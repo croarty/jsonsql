@@ -1,0 +1,9 @@
+{
+  "year": 2023,
+  "products": [
+    {"id": 1, "name": "Widget 2023", "price": 19.99, "category": "Tools", "year": 2023},
+    {"id": 2, "name": "Gadget 2023", "price": 29.99, "category": "Electronics", "year": 2023},
+    {"id": 3, "name": "Doohickey 2023", "price": 9.99, "category": "Tools", "year": 2023}
+  ]
+}
+

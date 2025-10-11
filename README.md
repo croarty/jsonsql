@@ -265,6 +265,27 @@ JOIN products p ON o.productId = p.id
 LEFT JOIN customers c ON o.customerId = c.id
 ```
 
+### ORDER BY Clause
+- `ORDER BY column` - Sort ascending (default)
+- `ORDER BY column ASC` - Sort ascending (explicit)
+- `ORDER BY column DESC` - Sort descending
+- `ORDER BY column1, column2 DESC` - Multi-column sort
+
+Examples:
+```sql
+ORDER BY price
+ORDER BY price ASC
+ORDER BY price DESC
+ORDER BY category, price DESC
+ORDER BY p.name, o.orderDate DESC
+```
+
+**Note:** ORDER BY supports:
+- Numbers (sorted numerically)
+- Text (sorted alphabetically)
+- Booleans (false < true)
+- Qualified column names (`p.price`, `o.quantity`)
+
 ### TOP / LIMIT
 - `SELECT TOP n` - Limit to first n results
 - `SELECT ... LIMIT n` - Alternative syntax
@@ -298,6 +319,8 @@ jsonsql --add-mapping products "$.document.data.entities.products"
 
 ### Working with Multiple Files
 
+#### Single File Per Table
+
 Place your JSON files in a data directory:
 
 ```
@@ -309,6 +332,60 @@ data/
 
 ```bash
 jsonsql --data-dir ./data --query "SELECT * FROM products"
+```
+
+#### Multiple Tables from One File
+
+When multiple data collections are in a single file, specify the filename in the mapping:
+
+```bash
+# Both tables from ecommerce.json
+jsonsql --add-mapping products "ecommerce.json:$.store.data.products"
+jsonsql --add-mapping orders "ecommerce.json:$.store.data.orders"
+
+# Now you can JOIN them
+jsonsql --query "SELECT p.name, o.quantity FROM orders o JOIN products p ON o.productId = p.id"
+```
+
+#### Partitioned Data Across Multiple Files
+
+Query data split across multiple files or directories:
+
+```
+data/
+  ├── products/
+  │   ├── products_2023.json
+  │   ├── products_2024.json
+  │   └── products_2025.json
+  └── orders/
+      ├── orders_q1.json
+      ├── orders_q2.json
+      ├── orders_q3.json
+      └── orders_q4.json
+```
+
+```bash
+# Map to directory - loads ALL .json files in that directory
+jsonsql --add-mapping all_products "products:$.products" --data-dir data
+jsonsql --add-mapping all_orders "orders:$.orders" --data-dir data
+
+# Query combines data from all files automatically
+jsonsql --query "SELECT * FROM all_products" --data-dir data
+
+# JOIN works across partitioned files too!
+jsonsql --query "SELECT p.name, o.quantity FROM all_orders o JOIN all_products p ON o.productId = p.id" --data-dir data
+```
+
+#### Relative Paths in Mappings
+
+Use relative paths for files in subdirectories:
+
+```bash
+# Single file with relative path
+jsonsql --add-mapping products "archive/2023/products.json:$.data.products"
+
+# Directory with relative path
+jsonsql --add-mapping products "archive/products:$.products"
 ```
 
 ### Piping and Scripting
@@ -379,12 +456,13 @@ jsonsql --query "SELECT * FROM products"
 ## Future Enhancements
 
 Planned features for future releases:
-- `ORDER BY` clause
-- `GROUP BY` clause with aggregation functions
+- `GROUP BY` clause with aggregation functions (COUNT, SUM, AVG, etc.)
 - `DISTINCT` keyword
 - Subqueries
-- `IN` and `LIKE` operators
-- Nested field access in WHERE clauses
+- `IN` and `LIKE` operators in WHERE clauses
+- Complex WHERE expressions (AND, OR, parentheses)
+- `HAVING` clause
+- Performance optimization: early termination for TOP without ORDER BY
 
 ## Architecture
 

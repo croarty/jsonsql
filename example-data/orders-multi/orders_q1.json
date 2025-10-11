@@ -1,0 +1,9 @@
+{
+  "quarter": "Q1",
+  "orders": [
+    {"orderId": 1001, "productId": 1, "quantity": 5, "status": "delivered", "quarter": "Q1"},
+    {"orderId": 1002, "productId": 2, "quantity": 2, "status": "active", "quarter": "Q1"},
+    {"orderId": 1003, "productId": 4, "quantity": 3, "status": "delivered", "quarter": "Q1"}
+  ]
+}
+

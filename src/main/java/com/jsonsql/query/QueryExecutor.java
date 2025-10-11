@@ -92,46 +92,70 @@ public class QueryExecutor {
         // Get the JSONPath (without filename prefix if present)
         String jsonPathExpression = mappingManager.getJsonPathOnly(tableName);
         
-        // Check if mapping specifies a filename, otherwise use table name
+        // Check if mapping specifies a filename/path, otherwise use table name
         String fileName = mappingManager.getFileName(tableName);
-        File jsonFile;
+        
+        List<File> jsonFiles = new ArrayList<>();
+        
         if (fileName != null) {
-            // Use filename from mapping
-            jsonFile = new File(dataDirectory, fileName);
+            // Use filename/path from mapping - could be file, directory, or relative path
+            File fileOrDir = new File(dataDirectory, fileName);
+            
+            // Handle absolute paths
+            if (!fileOrDir.isAbsolute() && new File(fileName).isAbsolute()) {
+                fileOrDir = new File(fileName);
+            }
+            
+            if (fileOrDir.isDirectory()) {
+                // Load all .json files from directory
+                File[] files = fileOrDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".json"));
+                if (files != null && files.length > 0) {
+                    jsonFiles.addAll(Arrays.asList(files));
+                } else {
+                    throw new IOException("No JSON files found in directory: " + fileOrDir.getAbsolutePath());
+                }
+            } else {
+                // Single file
+                jsonFiles.add(fileOrDir);
+            }
         } else {
             // Fall back to using table name as filename
-            jsonFile = findJsonFile(tableName);
+            jsonFiles.add(findJsonFile(tableName));
         }
         
-        if (!jsonFile.exists()) {
-            throw new IOException("JSON file not found: " + jsonFile.getAbsolutePath());
-        }
-
-        // Read JSON file
-        String jsonContent = Files.readString(jsonFile.toPath());
-        
-        // Apply JSONPath
-        Object result = JsonPath.using(jsonPathConfig).parse(jsonContent).read(jsonPathExpression);
-        
-        // Convert to list of JsonNodes
-        JsonNode resultNode = objectMapper.valueToTree(result);
-        
+        // Load and combine data from all files
         List<JsonNode> dataList = new ArrayList<>();
-        if (resultNode.isArray()) {
-            resultNode.forEach(node -> {
-                // Add table alias/name to each row for qualified column access
-                if (node.isObject()) {
-                    ObjectNode objNode = (ObjectNode) node;
-                    ObjectNode wrappedNode = objectMapper.createObjectNode();
-                    wrappedNode.set(tableInfo.getEffectiveName(), objNode);
-                    dataList.add(wrappedNode);
-                }
-            });
-        } else if (resultNode.isObject()) {
-            // Single object, wrap it
-            ObjectNode wrappedNode = objectMapper.createObjectNode();
-            wrappedNode.set(tableInfo.getEffectiveName(), resultNode);
-            dataList.add(wrappedNode);
+        
+        for (File jsonFile : jsonFiles) {
+            if (!jsonFile.exists()) {
+                throw new IOException("JSON file not found: " + jsonFile.getAbsolutePath());
+            }
+            
+            // Read JSON file
+            String jsonContent = Files.readString(jsonFile.toPath());
+            
+            // Apply JSONPath
+            Object result = JsonPath.using(jsonPathConfig).parse(jsonContent).read(jsonPathExpression);
+            
+            // Convert to list of JsonNodes
+            JsonNode resultNode = objectMapper.valueToTree(result);
+            
+            if (resultNode.isArray()) {
+                resultNode.forEach(node -> {
+                    // Add table alias/name to each row for qualified column access
+                    if (node.isObject()) {
+                        ObjectNode objNode = (ObjectNode) node;
+                        ObjectNode wrappedNode = objectMapper.createObjectNode();
+                        wrappedNode.set(tableInfo.getEffectiveName(), objNode);
+                        dataList.add(wrappedNode);
+                    }
+                });
+            } else if (resultNode.isObject()) {
+                // Single object, wrap it
+                ObjectNode wrappedNode = objectMapper.createObjectNode();
+                wrappedNode.set(tableInfo.getEffectiveName(), resultNode);
+                dataList.add(wrappedNode);
+            }
         }
 
         return dataList;

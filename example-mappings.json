@@ -1,0 +1,11 @@
+{
+  "products" : "$.data.products",
+  "orders" : "$.orders",
+  "specified_file_products" : "products.json:$.data.products",
+  "specified_file_orders" : "orders.json:$.orders",
+  "products_multi" : "products-multi:$.products",
+  "orders_multi" : "orders-multi:$.orders",
+  "ecommerce_orders" : "ecommerce.json:$.store.data.orders",
+  "ecommerce_products" : "ecommerce.json:$.store.data.products"
+}
+

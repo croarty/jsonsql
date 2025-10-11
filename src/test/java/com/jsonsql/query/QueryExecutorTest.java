@@ -341,5 +341,103 @@ class QueryExecutorTest {
             }
         }
     }
+
+    @Test
+    void testMultipleFilesFromDirectory() throws Exception {
+        // Create a directory with multiple product files
+        File multiDir = dataDir.toPath().resolve("multi-products").toFile();
+        multiDir.mkdirs();
+        
+        String products1 = """
+        {"products": [{"id": 1, "name": "Product A", "price": 10.0}, {"id": 2, "name": "Product B", "price": 20.0}]}
+        """;
+        String products2 = """
+        {"products": [{"id": 3, "name": "Product C", "price": 30.0}, {"id": 4, "name": "Product D", "price": 40.0}]}
+        """;
+        
+        Files.writeString(multiDir.toPath().resolve("products1.json"), products1);
+        Files.writeString(multiDir.toPath().resolve("products2.json"), products2);
+        
+        // Add mapping to directory
+        mappingManager.addMapping("multi_products", "multi-products:$.products");
+        
+        // Query should combine data from all files
+        String result = queryExecutor.execute("SELECT * FROM multi_products");
+        JsonNode resultNode = objectMapper.readTree(result);
+        
+        // Should have all 4 products from both files
+        assertEquals(4, resultNode.size());
+        
+        // Verify products from both files are present
+        boolean hasProductA = false;
+        boolean hasProductD = false;
+        for (JsonNode product : resultNode) {
+            String name = product.get("name").asText();
+            if (name.equals("Product A")) hasProductA = true;
+            if (name.equals("Product D")) hasProductD = true;
+        }
+        assertTrue(hasProductA, "Should have Product A from file 1");
+        assertTrue(hasProductD, "Should have Product D from file 2");
+    }
+
+    @Test
+    void testJoinAcrossMultipleFiles() throws Exception {
+        // Create directories with multiple files
+        File productsDir = dataDir.toPath().resolve("split-products").toFile();
+        File ordersDir = dataDir.toPath().resolve("split-orders").toFile();
+        productsDir.mkdirs();
+        ordersDir.mkdirs();
+        
+        String products1 = """
+        {"data": [{"id": 1, "name": "Item A"}, {"id": 2, "name": "Item B"}]}
+        """;
+        String products2 = """
+        {"data": [{"id": 3, "name": "Item C"}]}
+        """;
+        String orders1 = """
+        {"data": [{"orderId": 101, "productId": 1, "qty": 5}]}
+        """;
+        String orders2 = """
+        {"data": [{"orderId": 102, "productId": 3, "qty": 2}]}
+        """;
+        
+        Files.writeString(productsDir.toPath().resolve("p1.json"), products1);
+        Files.writeString(productsDir.toPath().resolve("p2.json"), products2);
+        Files.writeString(ordersDir.toPath().resolve("o1.json"), orders1);
+        Files.writeString(ordersDir.toPath().resolve("o2.json"), orders2);
+        
+        mappingManager.addMapping("split_products", "split-products:$.data");
+        mappingManager.addMapping("split_orders", "split-orders:$.data");
+        
+        // JOIN across multiple files
+        String result = queryExecutor.execute(
+            "SELECT p.name, o.qty FROM split_orders o JOIN split_products p ON o.productId = p.id"
+        );
+        JsonNode resultNode = objectMapper.readTree(result);
+        
+        // Should match orders with products from different files
+        assertEquals(2, resultNode.size());
+    }
+
+    @Test
+    void testRelativePathInMapping() throws Exception {
+        // Create a subdirectory structure
+        File subDir = dataDir.toPath().resolve("subfolder").toFile();
+        subDir.mkdirs();
+        
+        String testData = """
+        {"items": [{"id": 1, "value": "test"}]}
+        """;
+        Files.writeString(subDir.toPath().resolve("data.json"), testData);
+        
+        // Add mapping with relative path
+        mappingManager.addMapping("sub_items", "subfolder/data.json:$.items");
+        
+        String result = queryExecutor.execute("SELECT * FROM sub_items");
+        JsonNode resultNode = objectMapper.readTree(result);
+        
+        assertEquals(1, resultNode.size());
+        assertEquals("test", resultNode.get(0).get("value").asText());
+    }
 }
 

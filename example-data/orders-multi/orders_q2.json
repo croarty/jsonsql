@@ -1,0 +1,9 @@
+{
+  "quarter": "Q2",
+  "orders": [
+    {"orderId": 2001, "productId": 5, "quantity": 4, "status": "shipped", "quarter": "Q2"},
+    {"orderId": 2002, "productId": 7, "quantity": 6, "status": "delivered", "quarter": "Q2"},
+    {"orderId": 2003, "productId": 8, "quantity": 1, "status": "active", "quarter": "Q2"}
+  ]
+}
+

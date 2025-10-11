@@ -1,0 +1,9 @@
+{
+  "year": 2025,
+  "products": [
+    {"id": 7, "name": "Widget 2025", "price": 29.99, "category": "Tools", "year": 2025},
+    {"id": 8, "name": "Gadget 2025", "price": 39.99, "category": "Electronics", "year": 2025},
+    {"id": 9, "name": "Super Widget", "price": 49.99, "category": "Tools", "year": 2025}
+  ]
+}
+
