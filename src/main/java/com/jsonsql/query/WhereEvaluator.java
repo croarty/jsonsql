@@ -88,7 +88,9 @@ public class WhereEvaluator {
         String fieldPath = comparison.getLeftExpression().toString();
         JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
         
-        if (fieldValue == null) {
+        // In SQL, any comparison with NULL returns NULL (treated as FALSE in WHERE clauses)
+        // This includes both missing fields (fieldValue == null) and present but null fields (fieldValue.isNull())
+        if (fieldValue == null || fieldValue.isNull()) {
             return false;
         }
         
@@ -127,6 +129,11 @@ public class WhereEvaluator {
     }
     
     private boolean compareEquals(JsonNode fieldValue, String compareValue) {
+        // Handle null values - in SQL, NULL = anything is always false
+        if (fieldValue.isNull()) {
+            return false;
+        }
+        
         if (fieldValue.isTextual()) {
             return fieldValue.asText().equals(compareValue);
         } else if (fieldValue.isNumber()) {
@@ -142,6 +149,11 @@ public class WhereEvaluator {
     }
     
     private boolean compareGreater(JsonNode fieldValue, String compareValue) {
+        // Handle null values - in SQL, NULL > anything is always false
+        if (fieldValue.isNull()) {
+            return false;
+        }
+        
         if (fieldValue.isNumber()) {
             try {
                 return fieldValue.asDouble() > Double.parseDouble(compareValue);
@@ -153,6 +165,11 @@ public class WhereEvaluator {
     }
     
     private boolean compareLess(JsonNode fieldValue, String compareValue) {
+        // Handle null values - in SQL, NULL < anything is always false
+        if (fieldValue.isNull()) {
+            return false;
+        }
+        
         if (fieldValue.isNumber()) {
             try {
                 return fieldValue.asDouble() < Double.parseDouble(compareValue);
