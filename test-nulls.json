@@ -1,9 +1,0 @@
-{
-  "products": [
-    {"id": 1, "name": "Laptop", "category": "Electronics"},
-    {"id": 2, "name": "Mouse", "category": "Electronics"},
-    {"id": 3, "name": "Desk", "category": null},
-    {"id": 4, "name": "Chair"}
-  ]
-}
-

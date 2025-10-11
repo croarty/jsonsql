@@ -250,6 +250,11 @@ jsonsql --query "SELECT * FROM products WHERE price > 50 AND category = 'RareCat
 - `IS NOT NULL` - Check if field has a value
   - **Note:** Both missing fields and explicitly null fields are treated as NULL
 
+### List Matching
+- `IN` - Check if value matches any value in a list
+- `NOT IN` - Check if value does not match any value in the list
+  - **Note:** NULL values are excluded from both IN and NOT IN results
+
 ### Grouping
 - `()` - Parentheses for grouping and precedence
 
@@ -462,6 +467,123 @@ Both will match `WHERE category IS NULL` and fail `WHERE category IS NOT NULL`.
    jsonsql --query "SELECT * FROM products WHERE category = 'Electronics' OR category IS NULL"
    ```
 
+## IN / NOT IN Examples
+
+### Basic IN Operator
+
+```bash
+# Multiple string values
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics', 'Furniture', 'Tools')"
+
+# Numeric values
+jsonsql --query "SELECT * FROM products WHERE id IN (1, 5, 10, 15, 20)"
+
+# Single value (still useful for consistency)
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics')"
+
+# Decimal numbers
+jsonsql --query "SELECT * FROM products WHERE price IN (25.99, 149.99, 299.99)"
+```
+
+### NOT IN Operator
+
+```bash
+# Exclude multiple categories
+jsonsql --query "SELECT * FROM products WHERE category NOT IN ('Electronics', 'Tools')"
+
+# Exclude specific IDs
+jsonsql --query "SELECT * FROM products WHERE id NOT IN (1, 2, 3)"
+
+# Exclude price points
+jsonsql --query "SELECT * FROM products WHERE price NOT IN (25.0, 150.0)"
+```
+
+### IN with Other WHERE Operators
+
+```bash
+# IN with AND
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics', 'Tools') AND price < 100"
+
+# IN with OR
+jsonsql --query "SELECT * FROM products WHERE category IN ('Tools') OR price > 1000"
+
+# IN with LIKE
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics') AND name LIKE '%Laptop%'"
+
+# IN with IS NOT NULL
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics', 'Furniture') AND description IS NOT NULL"
+
+# IN with comparison operators
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics', 'Appliances') AND price > 100 AND price < 500"
+```
+
+### Complex IN Queries
+
+```bash
+# Multiple IN conditions
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics') AND brand IN ('Dell', 'Samsung', 'Apple')"
+
+# IN within parenthesized groups
+jsonsql --query "SELECT * FROM products WHERE (category IN ('Electronics', 'Furniture') AND price > 100) OR category = 'Tools'"
+
+# NOT IN with complex conditions
+jsonsql --query "SELECT * FROM products WHERE category NOT IN ('Electronics') AND (price < 50 OR stock < 10)"
+
+# IN combined with IS NULL
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics') OR category IS NULL"
+```
+
+### IN with JOINs
+
+```bash
+# Filter joined results with IN
+jsonsql --query "SELECT p.name, o.status FROM orders o JOIN products p ON o.productId = p.id WHERE o.status IN ('completed', 'shipped')"
+
+# NOT IN to exclude statuses
+jsonsql --query "SELECT o.id, p.name FROM orders o JOIN products p ON o.productId = p.id WHERE o.status NOT IN ('cancelled', 'returned')"
+
+# IN on both tables
+jsonsql --query "SELECT * FROM orders o JOIN products p ON o.productId = p.id WHERE o.status IN ('completed') AND p.category IN ('Electronics', 'Tools')"
+```
+
+### IN with ORDER BY and LIMIT
+
+```bash
+# Top 5 products in specific categories
+jsonsql --query "SELECT TOP 5 * FROM products WHERE category IN ('Electronics', 'Furniture') ORDER BY price DESC"
+
+# Paginated results with IN
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics', 'Tools', 'Office') ORDER BY name LIMIT 10"
+```
+
+### NULL Behavior with IN
+
+**Important:** Both `IN` and `NOT IN` exclude NULL values:
+
+```bash
+# These exclude rows where category is NULL
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics', 'Tools')"
+jsonsql --query "SELECT * FROM products WHERE category NOT IN ('Electronics')"
+
+# To include NULL values, use OR IS NULL
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics') OR category IS NULL"
+
+# To explicitly check for non-null values
+jsonsql --query "SELECT * FROM products WHERE category NOT IN ('Electronics') AND category IS NOT NULL"
+```
+
+### Performance Tip
+
+`IN` is much more readable and maintainable than multiple OR conditions:
+
+```bash
+# Recommended - clean and clear
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics', 'Furniture', 'Tools', 'Office')"
+
+# Avoid - verbose and error-prone
+jsonsql --query "SELECT * FROM products WHERE category = 'Electronics' OR category = 'Furniture' OR category = 'Tools' OR category = 'Office'"
+```
+
 ## Technical Details
 
 ### Short-Circuit Evaluation
@@ -506,6 +628,7 @@ jsonsql --query "SELECT o.orderId, p.name, p.price FROM ecommerce_orders o JOIN 
 Complex WHERE clauses in JsonSQL provide powerful filtering capabilities:
 
 ✅ **Full Boolean Logic**: AND, OR, NOT operators
+✅ **List Matching**: IN and NOT IN for checking against value lists
 ✅ **Pattern Matching**: LIKE and NOT LIKE with % and _ wildcards
 ✅ **Null Handling**: IS NULL and IS NOT NULL for missing and null fields
 ✅ **Unlimited Nesting**: Parentheses for any complexity level

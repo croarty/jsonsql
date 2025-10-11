@@ -84,6 +84,11 @@ public class WhereEvaluator {
             return evaluateIsNull(row, (IsNullExpression) expression);
         }
         
+        // Handle IN / NOT IN
+        if (expression instanceof InExpression) {
+            return evaluateIn(row, (InExpression) expression);
+        }
+        
         // Unsupported expression type
         return false;
     }
@@ -227,6 +232,69 @@ public class WhereEvaluator {
         
         // Handle IS NOT NULL
         return isNullExpr.isNot() ? !isNull : isNull;
+    }
+    
+    /**
+     * Evaluate IN / NOT IN expression.
+     * Checks if a field value matches any value in a list.
+     * Example: WHERE category IN ('Electronics', 'Tools', 'Furniture')
+     */
+    private boolean evaluateIn(JsonNode row, InExpression inExpr) {
+        // Get field value
+        String fieldPath = inExpr.getLeftExpression().toString();
+        JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
+        
+        // In SQL, NULL IN (...) returns UNKNOWN (treated as FALSE)
+        // NULL NOT IN (...) also returns UNKNOWN (treated as FALSE)
+        // This means NULL values are ALWAYS excluded from IN/NOT IN results
+        if (fieldValue == null || fieldValue.isNull()) {
+            return false;
+        }
+        
+        // Get the list of values to check against
+        var rightExpression = inExpr.getRightExpression();
+        
+        // Handle ExpressionList (the typical case)
+        if (rightExpression instanceof ParenthesedExpressionList) {
+            ParenthesedExpressionList<?> expressionList = (ParenthesedExpressionList<?>) rightExpression;
+            var expressions = expressionList.getExpressions();
+            
+            // Check if field value matches any value in the list
+            for (var expr : expressions) {
+                String listValue = extractLiteralValue(expr);
+                if (compareEqualsForIn(fieldValue, listValue)) {
+                    // Found a match
+                    return !inExpr.isNot(); // IN returns true, NOT IN returns false
+                }
+            }
+            
+            // No match found
+            return inExpr.isNot(); // IN returns false, NOT IN returns true
+        }
+        
+        // Unsupported right expression type
+        return false;
+    }
+    
+    /**
+     * Compare values for IN operator (similar to equals but optimized for IN).
+     */
+    private boolean compareEqualsForIn(JsonNode fieldValue, String compareValue) {
+        if (fieldValue.isTextual()) {
+            return fieldValue.asText().equals(compareValue);
+        } else if (fieldValue.isNumber()) {
+            try {
+                // Always use double comparison for flexibility with both int and decimal
+                double fieldDouble = fieldValue.asDouble();
+                double compareDouble = Double.parseDouble(compareValue);
+                return Math.abs(fieldDouble - compareDouble) < 0.0001;
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        } else if (fieldValue.isBoolean()) {
+            return fieldValue.asBoolean() == Boolean.parseBoolean(compareValue);
+        }
+        return false;
     }
     
     /**

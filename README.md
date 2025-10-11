@@ -7,7 +7,7 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
 - **SQL-like Query Syntax**: Write familiar SQL queries against JSON data
   - `SELECT` - Project specific fields or all fields with `*`, with `AS` aliases
   - `FROM` - Specify data sources
-  - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses, LIKE, IS NULL)
+  - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses, LIKE, IN, IS NULL)
   - `JOIN` / `LEFT JOIN` - Combine data from multiple sources
   - `TOP x` / `LIMIT` - Limit result sets
   - `ORDER BY` - Sort results ascending or descending
@@ -205,6 +205,7 @@ jsonsql --query "SELECT * FROM products WHERE ((category = 'Electronics' AND pri
 **Supported Operators:**
 - **Logical:** `AND`, `OR`, `NOT`
 - **Comparison:** `=`, `!=`, `>`, `<`, `>=`, `<=`
+- **List Matching:** `IN`, `NOT IN` - check if value matches any in a list
 - **Pattern Matching:** `LIKE`, `NOT LIKE` with `%` (any characters) and `_` (single character) wildcards
 - **Null Checking:** `IS NULL`, `IS NOT NULL` (treats both missing and explicitly null fields as NULL)
 - **Grouping:** Parentheses `()`
@@ -255,6 +256,35 @@ jsonsql --query "SELECT * FROM products WHERE category IS NULL OR description IS
 # Find complete records (no null fields)
 jsonsql --query "SELECT * FROM products WHERE name IS NOT NULL AND category IS NOT NULL AND price IS NOT NULL"
 ```
+
+**List Matching with IN / NOT IN:**
+
+Check if a value matches any value in a list:
+
+```bash
+# Multiple categories
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics', 'Furniture', 'Tools')"
+
+# Numeric IN list
+jsonsql --query "SELECT * FROM products WHERE id IN (1, 5, 10, 15)"
+
+# NOT IN to exclude values
+jsonsql --query "SELECT * FROM products WHERE category NOT IN ('Electronics')"
+
+# IN with other conditions
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics', 'Appliances') AND price > 100"
+
+# IN with LIKE
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics') AND name LIKE '%o%'"
+
+# Combining IN with IS NOT NULL
+jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics', 'Tools') AND description IS NOT NULL"
+```
+
+**Note on NULL behavior with IN:**
+- `NULL IN (...)` returns FALSE (excludes row)
+- `NULL NOT IN (...)` returns FALSE (excludes row)
+- Use `OR category IS NULL` if you want to include null values
 
 #### Queries with JOINs
 
@@ -548,7 +578,6 @@ Planned features for future releases, organized by priority:
 ### High Priority (Core SQL Features)
 
 **WHERE Clause Operators:**
-- `IN` operator - Check if value matches any in a list (e.g., `WHERE category IN ('Electronics', 'Tools')`)
 - `BETWEEN` operator - Range checking (e.g., `WHERE price BETWEEN 100 AND 500`)
 - `ILIKE` - Case-insensitive pattern matching
 
