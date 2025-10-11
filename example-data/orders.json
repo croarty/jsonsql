@@ -1,0 +1,9 @@
+{
+  "orders": [
+    {"orderId": 101, "productId": 1, "quantity": 5, "status": "active", "orderDate": "2023-01-15"},
+    {"orderId": 102, "productId": 2, "quantity": 2, "status": "active", "orderDate": "2023-01-16"},
+    {"orderId": 103, "productId": 1, "quantity": 10, "status": "completed", "orderDate": "2023-01-10"},
+    {"orderId": 104, "productId": 3, "quantity": 3, "status": "active", "orderDate": "2023-01-17"}
+  ]
+}
+
