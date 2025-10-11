@@ -521,14 +521,80 @@ jsonsql --query "SELECT * FROM products"
 
 ## Future Enhancements
 
-Planned features for future releases:
-- `GROUP BY` clause with aggregation functions (COUNT, SUM, AVG, etc.)
-- `DISTINCT` keyword
-- Subqueries
-- `IN`, `BETWEEN`, `IS NULL` operators in WHERE clauses
-- `HAVING` clause
-- Performance optimization: early termination for TOP without ORDER BY
-- Case-insensitive LIKE with `ILIKE` operator
+Planned features for future releases, organized by priority:
+
+### High Priority (Core SQL Features)
+
+**WHERE Clause Operators:**
+- `IS NULL` / `IS NOT NULL` - Find or exclude null values
+- `IN` operator - Check if value matches any in a list (e.g., `WHERE category IN ('Electronics', 'Tools')`)
+- `BETWEEN` operator - Range checking (e.g., `WHERE price BETWEEN 100 AND 500`)
+- `ILIKE` - Case-insensitive pattern matching
+
+**Aggregation & Grouping:**
+- `GROUP BY` clause with aggregation functions
+- `COUNT`, `SUM`, `AVG`, `MIN`, `MAX` functions
+- `HAVING` clause for filtering grouped results
+- `DISTINCT` keyword for unique results
+
+**Query Features:**
+- Subqueries (e.g., `WHERE price > (SELECT AVG(price) FROM products)`)
+- `UNION` / `UNION ALL` for combining result sets
+- Calculated fields in SELECT (e.g., `SELECT price * 1.1 AS price_with_tax`)
+
+### Medium Priority (Advanced Features)
+
+**JOIN Enhancements:**
+- `RIGHT JOIN` and `FULL OUTER JOIN`
+- Self-joins with improved alias handling
+
+**String & Data Functions:**
+- String functions: `UPPER`, `LOWER`, `CONCAT`, `SUBSTRING`, `LENGTH`, `TRIM`
+- Date/Time functions: `YEAR`, `MONTH`, `DAY`, `DATE`, `DATEADD`, `DATEDIFF`
+- Numeric functions: `ROUND`, `FLOOR`, `CEIL`, `ABS`, `POWER`
+- `COALESCE` / `IFNULL` for null value handling
+
+**Conditional Logic:**
+- `CASE/WHEN/ELSE/END` expressions for conditional values
+- `IF` function for simple conditionals
+
+**Pagination & Limiting:**
+- `OFFSET` support for pagination (e.g., `LIMIT 10 OFFSET 20`)
+
+### Lower Priority (Quality of Life)
+
+**Array/Collection Operations:**
+- `UNNEST` for flattening arrays
+- Array contains/length operations
+- JSONPath expressions in SELECT
+
+**Output Formats:**
+- CSV output format (`--format csv`)
+- TSV output format (`--format tsv`)
+- ASCII table format (`--format table`)
+- XML output format (`--format xml`)
+
+**Developer Tools:**
+- Query validation / dry-run mode (`--dry-run`)
+- Query profiling and performance analysis (`--explain`)
+- Schema introspection (`--describe <table>`)
+- Saved queries / named views (`--save-query`, `--run-query`)
+
+**Performance Optimizations:**
+- Early termination for TOP without ORDER BY
+- Query result caching
+- Index-like structures for frequently queried fields
+- Streaming mode for very large files
+
+**SQL Compatibility:**
+- Full three-valued logic (TRUE/FALSE/UNKNOWN) for NULL handling
+- Additional comparison operators (`<>` as synonym for `!=`)
+- Comment support in SQL (`--` and `/* */`)
+- Multi-statement execution
+
+### Community Requests
+
+Have a feature request? Please open an issue on GitHub!
 
 ## Architecture
 
