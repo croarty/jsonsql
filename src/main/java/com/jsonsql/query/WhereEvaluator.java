@@ -6,9 +6,11 @@ import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.conditional.OrExpression;
 import net.sf.jsqlparser.expression.operators.relational.*;
 
+import java.util.regex.Pattern;
+
 /**
  * Evaluates WHERE clause expressions against JSON data.
- * Supports complex boolean logic (AND, OR, NOT, parentheses).
+ * Supports complex boolean logic (AND, OR, NOT, parentheses) and pattern matching (LIKE).
  */
 public class WhereEvaluator {
     
@@ -70,6 +72,11 @@ public class WhereEvaluator {
         }
         if (expression instanceof MinorThanEquals) {
             return evaluateComparison(row, (MinorThanEquals) expression, "<=");
+        }
+        
+        // Handle LIKE operator
+        if (expression instanceof LikeExpression) {
+            return evaluateLike(row, (LikeExpression) expression);
         }
         
         // Unsupported expression type
@@ -154,6 +161,78 @@ public class WhereEvaluator {
             }
         }
         return false;
+    }
+    
+    /**
+     * Evaluate LIKE expression for pattern matching.
+     * Supports SQL wildcards: % (any characters) and _ (single character).
+     */
+    private boolean evaluateLike(JsonNode row, LikeExpression likeExpr) {
+        // Get field value
+        String fieldPath = likeExpr.getLeftExpression().toString();
+        JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
+        
+        if (fieldValue == null || !fieldValue.isTextual()) {
+            return false;
+        }
+        
+        String fieldText = fieldValue.asText();
+        String pattern = extractLiteralValue(likeExpr.getRightExpression());
+        
+        // Convert SQL LIKE pattern to regex
+        String regexPattern = convertLikePatternToRegex(pattern);
+        
+        // Evaluate pattern match
+        boolean matches = Pattern.matches(regexPattern, fieldText);
+        
+        // Handle NOT LIKE
+        return likeExpr.isNot() ? !matches : matches;
+    }
+    
+    /**
+     * Convert SQL LIKE pattern to Java regex pattern.
+     * - % matches zero or more characters (converted to .*)
+     * - _ matches exactly one character (converted to .)
+     * - All other regex special characters are escaped
+     */
+    private String convertLikePatternToRegex(String likePattern) {
+        StringBuilder regex = new StringBuilder();
+        
+        for (int i = 0; i < likePattern.length(); i++) {
+            char c = likePattern.charAt(i);
+            
+            switch (c) {
+                case '%':
+                    // % matches zero or more characters
+                    regex.append(".*");
+                    break;
+                case '_':
+                    // _ matches exactly one character
+                    regex.append(".");
+                    break;
+                case '.':
+                case '^':
+                case '$':
+                case '*':
+                case '+':
+                case '?':
+                case '(':
+                case ')':
+                case '[':
+                case ']':
+                case '{':
+                case '}':
+                case '\\':
+                case '|':
+                    // Escape regex special characters
+                    regex.append("\\").append(c);
+                    break;
+                default:
+                    regex.append(c);
+            }
+        }
+        
+        return regex.toString();
     }
 }
 

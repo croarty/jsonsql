@@ -239,8 +239,121 @@ jsonsql --query "SELECT * FROM products WHERE price > 50 AND category = 'RareCat
 - `>=` - Greater than or equal to
 - `<=` - Less than or equal to
 
+### Pattern Matching
+- `LIKE` - Pattern matching with wildcards
+  - `%` - Matches zero or more characters
+  - `_` - Matches exactly one character
+- `NOT LIKE` - Negated pattern matching
+
 ### Grouping
 - `()` - Parentheses for grouping and precedence
+
+## LIKE Pattern Matching Examples
+
+### Basic LIKE Patterns
+
+```bash
+# Starts with "Laptop"
+jsonsql --query "SELECT * FROM products WHERE name LIKE 'Laptop%'"
+
+# Ends with "Cable"
+jsonsql --query "SELECT * FROM products WHERE name LIKE '%Cable'"
+
+# Contains "Desk" anywhere
+jsonsql --query "SELECT * FROM products WHERE name LIKE '%Desk%'"
+
+# Exact match (no wildcards)
+jsonsql --query "SELECT * FROM products WHERE name LIKE 'Laptop'"
+```
+
+### Single Character Wildcard (_)
+
+```bash
+# Matches "Desk Lamp" (one character between "Desk" and "amp")
+jsonsql --query "SELECT * FROM products WHERE name LIKE 'Desk _amp'"
+
+# Match 3-letter category starting with 'F' ending with 'rniture'
+jsonsql --query "SELECT * FROM products WHERE category LIKE 'F__niture'"
+```
+
+### Combined Wildcards
+
+```bash
+# Complex pattern with both % and _
+jsonsql --query "SELECT * FROM products WHERE name LIKE 'L%p_o%'"
+
+# Multiple wildcards
+jsonsql --query "SELECT * FROM products WHERE name LIKE '%a%a%'"
+```
+
+### NOT LIKE
+
+```bash
+# Exclude products containing "Monitor"
+jsonsql --query "SELECT * FROM products WHERE name NOT LIKE '%Monitor%'"
+
+# Exclude items starting with "Wireless"
+jsonsql --query "SELECT * FROM products WHERE name NOT LIKE 'Wireless%'"
+```
+
+### LIKE with Complex WHERE Clauses
+
+```bash
+# LIKE with AND
+jsonsql --query "SELECT * FROM products WHERE name LIKE '%Desk%' AND category = 'Furniture'"
+
+# LIKE with OR
+jsonsql --query "SELECT * FROM products WHERE name LIKE 'Laptop%' OR name LIKE '%Mouse%'"
+
+# Multiple LIKE conditions
+jsonsql --query "SELECT * FROM products WHERE (name LIKE '%Computer%' OR name LIKE '%Laptop%') AND category = 'Electronics'"
+
+# NOT LIKE with AND
+jsonsql --query "SELECT * FROM products WHERE name NOT LIKE '%Laptop%' AND category = 'Electronics'"
+
+# LIKE with NOT and parentheses
+jsonsql --query "SELECT * FROM products WHERE NOT (name LIKE '%Monitor%' OR name LIKE '%Display%')"
+```
+
+### LIKE with Other SQL Features
+
+```bash
+# LIKE with ORDER BY
+jsonsql --query "SELECT * FROM products WHERE name LIKE '%e%' ORDER BY name ASC"
+
+# LIKE with TOP/LIMIT
+jsonsql --query "SELECT TOP 5 * FROM products WHERE name LIKE '%a%'"
+
+# LIKE with JOIN
+jsonsql --query "SELECT p.name, o.quantity FROM orders o JOIN products p ON o.productId = p.id WHERE p.name LIKE '%Chair%'"
+```
+
+### Special Characters in LIKE
+
+```bash
+# Match special characters (they are automatically escaped)
+jsonsql --query "SELECT * FROM products WHERE name LIKE '%2.0%'"
+
+# Match hyphens
+jsonsql --query "SELECT * FROM products WHERE name LIKE '%USB-C%'"
+
+# Match parentheses
+jsonsql --query "SELECT * FROM products WHERE name LIKE '%(%)%'"
+```
+
+### LIKE Pattern Tips
+
+1. **% matches everything**: `LIKE '%'` matches all non-null strings
+2. **Case-sensitive**: `LIKE 'laptop%'` will NOT match "Laptop"
+3. **Empty pattern**: `LIKE ''` matches only empty strings
+4. **Wildcard positioning matters**:
+   - `'%text'` - ends with text
+   - `'text%'` - starts with text
+   - `'%text%'` - contains text
+   - `'%te%xt%'` - contains "te" followed by "xt"
+5. **Single vs multiple wildcards**:
+   - `'_ext'` - exactly 4 characters ending in "ext"
+   - `'%ext'` - any number of characters ending in "ext"
 
 ## Technical Details
 
@@ -286,11 +399,13 @@ jsonsql --query "SELECT o.orderId, p.name, p.price FROM ecommerce_orders o JOIN 
 Complex WHERE clauses in JsonSQL provide powerful filtering capabilities:
 
 ✅ **Full Boolean Logic**: AND, OR, NOT operators
+✅ **Pattern Matching**: LIKE and NOT LIKE with % and _ wildcards
 ✅ **Unlimited Nesting**: Parentheses for any complexity level
 ✅ **Short-Circuit Evaluation**: Efficient query execution
 ✅ **Standard SQL Semantics**: Familiar operator precedence
 ✅ **Works with All Features**: JOINs, ORDER BY, TOP/LIMIT
 ✅ **Type-Safe**: Proper handling of numbers, strings, and booleans
+✅ **Special Character Handling**: Automatic escaping of regex special characters in LIKE patterns
 
 For more examples and documentation, see:
 - [README.md](README.md) - Main documentation

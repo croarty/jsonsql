@@ -7,7 +7,7 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
 - **SQL-like Query Syntax**: Write familiar SQL queries against JSON data
   - `SELECT` - Project specific fields or all fields with `*`, with `AS` aliases
   - `FROM` - Specify data sources
-  - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses)
+  - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses, LIKE)
   - `JOIN` / `LEFT JOIN` - Combine data from multiple sources
   - `TOP x` / `LIMIT` - Limit result sets
   - `ORDER BY` - Sort results ascending or descending
@@ -205,12 +205,34 @@ jsonsql --query "SELECT * FROM products WHERE ((category = 'Electronics' AND pri
 **Supported Operators:**
 - **Logical:** `AND`, `OR`, `NOT`
 - **Comparison:** `=`, `!=`, `>`, `<`, `>=`, `<=`
+- **Pattern Matching:** `LIKE`, `NOT LIKE` with `%` (any characters) and `_` (single character) wildcards
 - **Grouping:** Parentheses `()`
 
 **Boolean Logic:**
 - Short-circuit evaluation for `AND` and `OR`
 - Full support for nested conditions with any level of complexity
 - Operator precedence follows standard SQL rules
+
+**Pattern Matching with LIKE:**
+```bash
+# Starts with pattern
+jsonsql --query "SELECT * FROM products WHERE name LIKE 'Laptop%'"
+
+# Ends with pattern
+jsonsql --query "SELECT * FROM products WHERE name LIKE '%Cable'"
+
+# Contains pattern
+jsonsql --query "SELECT * FROM products WHERE name LIKE '%Desk%'"
+
+# Single character wildcard (_)
+jsonsql --query "SELECT * FROM products WHERE category LIKE 'F__niture'"
+
+# NOT LIKE
+jsonsql --query "SELECT * FROM products WHERE name NOT LIKE '%Monitor%'"
+
+# LIKE with complex conditions
+jsonsql --query "SELECT * FROM products WHERE name LIKE '%e%' AND category = 'Electronics' AND price > 100"
+```
 
 #### Queries with JOINs
 
@@ -503,9 +525,10 @@ Planned features for future releases:
 - `GROUP BY` clause with aggregation functions (COUNT, SUM, AVG, etc.)
 - `DISTINCT` keyword
 - Subqueries
-- `IN`, `LIKE`, `BETWEEN`, `IS NULL` operators in WHERE clauses
+- `IN`, `BETWEEN`, `IS NULL` operators in WHERE clauses
 - `HAVING` clause
 - Performance optimization: early termination for TOP without ORDER BY
+- Case-insensitive LIKE with `ILIKE` operator
 
 ## Architecture
 
