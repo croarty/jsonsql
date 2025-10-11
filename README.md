@@ -13,6 +13,7 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
   - `ORDER BY` - Sort results ascending or descending
 - **Schema-less Design**: Works with any JSON structure without predefined models
 - **JSONPath Mapping**: Define shortcuts for complex JSONPath expressions
+- **Saved Queries**: Save and reuse frequently-used queries by name
 - **Flexible Output**: Write to stdout, file, or clipboard
 - **Performance Optimized**: Designed for large and complex JSON documents
 - **Table Aliases**: Use aliases for cleaner queries (e.g., `FROM orders o`)
@@ -102,10 +103,12 @@ jsonsql --query "SELECT p.name, o.quantity FROM orders o LEFT JOIN products p ON
 ### Command Line Options
 
 ```
-Usage: jsonsql [-chV] [--clipboard] [--list-tables] [--pretty]
+Usage: jsonsql [-chV] [--clipboard] [--list-queries] [--list-tables] [--pretty]
                [--add-mapping=<addMapping> <addMapping>]
-               [-c=<configFile>] [-d=<dataDirectory>] [-o=<outputFile>]
-               [-q=<query>]
+               [-c=<configFile>] [-d=<dataDirectory>]
+               [--delete-query=<deleteQueryName>] [-o=<outputFile>]
+               [-q=<query>] [--queries-file=<queriesFile>]
+               [--run-query=<runQueryName>] [--save-query=<saveQueryName>]
 
 Options:
   -q, --query=<query>        SQL query to execute
@@ -113,12 +116,19 @@ Options:
                              Directory containing JSON files (default: .)
   -c, --config=<configFile>  Path to mapping configuration file
                              (default: .jsonsql-mappings.json)
+      --queries-file=<queriesFile>
+                             Path to saved queries file
+                             (default: .jsonsql-queries.json)
   -o, --output=<outputFile>  Output file path (default: stdout)
       --clipboard            Copy output to clipboard
       --pretty               Pretty-print JSON output
       --list-tables          Show all configured JSONPath shortcuts
       --add-mapping=<alias> <jsonpath>
                              Add a new JSONPath mapping
+      --save-query=<name>    Save a query with a name (requires --query)
+      --run-query=<name>     Execute a saved query by name
+      --list-queries         Show all saved queries
+      --delete-query=<name>  Delete a saved query
   -h, --help                 Show this help message and exit
   -V, --version              Print version information and exit
 ```
@@ -147,6 +157,57 @@ Configured JSONPath Mappings:
 ────────────────────────────────────────────────────────────────────────────────
 Total: 3 mapping(s)
 ```
+
+### Saved Queries
+
+JsonSQL allows you to save frequently-used queries for easy reuse.
+
+#### Save a Query
+```bash
+# Save a simple query
+jsonsql --save-query all_electronics --query "SELECT * FROM products WHERE category = 'Electronics'"
+
+# Save a complex query
+jsonsql --save-query top_orders --query "SELECT o.orderId, p.name, p.price FROM orders o JOIN products p ON o.productId = p.id WHERE o.status IN ('completed', 'shipped') ORDER BY p.price DESC LIMIT 10"
+```
+
+#### List Saved Queries
+```bash
+jsonsql --list-queries
+```
+
+Output:
+```
+Saved Queries:
+────────────────────────────────────────────────────────────────────────────────
+  all_electronics  -> SELECT * FROM products WHERE category = 'Electronics'
+  top_orders       -> SELECT o.orderId, p.name, p.price FROM orders o...
+────────────────────────────────────────────────────────────────────────────────
+Total: 2 saved queries
+```
+
+#### Run a Saved Query
+```bash
+# Run a saved query
+jsonsql --run-query all_electronics --data-dir example-data --pretty
+
+# Run saved query with output to file
+jsonsql --run-query top_orders --data-dir example-data --output results.json --pretty
+
+# Run saved query to clipboard
+jsonsql --run-query all_electronics --data-dir example-data --clipboard
+```
+
+#### Delete a Saved Query
+```bash
+jsonsql --delete-query old_query
+```
+
+**Saved Query Storage:**
+- Queries are stored in `.jsonsql-queries.json` (configurable with `--queries-file`)
+- Stored in JSON format with query names as keys
+- Persists across sessions
+- Can be version controlled with your project
 
 ### Query Examples
 
@@ -628,7 +689,6 @@ Planned features for future releases, organized by priority:
 - Query validation / dry-run mode (`--dry-run`)
 - Query profiling and performance analysis (`--explain`)
 - Schema introspection (`--describe <table>`)
-- Saved queries / named views (`--save-query`, `--run-query`)
 
 **Performance Optimizations:**
 - Early termination for TOP without ORDER BY
