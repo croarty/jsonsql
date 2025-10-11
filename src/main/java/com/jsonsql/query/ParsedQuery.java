@@ -11,6 +11,7 @@ public class ParsedQuery {
     private TableInfo fromTable;
     private List<JoinInfo> joins = new ArrayList<>();
     private String whereClause;
+    private List<OrderByInfo> orderBy = new ArrayList<>();
     private Long limit;
     private Long top;
 
@@ -71,6 +72,18 @@ public class ParsedQuery {
 
     public boolean hasJoins() {
         return joins != null && !joins.isEmpty();
+    }
+
+    public List<OrderByInfo> getOrderBy() {
+        return orderBy;
+    }
+
+    public void setOrderBy(List<OrderByInfo> orderBy) {
+        this.orderBy = orderBy;
+    }
+
+    public boolean hasOrderBy() {
+        return orderBy != null && !orderBy.isEmpty();
     }
 }
 

@@ -279,5 +279,67 @@ class QueryExecutorTest {
         assertTrue(joinNode.get(0).has("name"));
         assertTrue(joinNode.get(0).has("quantity"));
     }
+
+    @Test
+    void testSelectWithOrderBy() throws Exception {
+        String result = queryExecutor.execute("SELECT name, price FROM products ORDER BY price");
+        
+        JsonNode resultNode = objectMapper.readTree(result);
+        assertTrue(resultNode.size() > 0);
+        
+        // Verify ascending order
+        for (int i = 1; i < resultNode.size(); i++) {
+            double prevPrice = resultNode.get(i - 1).get("price").asDouble();
+            double currPrice = resultNode.get(i).get("price").asDouble();
+            assertTrue(prevPrice <= currPrice, "Prices should be in ascending order");
+        }
+    }
+
+    @Test
+    void testSelectWithOrderByDesc() throws Exception {
+        String result = queryExecutor.execute("SELECT name, price FROM products ORDER BY price DESC");
+        
+        JsonNode resultNode = objectMapper.readTree(result);
+        assertTrue(resultNode.size() > 0);
+        
+        // Verify descending order
+        for (int i = 1; i < resultNode.size(); i++) {
+            double prevPrice = resultNode.get(i - 1).get("price").asDouble();
+            double currPrice = resultNode.get(i).get("price").asDouble();
+            assertTrue(prevPrice >= currPrice, "Prices should be in descending order");
+        }
+    }
+
+    @Test
+    void testSelectWithMultipleOrderBy() throws Exception {
+        String result = queryExecutor.execute("SELECT name, category, price FROM products ORDER BY category, price DESC");
+        
+        JsonNode resultNode = objectMapper.readTree(result);
+        assertTrue(resultNode.size() > 0);
+        
+        // Verify first item has correct category
+        assertTrue(resultNode.get(0).has("category"));
+    }
+
+    @Test
+    void testOrderByWithTopAndWhere() throws Exception {
+        String result = queryExecutor.execute(
+            "SELECT TOP 2 name, price FROM products WHERE price > 10 ORDER BY price"
+        );
+        
+        JsonNode resultNode = objectMapper.readTree(result);
+        assertEquals(2, resultNode.size());
+        
+        // Verify ascending order and all prices > 10
+        for (int i = 0; i < resultNode.size(); i++) {
+            double price = resultNode.get(i).get("price").asDouble();
+            assertTrue(price > 10, "Price should be greater than 10");
+            
+            if (i > 0) {
+                double prevPrice = resultNode.get(i - 1).get("price").asDouble();
+                assertTrue(prevPrice <= price, "Prices should be in ascending order");
+            }
+        }
+    }
 }
 

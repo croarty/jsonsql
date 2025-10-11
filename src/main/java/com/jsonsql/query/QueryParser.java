@@ -58,6 +58,9 @@ public class QueryParser {
             query.setWhereClause(plainSelect.getWhere().toString());
         }
 
+        // Parse ORDER BY clause
+        parseOrderBy(plainSelect, query);
+
         // Parse TOP/LIMIT
         if (plainSelect.getLimit() != null && plainSelect.getLimit().getRowCount() != null) {
             query.setLimit(Long.parseLong(plainSelect.getLimit().getRowCount().toString()));
@@ -136,6 +139,25 @@ public class QueryParser {
         tableInfo.setAlias(alias);
         
         return tableInfo;
+    }
+
+    private void parseOrderBy(PlainSelect plainSelect, ParsedQuery query) {
+        List<net.sf.jsqlparser.statement.select.OrderByElement> orderByElements = plainSelect.getOrderByElements();
+        
+        if (orderByElements == null || orderByElements.isEmpty()) {
+            return;
+        }
+
+        List<OrderByInfo> orderByInfos = new ArrayList<>();
+        
+        for (net.sf.jsqlparser.statement.select.OrderByElement element : orderByElements) {
+            String column = element.getExpression().toString();
+            boolean ascending = element.isAsc() || !element.isAscDescPresent(); // Default to ASC if not specified
+            
+            orderByInfos.add(new OrderByInfo(column, ascending));
+        }
+        
+        query.setOrderBy(orderByInfos);
     }
 }
 

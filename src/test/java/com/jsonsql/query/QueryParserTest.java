@@ -160,5 +160,65 @@ class QueryParserTest {
             parser.parse("SELECT * FROM orders o JOIN products p")
         );
     }
+
+    @Test
+    void testSelectWithOrderBy() throws QueryParseException {
+        ParsedQuery query = parser.parse("SELECT * FROM products ORDER BY price");
+        
+        assertTrue(query.hasOrderBy());
+        assertEquals(1, query.getOrderBy().size());
+        assertEquals("price", query.getOrderBy().get(0).getColumn());
+        assertTrue(query.getOrderBy().get(0).isAscending());
+    }
+
+    @Test
+    void testSelectWithOrderByDesc() throws QueryParseException {
+        ParsedQuery query = parser.parse("SELECT * FROM products ORDER BY price DESC");
+        
+        assertTrue(query.hasOrderBy());
+        assertEquals(1, query.getOrderBy().size());
+        assertEquals("price", query.getOrderBy().get(0).getColumn());
+        assertFalse(query.getOrderBy().get(0).isAscending());
+    }
+
+    @Test
+    void testSelectWithOrderByAsc() throws QueryParseException {
+        ParsedQuery query = parser.parse("SELECT * FROM products ORDER BY name ASC");
+        
+        assertTrue(query.hasOrderBy());
+        assertEquals(1, query.getOrderBy().size());
+        assertEquals("name", query.getOrderBy().get(0).getColumn());
+        assertTrue(query.getOrderBy().get(0).isAscending());
+    }
+
+    @Test
+    void testSelectWithMultipleOrderBy() throws QueryParseException {
+        ParsedQuery query = parser.parse("SELECT * FROM products ORDER BY category ASC, price DESC");
+        
+        assertTrue(query.hasOrderBy());
+        assertEquals(2, query.getOrderBy().size());
+        
+        assertEquals("category", query.getOrderBy().get(0).getColumn());
+        assertTrue(query.getOrderBy().get(0).isAscending());
+        
+        assertEquals("price", query.getOrderBy().get(1).getColumn());
+        assertFalse(query.getOrderBy().get(1).isAscending());
+    }
+
+    @Test
+    void testComplexQueryWithOrderBy() throws QueryParseException {
+        ParsedQuery query = parser.parse(
+            "SELECT TOP 10 p.name, o.quantity " +
+            "FROM orders o " +
+            "JOIN products p ON o.productId = p.id " +
+            "WHERE o.status = 'active' " +
+            "ORDER BY o.quantity DESC"
+        );
+        
+        assertTrue(query.hasOrderBy());
+        assertEquals(1, query.getOrderBy().size());
+        assertEquals("o.quantity", query.getOrderBy().get(0).getColumn());
+        assertFalse(query.getOrderBy().get(0).isAscending());
+    }
 }
 

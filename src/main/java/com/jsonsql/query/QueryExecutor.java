@@ -56,6 +56,11 @@ public class QueryExecutor {
             filteredData = applyWhere(joinedData, parsedQuery.getWhereClause());
         }
 
+        // Apply ORDER BY
+        if (parsedQuery.hasOrderBy()) {
+            filteredData = applyOrderBy(filteredData, parsedQuery.getOrderBy());
+        }
+
         // Apply TOP/LIMIT
         if (parsedQuery.getEffectiveLimit() != null) {
             int limit = parsedQuery.getEffectiveLimit().intValue();
@@ -292,6 +297,52 @@ public class QueryExecutor {
         }
 
         return result;
+    }
+
+    /**
+     * Apply ORDER BY sorting.
+     */
+    private List<JsonNode> applyOrderBy(List<JsonNode> data, List<OrderByInfo> orderByList) {
+        List<JsonNode> sortedData = new ArrayList<>(data);
+        
+        sortedData.sort((row1, row2) -> {
+            for (OrderByInfo orderBy : orderByList) {
+                JsonNode value1 = getFieldValueFlexible(row1, orderBy.getColumn());
+                JsonNode value2 = getFieldValueFlexible(row2, orderBy.getColumn());
+                
+                int comparison = compareNodes(value1, value2);
+                
+                if (comparison != 0) {
+                    return orderBy.isAscending() ? comparison : -comparison;
+                }
+            }
+            return 0;
+        });
+        
+        return sortedData;
+    }
+
+    /**
+     * Compare two JsonNodes for sorting.
+     */
+    private int compareNodes(JsonNode node1, JsonNode node2) {
+        // Handle nulls
+        if (node1 == null && node2 == null) return 0;
+        if (node1 == null) return -1;
+        if (node2 == null) return 1;
+        
+        // Handle numbers
+        if (node1.isNumber() && node2.isNumber()) {
+            return Double.compare(node1.asDouble(), node2.asDouble());
+        }
+        
+        // Handle booleans
+        if (node1.isBoolean() && node2.isBoolean()) {
+            return Boolean.compare(node1.asBoolean(), node2.asBoolean());
+        }
+        
+        // Handle text (default)
+        return node1.asText().compareTo(node2.asText());
     }
 
     /**
