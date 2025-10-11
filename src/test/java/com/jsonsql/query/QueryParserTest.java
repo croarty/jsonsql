@@ -21,7 +21,8 @@ class QueryParserTest {
         ParsedQuery query = parser.parse("SELECT * FROM products");
         
         assertNotNull(query);
-        assertEquals(List.of("*"), query.getSelectColumns());
+        assertEquals(1, query.getSelectColumns().size());
+        assertEquals("*", query.getSelectColumns().get(0).getExpression());
         assertEquals("products", query.getFromTable().getTableName());
         assertNull(query.getFromTable().getAlias());
         assertFalse(query.hasJoins());
@@ -32,9 +33,10 @@ class QueryParserTest {
         ParsedQuery query = parser.parse("SELECT name, price, category FROM products");
         
         assertEquals(3, query.getSelectColumns().size());
-        assertTrue(query.getSelectColumns().contains("name"));
-        assertTrue(query.getSelectColumns().contains("price"));
-        assertTrue(query.getSelectColumns().contains("category"));
+        assertEquals("name", query.getSelectColumns().get(0).getExpression());
+        assertEquals("price", query.getSelectColumns().get(1).getExpression());
+        assertEquals("category", query.getSelectColumns().get(2).getExpression());
+        assertFalse(query.getSelectColumns().get(0).hasAlias());
     }
 
     @Test
@@ -128,6 +130,9 @@ class QueryParserTest {
         );
         
         assertEquals(3, query.getSelectColumns().size());
+        assertEquals("p.name", query.getSelectColumns().get(0).getExpression());
+        assertEquals("o.quantity", query.getSelectColumns().get(1).getExpression());
+        assertEquals("o.orderDate", query.getSelectColumns().get(2).getExpression());
         assertTrue(query.hasJoins());
         assertNotNull(query.getWhereClause());
         assertEquals(10L, query.getTop());
@@ -219,6 +224,42 @@ class QueryParserTest {
         assertEquals(1, query.getOrderBy().size());
         assertEquals("o.quantity", query.getOrderBy().get(0).getColumn());
         assertFalse(query.getOrderBy().get(0).isAscending());
+    }
+
+    @Test
+    void testSelectWithAlias() throws QueryParseException {
+        ParsedQuery query = parser.parse("SELECT name AS productName, price AS productPrice FROM products");
+        
+        assertEquals(2, query.getSelectColumns().size());
+        
+        // First column
+        assertEquals("name", query.getSelectColumns().get(0).getExpression());
+        assertEquals("productName", query.getSelectColumns().get(0).getAlias());
+        assertTrue(query.getSelectColumns().get(0).hasAlias());
+        
+        // Second column
+        assertEquals("price", query.getSelectColumns().get(1).getExpression());
+        assertEquals("productPrice", query.getSelectColumns().get(1).getAlias());
+        assertTrue(query.getSelectColumns().get(1).hasAlias());
+    }
+
+    @Test
+    void testSelectWithMixedAliases() throws QueryParseException {
+        ParsedQuery query = parser.parse("SELECT p.id AS productId, p.name, p.price AS cost FROM products p");
+        
+        assertEquals(3, query.getSelectColumns().size());
+        
+        // With alias
+        assertTrue(query.getSelectColumns().get(0).hasAlias());
+        assertEquals("productId", query.getSelectColumns().get(0).getAlias());
+        
+        // Without alias
+        assertFalse(query.getSelectColumns().get(1).hasAlias());
+        assertEquals("p.name", query.getSelectColumns().get(1).getExpression());
+        
+        // With alias
+        assertTrue(query.getSelectColumns().get(2).hasAlias());
+        assertEquals("cost", query.getSelectColumns().get(2).getAlias());
     }
 }
 

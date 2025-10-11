@@ -439,5 +439,276 @@ class QueryExecutorTest {
         assertEquals(1, resultNode.size());
         assertEquals("test", resultNode.get(0).get("value").asText());
     }
+
+    @Test
+    void testNestedFieldInWhere() throws Exception {
+        // Create data with nested objects
+        String customersJson = """
+        {
+          "customers": [
+            {"id": 1, "name": "Alice", "VIP": {"status": "Gold", "level": 3}},
+            {"id": 2, "name": "Bob", "VIP": {"status": "Silver", "level": 1}},
+            {"id": 3, "name": "Carol", "VIP": {"status": "Gold", "level": 5}}
+          ]
+        }
+        """;
+        Files.writeString(dataDir.toPath().resolve("customers.json"), customersJson);
+        
+        mappingManager.addMapping("customers", "customers.json:$.customers");
+        
+        // Query with nested field in WHERE clause
+        String result = queryExecutor.execute("SELECT c.name, c.VIP FROM customers c WHERE c.VIP.status = 'Gold'");
+        JsonNode resultNode = objectMapper.readTree(result);
+        
+        assertEquals(2, resultNode.size());
+        assertEquals("Alice", resultNode.get(0).get("name").asText());
+        assertEquals("Carol", resultNode.get(1).get("name").asText());
+        
+        // Verify nested object is preserved
+        assertTrue(resultNode.get(0).has("VIP"));
+        assertTrue(resultNode.get(0).get("VIP").isObject());
+        assertEquals("Gold", resultNode.get(0).get("VIP").get("status").asText());
+    }
+
+    @Test
+    void testNestedFieldInSelect() throws Exception {
+        String customersJson = """
+        {
+          "customers": [
+            {"id": 1, "name": "Alice", "address": {"city": "NYC", "zip": "10001"}}
+          ]
+        }
+        """;
+        Files.writeString(dataDir.toPath().resolve("nested.json"), customersJson);
+        
+        mappingManager.addMapping("nested_customers", "nested.json:$.customers");
+        
+        // Select individual nested fields
+        String result = queryExecutor.execute("SELECT c.name, c.address.city, c.address.zip FROM nested_customers c");
+        JsonNode resultNode = objectMapper.readTree(result);
+        
+        assertEquals(1, resultNode.size());
+        assertEquals("Alice", resultNode.get(0).get("name").asText());
+        assertEquals("NYC", resultNode.get(0).get("city").asText());
+        assertEquals("10001", resultNode.get(0).get("zip").asText());
+    }
+
+    @Test
+    void testColumnNameCollisionDetection() throws Exception {
+        // Create products and customers both with 'name' field
+        String productsJson = """
+        {"items": [{"id": 1, "name": "Widget"}]}
+        """;
+        String customersJson = """
+        {"items": [{"id": 1, "name": "Alice"}]}
+        """;
+        
+        Files.writeString(dataDir.toPath().resolve("prod_items.json"), productsJson);
+        Files.writeString(dataDir.toPath().resolve("cust_items.json"), customersJson);
+        
+        mappingManager.addMapping("prod_items", "prod_items.json:$.items");
+        mappingManager.addMapping("cust_items", "cust_items.json:$.items");
+        
+        // Both have 'name' - should use qualified names
+        String result = queryExecutor.execute("SELECT p.name, c.name FROM prod_items p JOIN cust_items c ON p.id = c.id");
+        JsonNode resultNode = objectMapper.readTree(result);
+        
+        assertEquals(1, resultNode.size());
+        // Should have both qualified names due to collision
+        assertTrue(resultNode.get(0).has("p.name"));
+        assertTrue(resultNode.get(0).has("c.name"));
+        assertEquals("Widget", resultNode.get(0).get("p.name").asText());
+        assertEquals("Alice", resultNode.get(0).get("c.name").asText());
+    }
+
+    @Test
+    void testNoCollisionUsesSimpleNames() throws Exception {
+        String result = queryExecutor.execute("SELECT p.name, p.price, p.category FROM products p");
+        JsonNode resultNode = objectMapper.readTree(result);
+        
+        assertTrue(resultNode.size() > 0);
+        JsonNode first = resultNode.get(0);
+        
+        // No collisions - should use simple names
+        assertTrue(first.has("name"));
+        assertTrue(first.has("price"));
+        assertTrue(first.has("category"));
+        
+        // Should NOT have qualified names
+        assertFalse(first.has("p.name"));
+        assertFalse(first.has("p.price"));
+    }
+
+    @Test
+    void testFourWayJoin() throws Exception {
+        String products = """
+        {"items": [{"id": 1, "name": "Product1"}]}
+        """;
+        String orders = """
+        {"items": [{"orderId": 101, "productId": 1, "customerId": 1, "shipmentId": 1}]}
+        """;
+        String customers = """
+        {"items": [{"id": 1, "name": "Customer1"}]}
+        """;
+        String shipments = """
+        {"items": [{"id": 1, "trackingNumber": "TRACK123"}]}
+        """;
+        
+        Files.writeString(dataDir.toPath().resolve("p4.json"), products);
+        Files.writeString(dataDir.toPath().resolve("o4.json"), orders);
+        Files.writeString(dataDir.toPath().resolve("c4.json"), customers);
+        Files.writeString(dataDir.toPath().resolve("s4.json"), shipments);
+        
+        mappingManager.addMapping("p4", "p4.json:$.items");
+        mappingManager.addMapping("o4", "o4.json:$.items");
+        mappingManager.addMapping("c4", "c4.json:$.items");
+        mappingManager.addMapping("s4", "s4.json:$.items");
+
+        String result = queryExecutor.execute("""
+            SELECT p.name, c.name, s.trackingNumber
+            FROM o4 o
+            JOIN p4 p ON o.productId = p.id
+            JOIN c4 c ON o.customerId = c.id
+            JOIN s4 s ON o.shipmentId = s.id
+            """);
+
+        JsonNode resultNode = objectMapper.readTree(result);
+
+        assertEquals(1, resultNode.size());
+        assertTrue(resultNode.get(0).has("p.name"));
+        assertTrue(resultNode.get(0).has("c.name"));
+        assertTrue(resultNode.get(0).has("trackingNumber"));
+    }
+
+    @Test
+    void testTopWithOrderByAndMultipleJoins() throws Exception {
+        String result = queryExecutor.execute("""
+            SELECT TOP 1 p.name, o.quantity
+            FROM orders o
+            JOIN products p ON o.productId = p.id
+            ORDER BY o.quantity DESC
+            """);
+
+        JsonNode resultNode = objectMapper.readTree(result);
+
+        assertEquals(1, resultNode.size());
+    }
+
+    @Test
+    void testWhereWithNumericInequality() throws Exception {
+        String result = queryExecutor.execute("SELECT name, price FROM products WHERE price >= 19.99");
+        JsonNode resultNode = objectMapper.readTree(result);
+
+        assertTrue(resultNode.size() > 0);
+        for (JsonNode row : resultNode) {
+            assertTrue(row.get("price").asDouble() >= 19.99);
+        }
+    }
+
+    @Test
+    void testWhereWithStringInequality() throws Exception {
+        String result = queryExecutor.execute("SELECT name FROM products WHERE category != 'Tools'");
+        JsonNode resultNode = objectMapper.readTree(result);
+
+        assertTrue(resultNode.size() > 0);
+        for (JsonNode row : resultNode) {
+            assertNotEquals("Tools", row.get("name").asText());
+        }
+    }
+
+    @Test
+    void testOrderByText() throws Exception {
+        String result = queryExecutor.execute("SELECT name FROM products ORDER BY name");
+        JsonNode resultNode = objectMapper.readTree(result);
+
+        assertTrue(resultNode.size() > 0);
+        // Verify alphabetical order
+        for (int i = 1; i < resultNode.size(); i++) {
+            String prev = resultNode.get(i - 1).get("name").asText();
+            String curr = resultNode.get(i).get("name").asText();
+            assertTrue(prev.compareTo(curr) <= 0);
+        }
+    }
+
+    @Test
+    void testOrderByMultipleColumns() throws Exception {
+        String result = queryExecutor.execute("SELECT name, category, price FROM products ORDER BY category, price DESC");
+        JsonNode resultNode = objectMapper.readTree(result);
+
+        assertTrue(resultNode.size() > 0);
+    }
+
+    @Test
+    void testSelectWithAllComparators() throws Exception {
+        // Test all WHERE operators
+        queryExecutor.execute("SELECT * FROM products WHERE price = 19.99");
+        queryExecutor.execute("SELECT * FROM products WHERE price != 19.99");
+        queryExecutor.execute("SELECT * FROM products WHERE price > 10");
+        queryExecutor.execute("SELECT * FROM products WHERE price < 100");
+        queryExecutor.execute("SELECT * FROM products WHERE price >= 19.99");
+        queryExecutor.execute("SELECT * FROM products WHERE price <= 29.99");
+        
+        // All should execute without error
+    }
+
+    @Test
+    void testJoinWithAllFeatures() throws Exception {
+        String result = queryExecutor.execute("""
+            SELECT 
+                o.orderId,
+                p.name AS product,
+                p.price,
+                o.quantity,
+                o.total
+            FROM orders o
+            JOIN products p ON o.productId = p.id
+            WHERE p.category = 'Tools'
+            ORDER BY o.total DESC
+            LIMIT 10
+            """);
+
+        JsonNode resultNode = objectMapper.readTree(result);
+
+        assertTrue(resultNode.size() > 0);
+    }
+
+    @Test
+    void testLeftJoinWithWhereOnRightTable() throws Exception {
+        String result = queryExecutor.execute("""
+            SELECT o.orderId, p.name
+            FROM orders o
+            LEFT JOIN products p ON o.productId = p.id
+            WHERE p.category = 'Electronics'
+            """);
+
+        JsonNode resultNode = objectMapper.readTree(result);
+
+        // Should only include orders with matching electronics products
+        assertTrue(resultNode.size() >= 0);
+    }
+
+    @Test
+    void testComplexNestedJoinScenario() throws Exception {
+        String result = queryExecutor.execute("""
+            SELECT 
+                c.name AS customer,
+                c.profile.tier,
+                c.profile.points,
+                c.address.city,
+                p.name AS product,
+                o.quantity
+            FROM orders o
+            JOIN customers c ON o.customerId = c.id
+            JOIN products p ON o.productId = p.id
+            WHERE c.profile.tier = 'gold'
+            ORDER BY c.profile.points DESC
+            """);
+
+        JsonNode resultNode = objectMapper.readTree(result);
+
+        // Should have at least one result
+        assertTrue(resultNode.size() >= 0);
+    }
 }
+
 

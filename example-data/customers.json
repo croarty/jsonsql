@@ -1,0 +1,85 @@
+{
+  "customers": [
+    {
+      "id": 101,
+      "name": "Alice Johnson",
+      "email": "alice@example.com",
+      "VIP": {
+        "status": "Gold",
+        "level": 3,
+        "points": 5000,
+        "since": "2020-01-15"
+      },
+      "address": {
+        "city": "New York",
+        "state": "NY",
+        "zip": "10001"
+      }
+    },
+    {
+      "id": 102,
+      "name": "Bob Smith",
+      "email": "bob@example.com",
+      "VIP": {
+        "status": "Silver",
+        "level": 2,
+        "points": 2000,
+        "since": "2021-06-10"
+      },
+      "address": {
+        "city": "Los Angeles",
+        "state": "CA",
+        "zip": "90001"
+      }
+    },
+    {
+      "id": 103,
+      "name": "Carol White",
+      "email": "carol@example.com",
+      "VIP": {
+        "status": "Gold",
+        "level": 5,
+        "points": 12000,
+        "since": "2019-03-22"
+      },
+      "address": {
+        "city": "Chicago",
+        "state": "IL",
+        "zip": "60601"
+      }
+    },
+    {
+      "id": 104,
+      "name": "David Brown",
+      "email": "david@example.com",
+      "VIP": {
+        "status": "Bronze",
+        "level": 1,
+        "points": 500,
+        "since": "2023-01-05"
+      },
+      "address": {
+        "city": "Houston",
+        "state": "TX",
+        "zip": "77001"
+      }
+    },
+    {
+      "id": 105,
+      "name": "Emma Davis",
+      "email": "emma@example.com",
+      "VIP": {
+        "status": "Gold",
+        "level": 4,
+        "points": 8500,
+        "since": "2020-08-12"
+      },
+      "address": {
+        "city": "Phoenix",
+        "state": "AZ",
+        "zip": "85001"
+      }
+    }
+  ]
+}
+

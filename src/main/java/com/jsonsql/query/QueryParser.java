@@ -74,10 +74,33 @@ public class QueryParser {
 
     private void parseSelectItems(PlainSelect plainSelect, ParsedQuery query) {
         List<SelectItem<?>> selectItems = plainSelect.getSelectItems();
-        List<String> columns = new ArrayList<>();
+        List<ColumnInfo> columns = new ArrayList<>();
 
         for (SelectItem<?> item : selectItems) {
-            columns.add(item.toString());
+            String fullString = item.toString();
+            String expression;
+            String alias = null;
+            
+            // Check for AS alias in the string representation
+            // Format: "column AS alias" or "column alias"
+            String upperString = fullString.toUpperCase();
+            int asIndex = upperString.indexOf(" AS ");
+            
+            if (asIndex > 0) {
+                // Has explicit AS alias
+                expression = fullString.substring(0, asIndex).trim();
+                alias = fullString.substring(asIndex + 4).trim();
+            } else if (fullString.contains(" ") && !fullString.equals("*")) {
+                // Has implicit alias (space without AS)
+                int spaceIndex = fullString.lastIndexOf(' ');
+                expression = fullString.substring(0, spaceIndex).trim();
+                alias = fullString.substring(spaceIndex + 1).trim();
+            } else {
+                // No alias
+                expression = fullString;
+            }
+            
+            columns.add(new ColumnInfo(expression, alias));
         }
 
         query.setSelectColumns(columns);

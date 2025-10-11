@@ -465,29 +465,56 @@ public class QueryExecutor {
     /**
      * Project SELECT columns from the data.
      */
-    private List<JsonNode> projectColumns(List<JsonNode> data, List<String> selectColumns) {
+    private List<JsonNode> projectColumns(List<JsonNode> data, List<ColumnInfo> selectColumns) {
         // Handle SELECT *
-        if (selectColumns.size() == 1 && selectColumns.get(0).equals("*")) {
+        if (selectColumns.size() == 1 && selectColumns.get(0).getExpression().equals("*")) {
             // Flatten the wrapped structure for output
             return data.stream()
                 .map(this::flattenRow)
                 .toList();
         }
 
+        // Detect collisions - which output names would appear multiple times?
+        Map<String, Integer> outputNameCounts = new HashMap<>();
+        for (ColumnInfo column : selectColumns) {
+            // If has alias, that's the output name; otherwise use simple name from expression
+            String outputName = column.hasAlias() 
+                ? column.getAlias()
+                : column.getOutputName();
+            outputNameCounts.put(outputName, outputNameCounts.getOrDefault(outputName, 0) + 1);
+        }
+        
         // Project specific columns
         List<JsonNode> result = new ArrayList<>();
         for (JsonNode row : data) {
             ObjectNode projectedRow = objectMapper.createObjectNode();
             
-            for (String column : selectColumns) {
-                String columnName = column.trim();
-                JsonNode value = getFieldValueFlexible(row, columnName);
+            for (ColumnInfo column : selectColumns) {
+                String expression = column.getExpression().trim();
+                JsonNode value = getFieldValueFlexible(row, expression);
                 
                 if (value != null) {
-                    // Use simple field name in output (strip table prefix if present)
-                    String outputName = columnName.contains(".") 
-                        ? columnName.substring(columnName.lastIndexOf('.') + 1)
-                        : columnName;
+                    String outputName;
+                    
+                    if (column.hasAlias()) {
+                        // Use explicit alias
+                        outputName = column.getAlias();
+                    } else {
+                        // Determine output name based on collision detection
+                        String simpleName = expression.contains(".") 
+                            ? expression.substring(expression.lastIndexOf('.') + 1)
+                            : expression;
+                        
+                        // Use qualified name if collision detected, otherwise use simple name
+                        if (outputNameCounts.get(simpleName) > 1) {
+                            // Collision - use qualified name
+                            outputName = expression;
+                        } else {
+                            // No collision - use simple name
+                            outputName = simpleName;
+                        }
+                    }
+                    
                     projectedRow.set(outputName, value);
                 }
             }

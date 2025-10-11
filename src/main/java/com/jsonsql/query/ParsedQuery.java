@@ -7,7 +7,7 @@ import java.util.List;
  * Represents a parsed SQL query with all its components.
  */
 public class ParsedQuery {
-    private List<String> selectColumns = new ArrayList<>();
+    private List<ColumnInfo> selectColumns = new ArrayList<>();
     private TableInfo fromTable;
     private List<JoinInfo> joins = new ArrayList<>();
     private String whereClause;
@@ -15,11 +15,11 @@ public class ParsedQuery {
     private Long limit;
     private Long top;
 
-    public List<String> getSelectColumns() {
+    public List<ColumnInfo> getSelectColumns() {
         return selectColumns;
     }
 
-    public void setSelectColumns(List<String> selectColumns) {
+    public void setSelectColumns(List<ColumnInfo> selectColumns) {
         this.selectColumns = selectColumns;
     }
 
