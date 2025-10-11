@@ -52,8 +52,8 @@ class QueryParserTest {
     void testSelectWithWhere() throws QueryParseException {
         ParsedQuery query = parser.parse("SELECT * FROM products WHERE category = 'Tools'");
         
-        assertNotNull(query.getWhereClause());
-        assertTrue(query.getWhereClause().contains("category"));
+        assertNotNull(query.getWhereExpression());
+        assertTrue(query.hasWhere());
     }
 
     @Test
@@ -134,7 +134,7 @@ class QueryParserTest {
         assertEquals("o.quantity", query.getSelectColumns().get(1).getExpression());
         assertEquals("o.orderDate", query.getSelectColumns().get(2).getExpression());
         assertTrue(query.hasJoins());
-        assertNotNull(query.getWhereClause());
+        assertTrue(query.hasWhere());
         assertEquals(10L, query.getTop());
     }
 

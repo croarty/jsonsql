@@ -1,5 +1,7 @@
 package com.jsonsql.query;
 
+import net.sf.jsqlparser.expression.Expression;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -10,7 +12,7 @@ public class ParsedQuery {
     private List<ColumnInfo> selectColumns = new ArrayList<>();
     private TableInfo fromTable;
     private List<JoinInfo> joins = new ArrayList<>();
-    private String whereClause;
+    private Expression whereExpression;
     private List<OrderByInfo> orderBy = new ArrayList<>();
     private Long limit;
     private Long top;
@@ -39,12 +41,16 @@ public class ParsedQuery {
         this.joins = joins;
     }
 
-    public String getWhereClause() {
-        return whereClause;
+    public Expression getWhereExpression() {
+        return whereExpression;
     }
 
-    public void setWhereClause(String whereClause) {
-        this.whereClause = whereClause;
+    public void setWhereExpression(Expression whereExpression) {
+        this.whereExpression = whereExpression;
+    }
+    
+    public boolean hasWhere() {
+        return whereExpression != null;
     }
 
     public Long getLimit() {

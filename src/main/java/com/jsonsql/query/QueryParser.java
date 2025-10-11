@@ -55,7 +55,7 @@ public class QueryParser {
 
         // Parse WHERE clause
         if (plainSelect.getWhere() != null) {
-            query.setWhereClause(plainSelect.getWhere().toString());
+            query.setWhereExpression(plainSelect.getWhere());
         }
 
         // Parse ORDER BY clause

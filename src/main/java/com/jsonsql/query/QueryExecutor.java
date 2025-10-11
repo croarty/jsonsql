@@ -8,6 +8,8 @@ import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.Option;
 import com.jsonsql.config.MappingManager;
+import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 
 import java.io.File;
 import java.io.IOException;
@@ -17,7 +19,7 @@ import java.util.*;
 /**
  * Executes parsed SQL queries against JSON data.
  */
-public class QueryExecutor {
+public class QueryExecutor implements FieldAccessor {
     private final MappingManager mappingManager;
     private final File dataDirectory;
     private final ObjectMapper objectMapper;
@@ -52,8 +54,8 @@ public class QueryExecutor {
 
         // Apply WHERE clause
         List<JsonNode> filteredData = joinedData;
-        if (parsedQuery.getWhereClause() != null) {
-            filteredData = applyWhere(joinedData, parsedQuery.getWhereClause());
+        if (parsedQuery.hasWhere()) {
+            filteredData = applyWhere(joinedData, parsedQuery.getWhereExpression());
         }
 
         // Apply ORDER BY
@@ -264,10 +266,9 @@ public class QueryExecutor {
     }
 
     /**
-     * Get field value from a row, supporting qualified names (e.g., "p.id").
-     * If fieldPath has no prefix, searches within all table wrappers.
+     * Get field value from a row using direct path navigation.
      */
-    private JsonNode getFieldValue(JsonNode row, String fieldPath) {
+    private JsonNode getFieldValueDirect(JsonNode row, String fieldPath) {
         String[] parts = fieldPath.split("\\.");
         JsonNode current = row;
 
@@ -287,7 +288,7 @@ public class QueryExecutor {
      */
     private JsonNode getFieldValueFlexible(JsonNode row, String fieldPath) {
         // First try direct access (for qualified names like "p.id")
-        JsonNode result = getFieldValue(row, fieldPath);
+        JsonNode result = getFieldValueDirect(row, fieldPath);
         if (result != null) {
             return result;
         }
@@ -311,16 +312,25 @@ public class QueryExecutor {
     /**
      * Apply WHERE clause filtering.
      */
-    private List<JsonNode> applyWhere(List<JsonNode> data, String whereClause) {
+    private List<JsonNode> applyWhere(List<JsonNode> data, Expression whereExpression) {
         List<JsonNode> result = new ArrayList<>();
+        WhereEvaluator evaluator = new WhereEvaluator(this);
 
         for (JsonNode row : data) {
-            if (evaluateWhereCondition(row, whereClause)) {
+            if (evaluator.evaluate(row, whereExpression)) {
                 result.add(row);
             }
         }
 
         return result;
+    }
+    
+    /**
+     * Implement FieldAccessor interface for WhereEvaluator.
+     */
+    @Override
+    public JsonNode getFieldValue(JsonNode row, String fieldPath) {
+        return getFieldValueFlexible(row, fieldPath);
     }
 
     /**
@@ -367,99 +377,6 @@ public class QueryExecutor {
         
         // Handle text (default)
         return node1.asText().compareTo(node2.asText());
-    }
-
-    /**
-     * Evaluate WHERE condition for a single row.
-     * This is a simplified implementation supporting basic comparisons.
-     */
-    private boolean evaluateWhereCondition(JsonNode row, String whereClause) {
-        try {
-            // Parse simple conditions like "field = 'value'" or "a.b = 123"
-            WhereCondition condition = parseWhereCondition(whereClause);
-            JsonNode fieldValue = getFieldValueFlexible(row, condition.field());
-
-            if (fieldValue == null) {
-                return false;
-            }
-
-            return switch (condition.operator()) {
-                case "=" -> compareEquals(fieldValue, condition.value());
-                case "!=" -> !compareEquals(fieldValue, condition.value());
-                case ">" -> compareGreater(fieldValue, condition.value());
-                case "<" -> compareLess(fieldValue, condition.value());
-                case ">=" -> compareGreater(fieldValue, condition.value()) || compareEquals(fieldValue, condition.value());
-                case "<=" -> compareLess(fieldValue, condition.value()) || compareEquals(fieldValue, condition.value());
-                default -> false;
-            };
-        } catch (Exception e) {
-            // If we can't parse/evaluate, skip the row
-            return false;
-        }
-    }
-
-    /**
-     * Parse WHERE condition.
-     */
-    private WhereCondition parseWhereCondition(String whereClause) {
-        // Support basic operators
-        String[] operators = {">=", "<=", "!=", "=", ">", "<"};
-        
-        for (String op : operators) {
-            int opIndex = whereClause.indexOf(op);
-            if (opIndex > 0) {
-                String field = whereClause.substring(0, opIndex).trim();
-                String value = whereClause.substring(opIndex + op.length()).trim();
-                
-                // Remove quotes from string values
-                if (value.startsWith("'") && value.endsWith("'")) {
-                    value = value.substring(1, value.length() - 1);
-                } else if (value.startsWith("\"") && value.endsWith("\"")) {
-                    value = value.substring(1, value.length() - 1);
-                }
-                
-                return new WhereCondition(field, op, value);
-            }
-        }
-        
-        throw new IllegalArgumentException("Cannot parse WHERE condition: " + whereClause);
-    }
-
-    private boolean compareEquals(JsonNode fieldValue, String compareValue) {
-        if (fieldValue.isTextual()) {
-            return fieldValue.asText().equals(compareValue);
-        } else if (fieldValue.isNumber()) {
-            try {
-                return fieldValue.asDouble() == Double.parseDouble(compareValue);
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        } else if (fieldValue.isBoolean()) {
-            return fieldValue.asBoolean() == Boolean.parseBoolean(compareValue);
-        }
-        return false;
-    }
-
-    private boolean compareGreater(JsonNode fieldValue, String compareValue) {
-        if (fieldValue.isNumber()) {
-            try {
-                return fieldValue.asDouble() > Double.parseDouble(compareValue);
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        }
-        return false;
-    }
-
-    private boolean compareLess(JsonNode fieldValue, String compareValue) {
-        if (fieldValue.isNumber()) {
-            try {
-                return fieldValue.asDouble() < Double.parseDouble(compareValue);
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        }
-        return false;
     }
 
     /**
@@ -548,10 +465,5 @@ public class QueryExecutor {
      * Simple record for JOIN conditions.
      */
     private record JoinCondition(String leftField, String rightField) {}
-
-    /**
-     * Simple record for WHERE conditions.
-     */
-    private record WhereCondition(String field, String operator, String value) {}
 }
 

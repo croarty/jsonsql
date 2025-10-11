@@ -5,11 +5,12 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
 ## Features
 
 - **SQL-like Query Syntax**: Write familiar SQL queries against JSON data
-  - `SELECT` - Project specific fields or all fields with `*`
+  - `SELECT` - Project specific fields or all fields with `*`, with `AS` aliases
   - `FROM` - Specify data sources
-  - `WHERE` - Filter results with conditions
+  - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses)
   - `JOIN` / `LEFT JOIN` - Combine data from multiple sources
   - `TOP x` / `LIMIT` - Limit result sets
+  - `ORDER BY` - Sort results ascending or descending
 - **Schema-less Design**: Works with any JSON structure without predefined models
 - **JSONPath Mapping**: Define shortcuts for complex JSONPath expressions
 - **Flexible Output**: Write to stdout, file, or clipboard
@@ -167,6 +168,49 @@ jsonsql --query "SELECT * FROM products WHERE category = 'Electronics'"
 # Limit results
 jsonsql --query "SELECT TOP 10 * FROM products"
 ```
+
+#### Complex WHERE Clauses
+
+JsonSQL now supports complex WHERE clauses with `AND`, `OR`, `NOT`, and parentheses for grouping:
+
+```bash
+# AND conditions
+jsonsql --query "SELECT * FROM products WHERE category = 'Electronics' AND price > 50"
+
+# OR conditions
+jsonsql --query "SELECT * FROM products WHERE category = 'Furniture' OR price < 30"
+
+# NOT condition
+jsonsql --query "SELECT * FROM products WHERE NOT inStock = false"
+
+# Parentheses for grouping
+jsonsql --query "SELECT * FROM products WHERE (category = 'Electronics' AND price > 100) OR category = 'Furniture'"
+
+# Complex nested conditions
+jsonsql --query "SELECT * FROM products WHERE (category = 'Electronics' AND (price < 100 OR price > 1000)) OR (category = 'Furniture' AND inStock = true)"
+
+# Multiple ANDs
+jsonsql --query "SELECT * FROM products WHERE category = 'Electronics' AND price > 50 AND inStock = true"
+
+# Combining AND with OR
+jsonsql --query "SELECT * FROM products WHERE category = 'Electronics' AND (price < 50 OR price > 1000)"
+
+# NOT with complex conditions
+jsonsql --query "SELECT * FROM products WHERE NOT (category = 'Electronics' AND price > 500)"
+
+# Deep nesting
+jsonsql --query "SELECT * FROM products WHERE ((category = 'Electronics' AND price > 100) OR (category = 'Furniture' AND price < 200)) AND inStock = true"
+```
+
+**Supported Operators:**
+- **Logical:** `AND`, `OR`, `NOT`
+- **Comparison:** `=`, `!=`, `>`, `<`, `>=`, `<=`
+- **Grouping:** Parentheses `()`
+
+**Boolean Logic:**
+- Short-circuit evaluation for `AND` and `OR`
+- Full support for nested conditions with any level of complexity
+- Operator precedence follows standard SQL rules
 
 #### Queries with JOINs
 
@@ -459,8 +503,7 @@ Planned features for future releases:
 - `GROUP BY` clause with aggregation functions (COUNT, SUM, AVG, etc.)
 - `DISTINCT` keyword
 - Subqueries
-- `IN` and `LIKE` operators in WHERE clauses
-- Complex WHERE expressions (AND, OR, parentheses)
+- `IN`, `LIKE`, `BETWEEN`, `IS NULL` operators in WHERE clauses
 - `HAVING` clause
 - Performance optimization: early termination for TOP without ORDER BY
 
