@@ -693,6 +693,11 @@ Planned features for future releases, organized by priority:
 - ASCII table format (`--format table`)
 - XML output format (`--format xml`)
 
+**Saved Query Enhancements:**
+- **Parameterized queries** - Variables in saved queries (e.g., `WHERE price > ${min_price}`)
+- Query templates with default values
+- Named parameters for reusability
+
 **Developer Tools:**
 - Query validation / dry-run mode (`--dry-run`)
 - Query profiling and performance analysis (`--explain`)
