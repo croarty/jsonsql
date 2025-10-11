@@ -245,6 +245,11 @@ jsonsql --query "SELECT * FROM products WHERE price > 50 AND category = 'RareCat
   - `_` - Matches exactly one character
 - `NOT LIKE` - Negated pattern matching
 
+### Null Checking
+- `IS NULL` - Check if field is null or missing
+- `IS NOT NULL` - Check if field has a value
+  - **Note:** Both missing fields and explicitly null fields are treated as NULL
+
 ### Grouping
 - `()` - Parentheses for grouping and precedence
 
@@ -355,6 +360,108 @@ jsonsql --query "SELECT * FROM products WHERE name LIKE '%(%)%'"
    - `'_ext'` - exactly 4 characters ending in "ext"
    - `'%ext'` - any number of characters ending in "ext"
 
+## IS NULL / IS NOT NULL Examples
+
+### Finding Null or Missing Fields
+
+```bash
+# Find products with no description (missing or explicitly null)
+jsonsql --query "SELECT * FROM products WHERE description IS NULL"
+
+# Find users without email addresses
+jsonsql --query "SELECT * FROM users WHERE email IS NULL"
+```
+
+### Finding Non-Null Fields
+
+```bash
+# Find products that have a category
+jsonsql --query "SELECT * FROM products WHERE category IS NOT NULL"
+
+# Find users with phone numbers
+jsonsql --query "SELECT * FROM users WHERE phone IS NOT NULL"
+```
+
+### Combining IS NULL with Other Operators
+
+```bash
+# Products with description AND in Electronics category
+jsonsql --query "SELECT * FROM products WHERE description IS NOT NULL AND category = 'Electronics'"
+
+# Products missing either category or description
+jsonsql --query "SELECT * FROM products WHERE category IS NULL OR description IS NULL"
+
+# Expensive products with no description
+jsonsql --query "SELECT * FROM products WHERE description IS NULL AND price > 500"
+
+# Products with pattern in name, excluding those without categories
+jsonsql --query "SELECT * FROM products WHERE name LIKE '%Laptop%' AND category IS NOT NULL"
+```
+
+### Complex Null Checks
+
+```bash
+# Find complete product records (all fields present)
+jsonsql --query "SELECT * FROM products WHERE name IS NOT NULL AND category IS NOT NULL AND description IS NOT NULL AND price IS NOT NULL"
+
+# Find incomplete records (any field missing)
+jsonsql --query "SELECT * FROM products WHERE name IS NULL OR category IS NULL OR description IS NULL OR price IS NULL"
+
+# Products with category but no stock info
+jsonsql --query "SELECT * FROM products WHERE category IS NOT NULL AND stock IS NULL"
+```
+
+### IS NULL with JOIN
+
+```bash
+# Orders without delivery notes
+jsonsql --query "SELECT o.id, p.name FROM orders o JOIN products p ON o.productId = p.id WHERE o.notes IS NULL"
+
+# Products that have never been ordered (using LEFT JOIN)
+jsonsql --query "SELECT p.name FROM products p LEFT JOIN orders o ON p.id = o.productId WHERE o.id IS NULL"
+```
+
+### IS NULL with ORDER BY and LIMIT
+
+```bash
+# First 10 products missing descriptions
+jsonsql --query "SELECT TOP 10 * FROM products WHERE description IS NULL ORDER BY name"
+
+# Products with categories, sorted by price
+jsonsql --query "SELECT * FROM products WHERE category IS NOT NULL ORDER BY price DESC"
+```
+
+### Understanding NULL vs Missing
+
+In JsonSQL, these are treated identically:
+
+```json
+// Explicitly null
+{"id": 1, "name": "Product", "category": null}
+
+// Field missing
+{"id": 2, "name": "Product"}
+```
+
+Both will match `WHERE category IS NULL` and fail `WHERE category IS NOT NULL`.
+
+### Important Notes
+
+1. **Regular comparisons exclude NULLs:**
+   - `WHERE price > 100` excludes rows where price is NULL
+   - `WHERE category = 'Electronics'` excludes rows where category is NULL
+   - `WHERE category != 'Electronics'` also excludes rows where category is NULL
+
+2. **Only IS NULL finds NULLs:**
+   - `WHERE description IS NULL` - finds null and missing
+   - `WHERE description IS NOT NULL` - finds only present values
+
+3. **Combine for flexible filtering:**
+   ```bash
+   # Products in Electronics OR with no category
+   jsonsql --query "SELECT * FROM products WHERE category = 'Electronics' OR category IS NULL"
+   ```
+
 ## Technical Details
 
 ### Short-Circuit Evaluation
@@ -400,6 +507,7 @@ Complex WHERE clauses in JsonSQL provide powerful filtering capabilities:
 
 ✅ **Full Boolean Logic**: AND, OR, NOT operators
 ✅ **Pattern Matching**: LIKE and NOT LIKE with % and _ wildcards
+✅ **Null Handling**: IS NULL and IS NOT NULL for missing and null fields
 ✅ **Unlimited Nesting**: Parentheses for any complexity level
 ✅ **Short-Circuit Evaluation**: Efficient query execution
 ✅ **Standard SQL Semantics**: Familiar operator precedence

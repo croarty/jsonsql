@@ -79,6 +79,11 @@ public class WhereEvaluator {
             return evaluateLike(row, (LikeExpression) expression);
         }
         
+        // Handle IS NULL / IS NOT NULL
+        if (expression instanceof IsNullExpression) {
+            return evaluateIsNull(row, (IsNullExpression) expression);
+        }
+        
         // Unsupported expression type
         return false;
     }
@@ -204,6 +209,24 @@ public class WhereEvaluator {
         
         // Handle NOT LIKE
         return likeExpr.isNot() ? !matches : matches;
+    }
+    
+    /**
+     * Evaluate IS NULL / IS NOT NULL expression.
+     * A field is considered NULL if:
+     * 1. The field is missing from the JSON object (fieldValue == null)
+     * 2. The field exists but is explicitly set to null (fieldValue.isNull())
+     */
+    private boolean evaluateIsNull(JsonNode row, IsNullExpression isNullExpr) {
+        // Get field value
+        String fieldPath = isNullExpr.getLeftExpression().toString();
+        JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
+        
+        // Check if field is null (missing or explicitly null)
+        boolean isNull = (fieldValue == null || fieldValue.isNull());
+        
+        // Handle IS NOT NULL
+        return isNullExpr.isNot() ? !isNull : isNull;
     }
     
     /**

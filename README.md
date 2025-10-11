@@ -7,7 +7,7 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
 - **SQL-like Query Syntax**: Write familiar SQL queries against JSON data
   - `SELECT` - Project specific fields or all fields with `*`, with `AS` aliases
   - `FROM` - Specify data sources
-  - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses, LIKE)
+  - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses, LIKE, IS NULL)
   - `JOIN` / `LEFT JOIN` - Combine data from multiple sources
   - `TOP x` / `LIMIT` - Limit result sets
   - `ORDER BY` - Sort results ascending or descending
@@ -206,6 +206,7 @@ jsonsql --query "SELECT * FROM products WHERE ((category = 'Electronics' AND pri
 - **Logical:** `AND`, `OR`, `NOT`
 - **Comparison:** `=`, `!=`, `>`, `<`, `>=`, `<=`
 - **Pattern Matching:** `LIKE`, `NOT LIKE` with `%` (any characters) and `_` (single character) wildcards
+- **Null Checking:** `IS NULL`, `IS NOT NULL` (treats both missing and explicitly null fields as NULL)
 - **Grouping:** Parentheses `()`
 
 **Boolean Logic:**
@@ -232,6 +233,27 @@ jsonsql --query "SELECT * FROM products WHERE name NOT LIKE '%Monitor%'"
 
 # LIKE with complex conditions
 jsonsql --query "SELECT * FROM products WHERE name LIKE '%e%' AND category = 'Electronics' AND price > 100"
+```
+
+**Null Value Handling with IS NULL / IS NOT NULL:**
+
+Both missing fields and explicitly null fields are treated as NULL:
+
+```bash
+# Find products with no description (missing or null)
+jsonsql --query "SELECT * FROM products WHERE description IS NULL"
+
+# Find products that have a category
+jsonsql --query "SELECT * FROM products WHERE category IS NOT NULL"
+
+# Combine with other operators
+jsonsql --query "SELECT * FROM products WHERE description IS NOT NULL AND price > 100"
+
+# Multiple null checks
+jsonsql --query "SELECT * FROM products WHERE category IS NULL OR description IS NULL"
+
+# Find complete records (no null fields)
+jsonsql --query "SELECT * FROM products WHERE name IS NOT NULL AND category IS NOT NULL AND price IS NOT NULL"
 ```
 
 #### Queries with JOINs
@@ -526,7 +548,6 @@ Planned features for future releases, organized by priority:
 ### High Priority (Core SQL Features)
 
 **WHERE Clause Operators:**
-- `IS NULL` / `IS NOT NULL` - Find or exclude null values
 - `IN` operator - Check if value matches any in a list (e.g., `WHERE category IN ('Electronics', 'Tools')`)
 - `BETWEEN` operator - Range checking (e.g., `WHERE price BETWEEN 100 AND 500`)
 - `ILIKE` - Case-insensitive pattern matching
