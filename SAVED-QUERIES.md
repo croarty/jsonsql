@@ -2,9 +2,13 @@
 
 JsonSQL allows you to save frequently-used queries with descriptive names for easy reuse. This feature is perfect for complex queries, recurring reports, and sharing common queries across a team.
 
+**✨ This repository includes 32 pre-configured example queries!**  
+See [SAVED-QUERIES-REFERENCE.md](SAVED-QUERIES-REFERENCE.md) for complete documentation of all included queries.
+
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Pre-configured Queries](#pre-configured-queries)
 - [Saving Queries](#saving-queries)
 - [Running Saved Queries](#running-saved-queries)
 - [Managing Saved Queries](#managing-saved-queries)
@@ -15,17 +19,49 @@ JsonSQL allows you to save frequently-used queries with descriptive names for ea
 ## Quick Start
 
 ```bash
-# 1. Save a query
-jsonsql --save-query my_report --query "SELECT * FROM products WHERE price > 100"
-
-# 2. List saved queries
+# 1. List pre-configured queries (32 included!)
 jsonsql --list-queries
 
-# 3. Run the saved query
+# 2. Run an example query
+jsonsql --run-query 16_top_10_electronics --data-dir example-data --pretty
+
+# 3. Save your own query
+jsonsql --save-query my_report --query "SELECT * FROM products WHERE price > 100"
+
+# 4. Run your saved query
 jsonsql --run-query my_report --data-dir example-data --pretty
 
-# 4. Delete when no longer needed
+# 5. Delete when no longer needed
 jsonsql --delete-query my_report
+```
+
+## Pre-configured Queries
+
+This repository includes **32 example queries** demonstrating all JsonSQL features:
+
+| Category | Queries | Features Demonstrated |
+|----------|---------|----------------------|
+| **Basic SELECT** | 01-02 | SELECT *, columns, AS aliases |
+| **WHERE Filtering** | 03-06 | =, <, >, AND, OR |
+| **IN Operator** | 07-08 | IN, NOT IN |
+| **LIKE Patterns** | 09-10, 23, 26 | LIKE, NOT LIKE, % wildcard |
+| **NULL Handling** | 11-12 | IS NULL, IS NOT NULL |
+| **Complex WHERE** | 13, 18, 20, 27, 29 | Parentheses, nested conditions |
+| **JOINs** | 14-15, 19, 24-25, 28 | INNER JOIN, multiple tables |
+| **TOP/LIMIT** | 16-17 | TOP, LIMIT |
+| **Business Logic** | 21-22, 30 | Real-world scenarios |
+| **Ultimate Showcase** | 30 | ALL operators combined |
+
+**View complete reference:** [SAVED-QUERIES-REFERENCE.md](SAVED-QUERIES-REFERENCE.md)
+
+**Try them out:**
+```bash
+# List all
+jsonsql --list-queries
+
+# Run any example
+jsonsql --run-query 16_top_10_electronics --data-dir example-data --pretty
+jsonsql --run-query 30_showcase_all_operators --data-dir example-data --pretty
 ```
 
 ## Saving Queries

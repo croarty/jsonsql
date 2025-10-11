@@ -209,6 +209,14 @@ jsonsql --delete-query old_query
 - Persists across sessions
 - Can be version controlled with your project
 
+**Pre-configured Queries:**
+
+This repository includes 32 pre-configured example queries demonstrating all features:
+- See [SAVED-QUERIES-REFERENCE.md](SAVED-QUERIES-REFERENCE.md) for complete documentation
+- Queries numbered 01-30 showcase specific features
+- Covers: SELECT, WHERE (all operators), JOIN, LIKE, IN, IS NULL, ORDER BY, TOP/LIMIT
+- Run any query: `jsonsql --run-query <name> --data-dir example-data --pretty`
+
 ### Query Examples
 
 #### Simple Queries
