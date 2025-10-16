@@ -1,0 +1,160 @@
+{
+  "products": [
+    {
+      "id": 1,
+      "name": "Wireless Mouse",
+      "description": "High-precision wireless mouse with ergonomic design",
+      "price": 24.99,
+      "category": "Electronics",
+      "brand": "Logitech",
+      "stock": 150,
+      "inStock": true,
+      "tags": ["wireless", "mouse", "ergonomic", "electronics"],
+      "specifications": {
+        "connectivity": "Bluetooth 5.0",
+        "battery": "12 months",
+        "dpi": "1600",
+        "weight": "85g",
+        "dimensions": "12.5 x 6.4 x 3.9 cm"
+      },
+      "reviews": [
+        {
+          "user": "TechReviewer",
+          "rating": 5,
+          "comment": "Excellent battery life and smooth tracking"
+        },
+        {
+          "user": "OfficeWorker",
+          "rating": 4,
+          "comment": "Great for daily use, very comfortable"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Mechanical Keyboard",
+      "description": "RGB mechanical keyboard with Cherry MX switches",
+      "price": 89.99,
+      "category": "Electronics",
+      "brand": "Corsair",
+      "stock": 75,
+      "inStock": true,
+      "tags": ["keyboard", "mechanical", "rgb", "gaming"],
+      "specifications": {
+        "switches": "Cherry MX Red",
+        "layout": "Full-size",
+        "connectivity": "USB-C",
+        "backlighting": "RGB",
+        "weight": "1.2kg"
+      },
+      "reviews": [
+        {
+          "user": "GamerPro",
+          "rating": 5,
+          "comment": "Perfect for gaming, great tactile feedback"
+        },
+        {
+          "user": "Developer",
+          "rating": 4,
+          "comment": "Love the RGB lighting and build quality"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "USB-C Hub",
+      "description": "7-in-1 USB-C hub with multiple ports",
+      "price": 34.99,
+      "category": "Electronics",
+      "brand": "Anker",
+      "stock": 200,
+      "inStock": true,
+      "tags": ["usb-c", "hub", "adapter", "connectivity"],
+      "specifications": {
+        "ports": ["USB-C", "USB-A x3", "HDMI", "SD Card", "MicroSD"],
+        "powerDelivery": "100W",
+        "material": "Aluminum",
+        "weight": "120g"
+      },
+      "reviews": [
+        {
+          "user": "MacUser",
+          "rating": 5,
+          "comment": "Essential for MacBook users, works perfectly"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Laptop Stand",
+      "description": "Adjustable aluminum laptop stand",
+      "price": 45.50,
+      "category": "Accessories",
+      "brand": "Rain Design",
+      "stock": 50,
+      "inStock": true,
+      "tags": ["laptop", "stand", "adjustable", "aluminum"],
+      "specifications": {
+        "material": "Aluminum",
+        "adjustability": "6 height positions",
+        "weight": "1.1kg",
+        "maxLaptopSize": "17 inches"
+      },
+      "reviews": [
+        {
+          "user": "RemoteWorker",
+          "rating": 4,
+          "comment": "Sturdy and well-built, improves posture"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Webcam HD",
+      "description": "1080p webcam with built-in microphone",
+      "price": 79.99,
+      "category": "Electronics",
+      "brand": "Logitech",
+      "stock": 0,
+      "inStock": false,
+      "tags": ["webcam", "hd", "microphone", "video"],
+      "specifications": {
+        "resolution": "1080p",
+        "frameRate": "30fps",
+        "microphone": "Built-in stereo",
+        "mounting": "Universal clip"
+      },
+      "reviews": [
+        {
+          "user": "Streamer",
+          "rating": 5,
+          "comment": "Great quality for streaming and video calls"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Desk Lamp",
+      "description": "LED desk lamp with adjustable brightness",
+      "price": 29.99,
+      "category": "Office",
+      "brand": "TaoTronics",
+      "stock": 120,
+      "inStock": true,
+      "tags": ["lamp", "led", "desk", "adjustable"],
+      "specifications": {
+        "brightness": "5 levels",
+        "colorTemperature": "2700K-6500K",
+        "power": "USB powered",
+        "adjustability": "360° flexible"
+      },
+      "reviews": [
+        {
+          "user": "Student",
+          "rating": 4,
+          "comment": "Perfect for studying, good value for money"
+        }
+      ]
+    }
+  ]
+}

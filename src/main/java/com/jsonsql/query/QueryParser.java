@@ -125,22 +125,33 @@ public class QueryParser {
         }
 
         List<JoinInfo> joinInfos = new ArrayList<>();
+        List<UnnestInfo> unnestInfos = new ArrayList<>();
         
         for (Join join : joins) {
-            JoinInfo joinInfo = new JoinInfo();
-            joinInfo.setLeftJoin(join.isLeft());
-            joinInfo.setTable(extractTableInfo(join.getRightItem()));
+            FromItem rightItem = join.getRightItem();
             
-            if (join.getOnExpressions() != null && !join.getOnExpressions().isEmpty()) {
-                joinInfo.setOnCondition(join.getOnExpressions().iterator().next().toString());
+            // Check if this is an UNNEST operation (TableFunction)
+            if (rightItem instanceof net.sf.jsqlparser.statement.select.TableFunction) {
+                UnnestInfo unnestInfo = extractUnnestInfo((net.sf.jsqlparser.statement.select.TableFunction) rightItem);
+                unnestInfos.add(unnestInfo);
             } else {
-                throw new QueryParseException("JOIN requires ON condition");
+                // Regular JOIN
+                JoinInfo joinInfo = new JoinInfo();
+                joinInfo.setLeftJoin(join.isLeft());
+                joinInfo.setTable(extractTableInfo(rightItem));
+                
+                if (join.getOnExpressions() != null && !join.getOnExpressions().isEmpty()) {
+                    joinInfo.setOnCondition(join.getOnExpressions().iterator().next().toString());
+                } else {
+                    throw new QueryParseException("JOIN requires ON condition");
+                }
+                
+                joinInfos.add(joinInfo);
             }
-            
-            joinInfos.add(joinInfo);
         }
         
         query.setJoins(joinInfos);
+        query.setUnnests(unnestInfos);
     }
 
     private TableInfo extractTableInfo(FromItem fromItem) {
@@ -162,6 +173,52 @@ public class QueryParser {
         tableInfo.setAlias(alias);
         
         return tableInfo;
+    }
+
+    private UnnestInfo extractUnnestInfo(net.sf.jsqlparser.statement.select.TableFunction tableFunction) throws QueryParseException {
+        String functionString = tableFunction.toString();
+        
+        // Parse UNNEST(expression) AS alias(column) format
+        // Example: "UNNEST(tags) AS t(tag)"
+        if (!functionString.toUpperCase().startsWith("UNNEST(")) {
+            throw new QueryParseException("Invalid UNNEST syntax: " + functionString);
+        }
+        
+        // Find the array expression inside UNNEST(...)
+        int startParen = functionString.indexOf('(');
+        int endParen = functionString.indexOf(')', startParen);
+        if (startParen == -1 || endParen == -1) {
+            throw new QueryParseException("Invalid UNNEST syntax: " + functionString);
+        }
+        
+        String arrayExpression = functionString.substring(startParen + 1, endParen).trim();
+        
+        // Parse the alias part: AS alias(column)
+        String aliasPart = functionString.substring(endParen + 1).trim();
+        String alias = null;
+        String elementColumn = null;
+        
+        if (aliasPart.toUpperCase().startsWith("AS ")) {
+            String aliasExpression = aliasPart.substring(3).trim();
+            // Parse alias(column) format
+            int aliasStartParen = aliasExpression.indexOf('(');
+            int aliasEndParen = aliasExpression.indexOf(')', aliasStartParen);
+            
+            if (aliasStartParen > 0 && aliasEndParen > aliasStartParen) {
+                alias = aliasExpression.substring(0, aliasStartParen).trim();
+                elementColumn = aliasExpression.substring(aliasStartParen + 1, aliasEndParen).trim();
+            } else {
+                // Simple alias without column specification
+                alias = aliasExpression;
+                elementColumn = "value"; // Default column name
+            }
+        }
+        
+        if (alias == null || elementColumn == null) {
+            throw new QueryParseException("UNNEST requires alias and column specification: " + functionString);
+        }
+        
+        return new UnnestInfo(arrayExpression, alias, elementColumn);
     }
 
     private void parseOrderBy(PlainSelect plainSelect, ParsedQuery query) {

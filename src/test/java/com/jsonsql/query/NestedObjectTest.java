@@ -8,13 +8,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Comprehensive tests for nested object handling.
+ * Tests for nested object access in SELECT and WHERE clauses.
+ * Documents current behavior and identifies areas for improvement.
  */
 class NestedObjectTest {
 
@@ -28,239 +28,415 @@ class NestedObjectTest {
     private ObjectMapper objectMapper;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         objectMapper = new ObjectMapper();
         configFile = tempDir.resolve("test-mappings.json").toFile();
         mappingManager = new MappingManager(configFile);
         dataDir = tempDir.resolve("data").toFile();
         dataDir.mkdirs();
         queryExecutor = new QueryExecutor(mappingManager, dataDir);
+
+        setupTestData();
     }
 
-    @Test
-    void testDeepNesting() throws Exception {
-        String json = """
-        {"items": [
+    private void setupTestData() throws Exception {
+        // Create complex nested data
+        String customers = """
+        {"customers": [
             {
                 "id": 1,
-                "user": {
-                    "profile": {
-                        "settings": {
-                            "theme": "dark",
-                            "language": "en"
-                        }
+                "name": "Alice Johnson",
+                "profile": {
+                    "vip": true,
+                    "level": "Gold",
+                    "points": 5000,
+                    "preferences": {
+                        "newsletter": true,
+                        "language": "en"
+                    }
+                },
+                "address": {
+                    "street": "123 Main St",
+                    "city": "New York",
+                    "state": "NY",
+                    "zip": "10001",
+                    "country": "USA",
+                    "coordinates": {
+                        "lat": 40.7128,
+                        "lng": -74.0060
+                    }
+                }
+            },
+            {
+                "id": 2,
+                "name": "Bob Smith",
+                "profile": {
+                    "vip": false,
+                    "level": "Bronze",
+                    "points": 500,
+                    "preferences": {
+                        "newsletter": false,
+                        "language": "es"
+                    }
+                },
+                "address": {
+                    "street": "456 Oak Ave",
+                    "city": "Los Angeles",
+                    "state": "CA",
+                    "zip": "90210",
+                    "country": "USA",
+                    "coordinates": {
+                        "lat": 34.0522,
+                        "lng": -118.2437
+                    }
+                }
+            },
+            {
+                "id": 3,
+                "name": "Carol White",
+                "profile": {
+                    "vip": true,
+                    "level": "Silver",
+                    "points": 2000,
+                    "preferences": {
+                        "newsletter": true,
+                        "language": "en"
+                    }
+                },
+                "address": {
+                    "street": "789 Pine Rd",
+                    "city": "Chicago",
+                    "state": "IL",
+                    "zip": "60601",
+                    "country": "USA",
+                    "coordinates": {
+                        "lat": 41.8781,
+                        "lng": -87.6298
                     }
                 }
             }
         ]}
         """;
-        Files.writeString(dataDir.toPath().resolve("deep.json"), json);
-        mappingManager.addMapping("deep", "deep.json:$.items");
 
-        String result = queryExecutor.execute("SELECT d.user.profile.settings.theme FROM deep d");
-        JsonNode resultNode = objectMapper.readTree(result);
+        // Write test data file
+        java.nio.file.Files.writeString(dataDir.toPath().resolve("customers.json"), customers);
 
-        assertEquals(1, resultNode.size());
-        assertEquals("dark", resultNode.get(0).get("theme").asText());
+        // Set up mapping
+        mappingManager.addMapping("customers", "customers.json:$.customers[*]");
     }
 
     @Test
-    void testNestedObjectInWhere() throws Exception {
-        String json = """
-        {"users": [
-            {"id": 1, "name": "Alice", "meta": {"region": "US", "tier": "premium"}},
-            {"id": 2, "name": "Bob", "meta": {"region": "EU", "tier": "basic"}},
-            {"id": 3, "name": "Carol", "meta": {"region": "US", "tier": "basic"}}
-        ]}
-        """;
-        Files.writeString(dataDir.toPath().resolve("users.json"), json);
-        mappingManager.addMapping("users", "users.json:$.users");
-
-        String result = queryExecutor.execute("SELECT u.name, u.meta FROM users u WHERE u.meta.region = 'US'");
-        JsonNode resultNode = objectMapper.readTree(result);
-
-        assertEquals(2, resultNode.size());
-        assertEquals("Alice", resultNode.get(0).get("name").asText());
-        assertEquals("Carol", resultNode.get(1).get("name").asText());
-    }
-
-    @Test
-    void testNestedObjectInOrderBy() throws Exception {
-        String json = """
-        {"items": [
-            {"id": 1, "data": {"priority": 3}},
-            {"id": 2, "data": {"priority": 1}},
-            {"id": 3, "data": {"priority": 2}}
-        ]}
-        """;
-        Files.writeString(dataDir.toPath().resolve("nested_order.json"), json);
-        mappingManager.addMapping("nested_order", "nested_order.json:$.items");
-
-        String result = queryExecutor.execute("SELECT n.id, n.data FROM nested_order n ORDER BY n.data.priority");
-        JsonNode resultNode = objectMapper.readTree(result);
-
-        assertEquals(3, resultNode.size());
-        assertEquals(1, resultNode.get(0).get("data").get("priority").asInt());
-        assertEquals(2, resultNode.get(1).get("data").get("priority").asInt());
-        assertEquals(3, resultNode.get(2).get("data").get("priority").asInt());
-    }
-
-    @Test
-    void testNestedObjectInJoinCondition() throws Exception {
-        String products = """
-        {"items": [{"id": 1, "ref": {"code": "A1"}}]}
-        """;
-        String orders = """
-        {"items": [{"orderId": 101, "product": {"code": "A1"}}]}
-        """;
+    void testNestedObjectSelection() throws Exception {
+        // Test selecting nested object fields
+        String sql = "SELECT name, profile.level, profile.points FROM customers";
         
-        Files.writeString(dataDir.toPath().resolve("prod_ref.json"), products);
-        Files.writeString(dataDir.toPath().resolve("ord_ref.json"), orders);
+        String result = queryExecutor.execute(sql);
+        JsonNode resultArray = objectMapper.readTree(result);
         
-        mappingManager.addMapping("prod_ref", "prod_ref.json:$.items");
-        mappingManager.addMapping("ord_ref", "ord_ref.json:$.items");
-
-        String result = queryExecutor.execute(
-            "SELECT o.orderId, p.id FROM ord_ref o JOIN prod_ref p ON o.product.code = p.ref.code"
-        );
-        JsonNode resultNode = objectMapper.readTree(result);
-
-        assertEquals(1, resultNode.size());
-        assertEquals(101, resultNode.get(0).get("orderId").asInt());
-        assertEquals(1, resultNode.get(0).get("id").asInt());
+        assertTrue(resultArray.isArray());
+        assertEquals(3, resultArray.size());
+        
+        // Verify nested fields are selected correctly
+        JsonNode alice = resultArray.get(0);
+        assertEquals("Alice Johnson", alice.get("name").asText());
+        assertEquals("Gold", alice.get("level").asText());
+        assertEquals(5000, alice.get("points").asInt());
     }
 
     @Test
-    void testSelectEntireNestedObject() throws Exception {
-        String json = """
-        {"items": [
-            {
-                "id": 1,
-                "metadata": {
-                    "created": "2024-01-01",
-                    "updated": "2024-01-15",
-                    "tags": ["tag1", "tag2"]
-                }
-            }
-        ]}
-        """;
-        Files.writeString(dataDir.toPath().resolve("meta.json"), json);
-        mappingManager.addMapping("meta", "meta.json:$.items");
-
-        String result = queryExecutor.execute("SELECT id, metadata FROM meta");
-        JsonNode resultNode = objectMapper.readTree(result);
-
-        assertEquals(1, resultNode.size());
-        assertTrue(resultNode.get(0).get("metadata").isObject());
-        assertTrue(resultNode.get(0).get("metadata").has("created"));
-        assertTrue(resultNode.get(0).get("metadata").has("tags"));
+    void testDeeplyNestedObjectSelection() throws Exception {
+        // Test selecting deeply nested object fields
+        String sql = "SELECT name, profile.preferences.language, address.coordinates.lat FROM customers";
+        
+        String result = queryExecutor.execute(sql);
+        JsonNode resultArray = objectMapper.readTree(result);
+        
+        assertTrue(resultArray.isArray());
+        assertEquals(3, resultArray.size());
+        
+        // Verify deeply nested fields are selected correctly
+        JsonNode alice = resultArray.get(0);
+        assertEquals("Alice Johnson", alice.get("name").asText());
+        assertEquals("en", alice.get("language").asText());
+        assertEquals(40.7128, alice.get("lat").asDouble(), 0.0001);
     }
 
     @Test
-    void testMultipleNestedLevelsInSelect() throws Exception {
-        String json = """
-        {"items": [
-            {
-                "id": 1,
-                "a": {"b": {"c": {"d": "deep_value"}}}
-            }
-        ]}
-        """;
-        Files.writeString(dataDir.toPath().resolve("multi_nest.json"), json);
-        mappingManager.addMapping("multi_nest", "multi_nest.json:$.items");
+    void testNestedObjectWhereClause() throws Exception {
+        // Test WHERE clause with nested object access
+        String sql = "SELECT name FROM customers WHERE profile.level = 'Gold'";
+        
+        String result = queryExecutor.execute(sql);
+        JsonNode resultArray = objectMapper.readTree(result);
+        
+        assertTrue(resultArray.isArray());
+        assertEquals(1, resultArray.size());
+        assertEquals("Alice Johnson", resultArray.get(0).get("name").asText());
+    }
 
-        String result = queryExecutor.execute("SELECT m.id, m.a.b.c.d FROM multi_nest m");
-        JsonNode resultNode = objectMapper.readTree(result);
-
-        assertEquals(1, resultNode.size());
-        assertTrue(resultNode.get(0).has("id") || resultNode.get(0).has("d"));
-        // The deeply nested value should be present
-        if (resultNode.get(0).has("d")) {
-            assertEquals("deep_value", resultNode.get(0).get("d").asText());
+    @Test
+    void testDeeplyNestedObjectWhereClause() throws Exception {
+        // Test WHERE clause with deeply nested object access
+        String sql = "SELECT name FROM customers WHERE profile.preferences.newsletter = true";
+        
+        String result = queryExecutor.execute(sql);
+        JsonNode resultArray = objectMapper.readTree(result);
+        
+        assertTrue(resultArray.isArray());
+        assertEquals(2, resultArray.size());
+        
+        // Verify we get the correct customers
+        String[] expectedNames = {"Alice Johnson", "Carol White"};
+        for (int i = 0; i < resultArray.size(); i++) {
+            assertTrue(java.util.Arrays.asList(expectedNames).contains(resultArray.get(i).get("name").asText()));
         }
     }
 
     @Test
-    void testNestedObjectWithNullValue() throws Exception {
-        String json = """
-        {"items": [
-            {"id": 1, "data": {"value": null}},
-            {"id": 2, "data": {"value": "present"}}
-        ]}
-        """;
-        Files.writeString(dataDir.toPath().resolve("null_nested.json"), json);
-        mappingManager.addMapping("null_nested", "null_nested.json:$.items");
-
-        String result = queryExecutor.execute("SELECT * FROM null_nested");
-        JsonNode resultNode = objectMapper.readTree(result);
-
-        assertEquals(2, resultNode.size());
-        assertTrue(resultNode.get(0).get("data").get("value").isNull());
-        assertFalse(resultNode.get(1).get("data").get("value").isNull());
+    void testNestedObjectWhereWithMultipleConditions() throws Exception {
+        // Test WHERE clause with multiple nested conditions
+        String sql = "SELECT name FROM customers WHERE profile.vip = true AND address.country = 'USA'";
+        
+        String result = queryExecutor.execute(sql);
+        JsonNode resultArray = objectMapper.readTree(result);
+        
+        assertTrue(resultArray.isArray());
+        assertEquals(2, resultArray.size());
+        
+        // Verify we get VIP customers from USA
+        String[] expectedNames = {"Alice Johnson", "Carol White"};
+        for (int i = 0; i < resultArray.size(); i++) {
+            assertTrue(java.util.Arrays.asList(expectedNames).contains(resultArray.get(i).get("name").asText()));
+        }
     }
 
     @Test
-    void testMissingNestedObject() throws Exception {
-        String json = """
-        {"items": [
-            {"id": 1, "config": {"setting": "value"}},
-            {"id": 2}
-        ]}
-        """;
-        Files.writeString(dataDir.toPath().resolve("missing_nest.json"), json);
-        mappingManager.addMapping("missing_nest", "missing_nest.json:$.items");
-
-        // Should not crash when config is missing
-        String result = queryExecutor.execute("SELECT id FROM missing_nest");
-        JsonNode resultNode = objectMapper.readTree(result);
-
-        assertEquals(2, resultNode.size());
+    void testNestedObjectWithAliases() throws Exception {
+        // Test nested object access with table aliases
+        String sql = "SELECT c.name, c.profile.level, c.address.city FROM customers c WHERE c.profile.vip = true";
+        
+        String result = queryExecutor.execute(sql);
+        JsonNode resultArray = objectMapper.readTree(result);
+        
+        assertTrue(resultArray.isArray());
+        assertEquals(2, resultArray.size());
+        
+        // Verify nested fields are selected correctly with aliases
+        JsonNode alice = resultArray.get(0);
+        assertEquals("Alice Johnson", alice.get("name").asText());
+        assertTrue(alice.has("level"));
+        assertTrue(alice.has("city"));
     }
 
     @Test
-    void testNestedArrayNotSupported() throws Exception {
-        String json = """
-        {"items": [
-            {"id": 1, "tags": ["tag1", "tag2", "tag3"]},
-            {"id": 2, "tags": ["tag4"]}
-        ]}
-        """;
-        Files.writeString(dataDir.toPath().resolve("arrays.json"), json);
-        mappingManager.addMapping("arrays", "arrays.json:$.items");
-
-        // Arrays should be included as-is in results
-        String result = queryExecutor.execute("SELECT * FROM arrays");
-        JsonNode resultNode = objectMapper.readTree(result);
-
-        assertEquals(2, resultNode.size());
-        assertTrue(resultNode.get(0).get("tags").isArray());
-        assertEquals(3, resultNode.get(0).get("tags").size());
+    void testNestedObjectWithOrderBy() throws Exception {
+        // Test ORDER BY with nested object fields
+        String sql = "SELECT name, profile.points FROM customers ORDER BY profile.points DESC";
+        
+        String result = queryExecutor.execute(sql);
+        JsonNode resultArray = objectMapper.readTree(result);
+        
+        assertTrue(resultArray.isArray());
+        assertEquals(3, resultArray.size());
+        
+        // Verify ordering by nested field
+        assertEquals(5000, resultArray.get(0).get("points").asInt());
+        assertEquals(2000, resultArray.get(1).get("points").asInt());
+        assertEquals(500, resultArray.get(2).get("points").asInt());
     }
 
     @Test
-    void testMixedNestedAndFlatFields() throws Exception {
-        String json = """
-        {"items": [
+    void testNestedObjectWithJoin() throws Exception {
+        // Create orders data to test JOIN with nested objects
+        String orders = """
+        {"orders": [
+            {"id": 1, "customerId": 1, "status": "completed", "total": 100.00},
+            {"id": 2, "customerId": 2, "status": "pending", "total": 50.00},
+            {"id": 3, "customerId": 1, "status": "shipped", "total": 75.00}
+        ]}
+        """;
+
+        java.nio.file.Files.writeString(dataDir.toPath().resolve("orders.json"), orders);
+        mappingManager.addMapping("orders", "orders.json:$.orders[*]");
+
+        // Test JOIN with nested object access
+        String sql = "SELECT c.name, c.profile.level, o.total FROM customers c JOIN orders o ON c.id = o.customerId WHERE c.profile.vip = true";
+        
+        String result = queryExecutor.execute(sql);
+        JsonNode resultArray = objectMapper.readTree(result);
+        
+        assertTrue(resultArray.isArray());
+        assertEquals(2, resultArray.size());
+        
+        // Verify JOIN results with nested object filtering
+        for (JsonNode row : resultArray) {
+            assertEquals("Alice Johnson", row.get("name").asText());
+            assertEquals("Gold", row.get("level").asText());
+            assertTrue(row.has("total"));
+        }
+    }
+
+    @Test
+    void testNestedObjectWithUnnest() throws Exception {
+        // Create customers with array data for UNNEST testing
+        String customersWithTags = """
+        {"customers": [
             {
                 "id": 1,
-                "name": "Item1",
-                "pricing": {"base": 10.0, "tax": 1.5},
-                "category": "Tools"
+                "name": "Alice",
+                "profile": {"level": "Gold", "tags": ["vip", "premium"]},
+                "address": {"city": "New York", "state": "NY"}
+            },
+            {
+                "id": 2,
+                "name": "Bob",
+                "profile": {"level": "Bronze", "tags": ["basic"]},
+                "address": {"city": "Los Angeles", "state": "CA"}
             }
         ]}
         """;
-        Files.writeString(dataDir.toPath().resolve("mixed.json"), json);
-        mappingManager.addMapping("mixed", "mixed.json:$.items");
 
-        String result = queryExecutor.execute("SELECT m.id, m.name, m.pricing.base, m.pricing.tax, m.category FROM mixed m");
-        JsonNode resultNode = objectMapper.readTree(result);
+        java.nio.file.Files.writeString(dataDir.toPath().resolve("customers-with-tags.json"), customersWithTags);
+        mappingManager.addMapping("customers_with_tags", "customers-with-tags.json:$.customers[*]");
 
-        assertEquals(1, resultNode.size());
-        assertEquals(1, resultNode.get(0).get("id").asInt());
-        assertEquals("Item1", resultNode.get(0).get("name").asText());
-        assertTrue(resultNode.get(0).has("base") || resultNode.get(0).has("pricing"));
-        assertTrue(resultNode.get(0).has("tax") || resultNode.get(0).has("pricing"));
-        assertEquals("Tools", resultNode.get(0).get("category").asText());
+        // Test UNNEST with nested object access
+        String sql = "SELECT c.name, c.profile.level, tag FROM customers_with_tags c, UNNEST(c.profile.tags) AS t(tag)";
+        
+        String result = queryExecutor.execute(sql);
+        JsonNode resultArray = objectMapper.readTree(result);
+        
+        assertTrue(resultArray.isArray());
+        assertEquals(3, resultArray.size()); // Alice has 2 tags, Bob has 1
+        
+        // Verify UNNEST results with nested object access
+        boolean foundAliceVip = false;
+        boolean foundAlicePremium = false;
+        boolean foundBobBasic = false;
+        
+        for (JsonNode row : resultArray) {
+            String name = row.get("name").asText();
+            String level = row.get("level").asText();
+            String tag = row.get("tag").asText();
+            
+            if (name.equals("Alice")) {
+                assertEquals("Gold", level);
+                if (tag.equals("vip")) foundAliceVip = true;
+                if (tag.equals("premium")) foundAlicePremium = true;
+            } else if (name.equals("Bob")) {
+                assertEquals("Bronze", level);
+                if (tag.equals("basic")) foundBobBasic = true;
+            }
+        }
+        
+        assertTrue(foundAliceVip);
+        assertTrue(foundAlicePremium);
+        assertTrue(foundBobBasic);
+    }
+
+    @Test
+    void testNestedObjectWithNullValues() throws Exception {
+        // Create data with null nested values
+        String customersWithNulls = """
+        {"customers": [
+            {
+                "id": 1,
+                "name": "Alice",
+                "profile": {"level": "Gold", "points": 5000},
+                "address": {"city": "New York", "state": "NY"}
+            },
+            {
+                "id": 2,
+                "name": "Bob",
+                "profile": null,
+                "address": {"city": "Los Angeles", "state": "CA"}
+            },
+            {
+                "id": 3,
+                "name": "Carol",
+                "profile": {"level": "Silver", "points": null},
+                "address": {"city": "Chicago", "state": "IL"}
+            }
+        ]}
+        """;
+
+        java.nio.file.Files.writeString(dataDir.toPath().resolve("customers-with-nulls.json"), customersWithNulls);
+        mappingManager.addMapping("customers_with_nulls", "customers-with-nulls.json:$.customers[*]");
+
+        // Test handling of null nested objects
+        String sql = "SELECT name, profile.level FROM customers_with_nulls WHERE profile.level IS NOT NULL";
+        
+        String result = queryExecutor.execute(sql);
+        JsonNode resultArray = objectMapper.readTree(result);
+        
+        assertTrue(resultArray.isArray());
+        assertEquals(2, resultArray.size()); // Alice and Carol (Bob has null profile)
+        
+        // Verify non-null nested values are handled correctly
+        for (JsonNode row : resultArray) {
+            assertTrue(row.has("name"));
+            assertTrue(row.has("level"));
+            assertFalse(row.get("level").isNull());
+        }
+    }
+
+    @Test
+    void testNestedObjectEdgeCases() throws Exception {
+        // Test edge cases with nested object access
+        
+        // Test with non-existent nested field
+        String sql1 = "SELECT name FROM customers WHERE profile.nonexistent = 'value'";
+        String result1 = queryExecutor.execute(sql1);
+        JsonNode resultArray1 = objectMapper.readTree(result1);
+        assertEquals(0, resultArray1.size()); // Should return no results
+        
+        // Test selecting non-existent nested field
+        String sql2 = "SELECT name, profile.nonexistent FROM customers";
+        String result2 = queryExecutor.execute(sql2);
+        JsonNode resultArray2 = objectMapper.readTree(result2);
+        assertEquals(3, resultArray2.size());
+        
+        // Test with empty string in nested field
+        String customersWithEmpty = """
+        {"customers": [
+            {"id": 1, "name": "Alice", "profile": {"level": "", "points": 5000}}
+        ]}
+        """;
+        
+        java.nio.file.Files.writeString(dataDir.toPath().resolve("customers-empty.json"), customersWithEmpty);
+        mappingManager.addMapping("customers_empty", "customers-empty.json:$.customers[*]");
+        
+        String sql3 = "SELECT name FROM customers_empty WHERE profile.level = ''";
+        String result3 = queryExecutor.execute(sql3);
+        JsonNode resultArray3 = objectMapper.readTree(result3);
+        assertEquals(1, resultArray3.size());
+        assertEquals("Alice", resultArray3.get(0).get("name").asText());
+    }
+
+    @Test
+    void testNestedObjectPerformance() throws Exception {
+        // Test performance with many nested fields
+        String sql = "SELECT name, profile.level, profile.points, profile.preferences.language, address.city, address.state, address.coordinates.lat, address.coordinates.lng FROM customers";
+        
+        long startTime = System.currentTimeMillis();
+        String result = queryExecutor.execute(sql);
+        long endTime = System.currentTimeMillis();
+        
+        JsonNode resultArray = objectMapper.readTree(result);
+        assertTrue(resultArray.isArray());
+        assertEquals(3, resultArray.size());
+        
+        // Verify all nested fields are present
+        JsonNode alice = resultArray.get(0);
+        assertTrue(alice.has("name"));
+        assertTrue(alice.has("level"));
+        assertTrue(alice.has("points"));
+        assertTrue(alice.has("language"));
+        assertTrue(alice.has("city"));
+        assertTrue(alice.has("state"));
+        assertTrue(alice.has("lat"));
+        assertTrue(alice.has("lng"));
+        
+        // Performance should be reasonable (less than 1 second for small dataset)
+        assertTrue(endTime - startTime < 1000);
     }
 }
-

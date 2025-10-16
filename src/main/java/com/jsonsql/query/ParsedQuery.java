@@ -12,6 +12,7 @@ public class ParsedQuery {
     private List<ColumnInfo> selectColumns = new ArrayList<>();
     private TableInfo fromTable;
     private List<JoinInfo> joins = new ArrayList<>();
+    private List<UnnestInfo> unnests = new ArrayList<>();
     private Expression whereExpression;
     private List<OrderByInfo> orderBy = new ArrayList<>();
     private Long limit;
@@ -90,6 +91,18 @@ public class ParsedQuery {
 
     public boolean hasOrderBy() {
         return orderBy != null && !orderBy.isEmpty();
+    }
+
+    public List<UnnestInfo> getUnnests() {
+        return unnests;
+    }
+
+    public void setUnnests(List<UnnestInfo> unnests) {
+        this.unnests = unnests;
+    }
+
+    public boolean hasUnnests() {
+        return unnests != null && !unnests.isEmpty();
     }
 }
 

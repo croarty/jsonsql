@@ -1,0 +1,76 @@
+{
+  "products": [
+    {
+      "id": 1,
+      "name": "Smartphone",
+      "price": 699.99,
+      "category": "Electronics",
+      "tags": ["mobile", "smartphone", "android", "premium"],
+      "specifications": {
+        "screen": "6.1 inch",
+        "storage": "128GB",
+        "camera": "12MP"
+      },
+      "reviews": [
+        {"user": "Alice", "rating": 5, "comment": "Great phone!"},
+        {"user": "Bob", "rating": 4, "comment": "Good value"},
+        {"user": "Carol", "rating": 5, "comment": "Love the camera"}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Laptop",
+      "price": 1299.99,
+      "category": "Electronics",
+      "tags": ["laptop", "computer", "work", "gaming"],
+      "specifications": {
+        "screen": "15.6 inch",
+        "storage": "512GB SSD",
+        "ram": "16GB"
+      },
+      "reviews": [
+        {"user": "David", "rating": 4, "comment": "Fast and reliable"},
+        {"user": "Emma", "rating": 5, "comment": "Perfect for work"}
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Headphones",
+      "price": 199.99,
+      "category": "Audio",
+      "tags": ["audio", "wireless", "noise-cancelling"],
+      "specifications": {
+        "type": "Over-ear",
+        "battery": "30 hours",
+        "connectivity": "Bluetooth 5.0"
+      },
+      "reviews": [
+        {"user": "Frank", "rating": 5, "comment": "Amazing sound quality"},
+        {"user": "Grace", "rating": 4, "comment": "Comfortable for long use"},
+        {"user": "Henry", "rating": 3, "comment": "Good but expensive"}
+      ]
+    }
+  ],
+  "customers": [
+    {
+      "id": 101,
+      "name": "Alice Johnson",
+      "email": "alice@example.com",
+      "interests": ["technology", "gaming", "photography"],
+      "purchase_history": [
+        {"product_id": 1, "date": "2024-01-15", "amount": 699.99},
+        {"product_id": 3, "date": "2024-02-10", "amount": 199.99}
+      ]
+    },
+    {
+      "id": 102,
+      "name": "Bob Smith",
+      "email": "bob@example.com",
+      "interests": ["business", "productivity", "travel"],
+      "purchase_history": [
+        {"product_id": 2, "date": "2024-01-20", "amount": 1299.99},
+        {"product_id": 1, "date": "2024-03-05", "amount": 699.99}
+      ]
+    }
+  ]
+}

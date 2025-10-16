@@ -1,0 +1,238 @@
+{
+  "orders": [
+    {
+      "orderId": 1001,
+      "customerId": 1,
+      "orderDate": "2024-01-15",
+      "status": "delivered",
+      "shippingAddress": {
+        "type": "home",
+        "street": "123 Main Street",
+        "city": "New York",
+        "state": "NY",
+        "zipCode": "10001",
+        "country": "USA"
+      },
+      "items": [
+        {
+          "productId": 1,
+          "quantity": 2,
+          "unitPrice": 24.99,
+          "totalPrice": 49.98
+        },
+        {
+          "productId": 3,
+          "quantity": 1,
+          "unitPrice": 34.99,
+          "totalPrice": 34.99
+        }
+      ],
+      "totals": {
+        "subtotal": 84.97,
+        "tax": 6.80,
+        "shipping": 0.00,
+        "total": 91.77
+      },
+      "tracking": {
+        "trackingNumber": "TRK123456789",
+        "carrier": "FedEx",
+        "estimatedDelivery": "2024-01-18",
+        "actualDelivery": "2024-01-18"
+      }
+    },
+    {
+      "orderId": 1002,
+      "customerId": 2,
+      "orderDate": "2024-01-16",
+      "status": "delivered",
+      "shippingAddress": {
+        "type": "home",
+        "street": "789 Oak Lane",
+        "city": "Los Angeles",
+        "state": "CA",
+        "zipCode": "90001",
+        "country": "USA"
+      },
+      "items": [
+        {
+          "productId": 2,
+          "quantity": 1,
+          "unitPrice": 89.99,
+          "totalPrice": 89.99
+        }
+      ],
+      "totals": {
+        "subtotal": 89.99,
+        "tax": 7.20,
+        "shipping": 5.99,
+        "total": 103.18
+      },
+      "tracking": {
+        "trackingNumber": "TRK987654321",
+        "carrier": "UPS",
+        "estimatedDelivery": "2024-01-20",
+        "actualDelivery": "2024-01-19"
+      }
+    },
+    {
+      "orderId": 1003,
+      "customerId": 3,
+      "orderDate": "2024-01-17",
+      "status": "shipped",
+      "shippingAddress": {
+        "type": "home",
+        "street": "321 Elm Street",
+        "city": "Chicago",
+        "state": "IL",
+        "zipCode": "60601",
+        "country": "USA"
+      },
+      "items": [
+        {
+          "productId": 1,
+          "quantity": 3,
+          "unitPrice": 24.99,
+          "totalPrice": 74.97
+        },
+        {
+          "productId": 4,
+          "quantity": 1,
+          "unitPrice": 45.50,
+          "totalPrice": 45.50
+        }
+      ],
+      "totals": {
+        "subtotal": 120.47,
+        "tax": 9.64,
+        "shipping": 0.00,
+        "total": 130.11
+      },
+      "tracking": {
+        "trackingNumber": "TRK456789123",
+        "carrier": "FedEx",
+        "estimatedDelivery": "2024-01-21",
+        "actualDelivery": null
+      }
+    },
+    {
+      "orderId": 1004,
+      "customerId": 1,
+      "orderDate": "2024-01-18",
+      "status": "processing",
+      "shippingAddress": {
+        "type": "work",
+        "street": "456 Business Ave",
+        "city": "New York",
+        "state": "NY",
+        "zipCode": "10002",
+        "country": "USA"
+      },
+      "items": [
+        {
+          "productId": 5,
+          "quantity": 1,
+          "unitPrice": 79.99,
+          "totalPrice": 79.99
+        }
+      ],
+      "totals": {
+        "subtotal": 79.99,
+        "tax": 6.40,
+        "shipping": 0.00,
+        "total": 86.39
+      },
+      "tracking": {
+        "trackingNumber": null,
+        "carrier": null,
+        "estimatedDelivery": null,
+        "actualDelivery": null
+      }
+    },
+    {
+      "orderId": 1005,
+      "customerId": 4,
+      "orderDate": "2024-01-19",
+      "status": "delivered",
+      "shippingAddress": {
+        "type": "home",
+        "street": "987 Maple Drive",
+        "city": "Houston",
+        "state": "TX",
+        "zipCode": "77001",
+        "country": "USA"
+      },
+      "items": [
+        {
+          "productId": 3,
+          "quantity": 2,
+          "unitPrice": 34.99,
+          "totalPrice": 69.98
+        },
+        {
+          "productId": 6,
+          "quantity": 1,
+          "unitPrice": 29.99,
+          "totalPrice": 29.99
+        }
+      ],
+      "totals": {
+        "subtotal": 99.97,
+        "tax": 8.00,
+        "shipping": 7.99,
+        "total": 115.96
+      },
+      "tracking": {
+        "trackingNumber": "TRK789123456",
+        "carrier": "USPS",
+        "estimatedDelivery": "2024-01-23",
+        "actualDelivery": "2024-01-22"
+      }
+    },
+    {
+      "orderId": 1006,
+      "customerId": 5,
+      "orderDate": "2024-01-20",
+      "status": "shipped",
+      "shippingAddress": {
+        "type": "home",
+        "street": "147 Cedar Avenue",
+        "city": "Phoenix",
+        "state": "AZ",
+        "zipCode": "85001",
+        "country": "USA"
+      },
+      "items": [
+        {
+          "productId": 2,
+          "quantity": 1,
+          "unitPrice": 89.99,
+          "totalPrice": 89.99
+        },
+        {
+          "productId": 4,
+          "quantity": 2,
+          "unitPrice": 45.50,
+          "totalPrice": 91.00
+        },
+        {
+          "productId": 6,
+          "quantity": 1,
+          "unitPrice": 29.99,
+          "totalPrice": 29.99
+        }
+      ],
+      "totals": {
+        "subtotal": 210.98,
+        "tax": 16.88,
+        "shipping": 0.00,
+        "total": 227.86
+      },
+      "tracking": {
+        "trackingNumber": "TRK321654987",
+        "carrier": "FedEx",
+        "estimatedDelivery": "2024-01-24",
+        "actualDelivery": null
+      }
+    }
+  ]
+}

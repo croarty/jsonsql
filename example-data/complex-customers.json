@@ -1,0 +1,181 @@
+{
+  "customers": [
+    {
+      "id": 1,
+      "name": "Alice Johnson",
+      "email": "alice.johnson@email.com",
+      "phone": "+1-555-0101",
+      "dateOfBirth": "1985-03-15",
+      "addresses": [
+        {
+          "type": "home",
+          "street": "123 Main Street",
+          "city": "New York",
+          "state": "NY",
+          "zipCode": "10001",
+          "country": "USA",
+          "isDefault": true
+        },
+        {
+          "type": "work",
+          "street": "456 Business Ave",
+          "city": "New York",
+          "state": "NY",
+          "zipCode": "10002",
+          "country": "USA",
+          "isDefault": false
+        }
+      ],
+      "preferences": {
+        "newsletter": true,
+        "smsUpdates": false,
+        "language": "en",
+        "currency": "USD"
+      },
+      "vipStatus": {
+        "level": "Gold",
+        "points": 5000,
+        "memberSince": "2020-01-15",
+        "benefits": ["free-shipping", "early-access", "priority-support"]
+      }
+    },
+    {
+      "id": 2,
+      "name": "Bob Smith",
+      "email": "bob.smith@email.com",
+      "phone": "+1-555-0102",
+      "dateOfBirth": "1990-07-22",
+      "addresses": [
+        {
+          "type": "home",
+          "street": "789 Oak Lane",
+          "city": "Los Angeles",
+          "state": "CA",
+          "zipCode": "90001",
+          "country": "USA",
+          "isDefault": true
+        }
+      ],
+      "preferences": {
+        "newsletter": false,
+        "smsUpdates": true,
+        "language": "en",
+        "currency": "USD"
+      },
+      "vipStatus": {
+        "level": "Silver",
+        "points": 2000,
+        "memberSince": "2021-06-10",
+        "benefits": ["free-shipping"]
+      }
+    },
+    {
+      "id": 3,
+      "name": "Carol White",
+      "email": "carol.white@email.com",
+      "phone": "+1-555-0103",
+      "dateOfBirth": "1982-11-08",
+      "addresses": [
+        {
+          "type": "home",
+          "street": "321 Elm Street",
+          "city": "Chicago",
+          "state": "IL",
+          "zipCode": "60601",
+          "country": "USA",
+          "isDefault": true
+        },
+        {
+          "type": "billing",
+          "street": "654 Pine Road",
+          "city": "Evanston",
+          "state": "IL",
+          "zipCode": "60201",
+          "country": "USA",
+          "isDefault": false
+        }
+      ],
+      "preferences": {
+        "newsletter": true,
+        "smsUpdates": true,
+        "language": "en",
+        "currency": "USD"
+      },
+      "vipStatus": {
+        "level": "Gold",
+        "points": 12000,
+        "memberSince": "2019-03-22",
+        "benefits": ["free-shipping", "early-access", "priority-support", "exclusive-events"]
+      }
+    },
+    {
+      "id": 4,
+      "name": "David Brown",
+      "email": "david.brown@email.com",
+      "phone": "+1-555-0104",
+      "dateOfBirth": "1995-05-12",
+      "addresses": [
+        {
+          "type": "home",
+          "street": "987 Maple Drive",
+          "city": "Houston",
+          "state": "TX",
+          "zipCode": "77001",
+          "country": "USA",
+          "isDefault": true
+        }
+      ],
+      "preferences": {
+        "newsletter": true,
+        "smsUpdates": false,
+        "language": "en",
+        "currency": "USD"
+      },
+      "vipStatus": {
+        "level": "Bronze",
+        "points": 500,
+        "memberSince": "2023-01-05",
+        "benefits": []
+      }
+    },
+    {
+      "id": 5,
+      "name": "Emma Davis",
+      "email": "emma.davis@email.com",
+      "phone": "+1-555-0105",
+      "dateOfBirth": "1988-09-30",
+      "addresses": [
+        {
+          "type": "home",
+          "street": "147 Cedar Avenue",
+          "city": "Phoenix",
+          "state": "AZ",
+          "zipCode": "85001",
+          "country": "USA",
+          "isDefault": true
+        },
+        {
+          "type": "work",
+          "street": "258 Corporate Blvd",
+          "city": "Scottsdale",
+          "state": "AZ",
+          "zipCode": "85251",
+          "country": "USA",
+          "isDefault": false
+        }
+      ],
+      "preferences": {
+        "newsletter": true,
+        "smsUpdates": true,
+        "language": "en",
+        "currency": "USD"
+      },
+      "vipStatus": {
+        "level": "Gold",
+        "points": 8500,
+        "memberSince": "2020-08-12",
+        "benefits": ["free-shipping", "early-access", "priority-support"]
+      }
+    }
+  ]
+}

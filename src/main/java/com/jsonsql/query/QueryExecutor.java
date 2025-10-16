@@ -52,10 +52,16 @@ public class QueryExecutor implements FieldAccessor {
             joinedData = executeJoins(fromData, parsedQuery);
         }
 
+        // Apply UNNEST operations if any
+        List<JsonNode> unnestedData = joinedData;
+        if (parsedQuery.hasUnnests()) {
+            unnestedData = executeUnnests(joinedData, parsedQuery.getUnnests());
+        }
+
         // Apply WHERE clause
-        List<JsonNode> filteredData = joinedData;
+        List<JsonNode> filteredData = unnestedData;
         if (parsedQuery.hasWhere()) {
-            filteredData = applyWhere(joinedData, parsedQuery.getWhereExpression());
+            filteredData = applyWhere(unnestedData, parsedQuery.getWhereExpression());
         }
 
         // Apply ORDER BY
@@ -293,15 +299,23 @@ public class QueryExecutor implements FieldAccessor {
             return result;
         }
         
-        // If not found and no table prefix, search in all wrapped tables
-        if (!fieldPath.contains(".")) {
-            // Search within each table wrapper
-            var fields = row.fields();
-            while (fields.hasNext()) {
-                var entry = fields.next();
-                JsonNode tableData = entry.getValue();
-                if (tableData.isObject() && tableData.has(fieldPath)) {
+        // Search within each table wrapper for both qualified and unqualified paths
+        var fields = row.fields();
+        while (fields.hasNext()) {
+            var entry = fields.next();
+            JsonNode tableData = entry.getValue();
+            
+            if (tableData.isObject()) {
+                // Try exact match first (for simple field names)
+                if (tableData.has(fieldPath)) {
                     return tableData.get(fieldPath);
+                }
+                
+                // Try nested path access within the table wrapper
+                // This handles cases like "profile.level" where the data is wrapped
+                result = getFieldValueDirect(tableData, fieldPath);
+                if (result != null) {
+                    return result;
                 }
             }
         }
@@ -375,8 +389,60 @@ public class QueryExecutor implements FieldAccessor {
             return Boolean.compare(node1.asBoolean(), node2.asBoolean());
         }
         
-        // Handle text (default)
-        return node1.asText().compareTo(node2.asText());
+        // Handle text - try numeric comparison first, then lexicographic
+        String text1 = node1.asText();
+        String text2 = node2.asText();
+        
+        // Try to parse as numbers for numeric comparison
+        // Extract numeric part from strings like "15.6 inch" -> "15.6"
+        Double num1 = extractNumericValue(text1);
+        Double num2 = extractNumericValue(text2);
+        
+        if (num1 != null && num2 != null) {
+            return Double.compare(num1, num2);
+        } else {
+            // Not both numeric, use lexicographic comparison
+            return text1.compareTo(text2);
+        }
+    }
+
+    /**
+     * Extract numeric value from a string, handling units like "15.6 inch" -> 15.6
+     */
+    private Double extractNumericValue(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return null;
+        }
+        
+        // Try to parse the entire string as a number first
+        try {
+            return Double.parseDouble(text.trim());
+        } catch (NumberFormatException e) {
+            // If that fails, try to extract a number from the beginning
+            // This handles cases like "15.6 inch", "5.0 cm", etc.
+            String trimmed = text.trim();
+            StringBuilder numericPart = new StringBuilder();
+            
+            for (int i = 0; i < trimmed.length(); i++) {
+                char c = trimmed.charAt(i);
+                if (Character.isDigit(c) || c == '.' || c == '-' || c == '+') {
+                    numericPart.append(c);
+                } else {
+                    // Stop at first non-numeric character
+                    break;
+                }
+            }
+            
+            if (numericPart.length() > 0) {
+                try {
+                    return Double.parseDouble(numericPart.toString());
+                } catch (NumberFormatException ex) {
+                    return null;
+                }
+            }
+            
+            return null;
+        }
     }
 
     /**
@@ -459,6 +525,54 @@ public class QueryExecutor implements FieldAccessor {
         });
         
         return flattened;
+    }
+
+    /**
+     * Execute UNNEST operations to flatten arrays into individual rows.
+     */
+    private List<JsonNode> executeUnnests(List<JsonNode> data, List<UnnestInfo> unnests) {
+        List<JsonNode> result = data;
+        
+        for (UnnestInfo unnest : unnests) {
+            result = executeUnnest(result, unnest);
+        }
+        
+        return result;
+    }
+
+    /**
+     * Execute a single UNNEST operation.
+     */
+    private List<JsonNode> executeUnnest(List<JsonNode> data, UnnestInfo unnest) {
+        List<JsonNode> result = new ArrayList<>();
+        
+        for (JsonNode row : data) {
+            // Get the array field to unnest
+            JsonNode arrayField = getFieldValue(row, unnest.getArrayExpression());
+            
+            if (arrayField != null && arrayField.isArray()) {
+                // For each element in the array, create a new row
+                for (JsonNode arrayElement : arrayField) {
+                    ObjectNode newRow = objectMapper.createObjectNode();
+                    
+                    // Copy all original fields
+                    row.fields().forEachRemaining(entry -> {
+                        newRow.set(entry.getKey(), entry.getValue());
+                    });
+                    
+                    // Add the unnested element with the specified alias and column name
+                    newRow.set(unnest.getElementColumn(), arrayElement);
+                    
+                    result.add(newRow);
+                }
+            } else {
+                // If the array field is null or not an array, skip this row entirely
+                // This follows SQL standard behavior for UNNEST
+                // No row is added to the result
+            }
+        }
+        
+        return result;
     }
 
     /**

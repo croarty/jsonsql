@@ -6,9 +6,10 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
 
 - **SQL-like Query Syntax**: Write familiar SQL queries against JSON data
   - `SELECT` - Project specific fields or all fields with `*`, with `AS` aliases
-  - `FROM` - Specify data sources
+  - `FROM` - Specify data sources with table aliases
   - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses, LIKE, IN, IS NULL)
   - `JOIN` / `LEFT JOIN` - Combine data from multiple sources
+  - `UNNEST` - Flatten arrays into individual rows
   - `TOP x` / `LIMIT` - Limit result sets
   - `ORDER BY` - Sort results ascending or descending
 - **Schema-less Design**: Works with any JSON structure without predefined models
@@ -372,6 +373,15 @@ jsonsql --query "SELECT o.orderId, p.name, c.name FROM orders o JOIN products p 
 
 # JOIN with TOP
 jsonsql --query "SELECT TOP 5 p.name, o.quantity FROM orders o JOIN products p ON o.productId = p.id"
+
+# UNNEST - Flatten arrays
+jsonsql --query "SELECT name, tag FROM products, UNNEST(tags) AS t(tag)"
+
+# UNNEST with complex objects
+jsonsql --query "SELECT name, review.user, review.rating FROM products, UNNEST(reviews) AS r(review)"
+
+# UNNEST with WHERE filtering
+jsonsql --query "SELECT name, tag FROM products, UNNEST(tags) AS t(tag) WHERE tag = 'android'"
 ```
 
 ### Output Options
@@ -640,6 +650,14 @@ export DEBUG=1
 jsonsql --query "SELECT * FROM products"
 ```
 
+## Documentation
+
+- **[Quick Start Guide](QUICK-START.md)** - Get up and running quickly
+- **[Basic Examples](EXAMPLES.md)** - Common query patterns
+- **[Complex Query Examples](COMPLEX-QUERY-EXAMPLES.md)** - Advanced customer/order/product analysis
+- **[Multi-File Examples](MULTI-FILE-EXAMPLES.md)** - Working with multiple JSON files
+- **[Saved Queries Reference](SAVED-QUERIES-REFERENCE.md)** - Query management features
+
 ## Future Enhancements
 
 Planned features for future releases, organized by priority:
@@ -654,7 +672,7 @@ Planned features for future releases, organized by priority:
 - `GROUP BY` clause with aggregation functions
 - `COUNT`, `SUM`, `AVG`, `MIN`, `MAX` functions
 - `HAVING` clause for filtering grouped results
-- `DISTINCT` keyword for unique results
+- `DISTINCT` keyword for unique results (parsed but not implemented)
 
 **Query Features:**
 - Subqueries (e.g., `WHERE price > (SELECT AVG(price) FROM products)`)
@@ -683,7 +701,7 @@ Planned features for future releases, organized by priority:
 ### Lower Priority (Quality of Life)
 
 **Array/Collection Operations:**
-- `UNNEST` for flattening arrays
+- ✅ `UNNEST` for flattening arrays
 - Array contains/length operations
 - JSONPath expressions in SELECT
 
