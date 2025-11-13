@@ -76,7 +76,12 @@ public class WhereEvaluator {
         
         // Handle LIKE operator
         if (expression instanceof LikeExpression) {
-            return evaluateLike(row, (LikeExpression) expression);
+            LikeExpression likeExpr = (LikeExpression) expression;
+            // Check if this is ILIKE (case-insensitive LIKE)
+            // JSqlParser may parse ILIKE as LikeExpression, so we check the string representation
+            String exprString = expression.toString().toUpperCase();
+            boolean caseInsensitive = exprString.contains("ILIKE");
+            return evaluateLike(row, likeExpr, caseInsensitive);
         }
         
         // Handle IS NULL / IS NOT NULL
@@ -193,8 +198,9 @@ public class WhereEvaluator {
     /**
      * Evaluate LIKE expression for pattern matching.
      * Supports SQL wildcards: % (any characters) and _ (single character).
+     * @param caseInsensitive If true, performs case-insensitive matching (ILIKE behavior)
      */
-    private boolean evaluateLike(JsonNode row, LikeExpression likeExpr) {
+    private boolean evaluateLike(JsonNode row, LikeExpression likeExpr, boolean caseInsensitive) {
         // Get field value
         String fieldPath = likeExpr.getLeftExpression().toString();
         JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
@@ -206,13 +212,21 @@ public class WhereEvaluator {
         String fieldText = fieldValue.asText();
         String pattern = extractLiteralValue(likeExpr.getRightExpression());
         
+        // Convert to lowercase for case-insensitive matching
+        if (caseInsensitive) {
+            fieldText = fieldText.toLowerCase();
+            pattern = pattern.toLowerCase();
+        }
+        
         // Convert SQL LIKE pattern to regex
         String regexPattern = convertLikePatternToRegex(pattern);
         
         // Evaluate pattern match
-        boolean matches = Pattern.matches(regexPattern, fieldText);
+        // Use CASE_INSENSITIVE flag if needed (though we already lowercased)
+        int flags = 0;
+        boolean matches = Pattern.compile(regexPattern, flags).matcher(fieldText).matches();
         
-        // Handle NOT LIKE
+        // Handle NOT LIKE / NOT ILIKE
         return likeExpr.isNot() ? !matches : matches;
     }
     

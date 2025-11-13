@@ -277,6 +277,7 @@ jsonsql --query "SELECT * FROM products WHERE ((category = 'Electronics' AND pri
 - **Comparison:** `=`, `!=`, `>`, `<`, `>=`, `<=`
 - **List Matching:** `IN`, `NOT IN` - check if value matches any in a list
 - **Pattern Matching:** `LIKE`, `NOT LIKE` with `%` (any characters) and `_` (single character) wildcards
+- **Case-Insensitive Pattern Matching:** `ILIKE`, `NOT ILIKE` - same as LIKE but case-insensitive
 - **Null Checking:** `IS NULL`, `IS NOT NULL` (treats both missing and explicitly null fields as NULL)
 - **Grouping:** Parentheses `()`
 
@@ -305,6 +306,34 @@ jsonsql --query "SELECT * FROM products WHERE name NOT LIKE '%Monitor%'"
 # LIKE with complex conditions
 jsonsql --query "SELECT * FROM products WHERE name LIKE '%e%' AND category = 'Electronics' AND price > 100"
 ```
+
+**Case-Insensitive Pattern Matching with ILIKE:**
+
+`ILIKE` works exactly like `LIKE` but performs case-insensitive matching:
+
+```bash
+# Case-insensitive starts with
+jsonsql --query "SELECT * FROM products WHERE name ILIKE 'laptop%'"
+
+# Case-insensitive contains
+jsonsql --query "SELECT * FROM products WHERE name ILIKE '%desk%'"
+
+# Case-insensitive exact match
+jsonsql --query "SELECT * FROM products WHERE category ILIKE 'electronics'"
+
+# NOT ILIKE
+jsonsql --query "SELECT * FROM products WHERE name NOT ILIKE '%laptop%'"
+
+# ILIKE with wildcards
+jsonsql --query "SELECT * FROM products WHERE name ILIKE 'w%'"
+
+# ILIKE with complex conditions
+jsonsql --query "SELECT * FROM products WHERE name ILIKE '%e%' AND category ILIKE 'electronics'"
+```
+
+**Difference between LIKE and ILIKE:**
+- `LIKE` is case-sensitive: `'laptop%'` only matches strings starting with lowercase "laptop"
+- `ILIKE` is case-insensitive: `'laptop%'` matches "Laptop", "laptop", "LAPTOP", etc.
 
 **Null Value Handling with IS NULL / IS NOT NULL:**
 
