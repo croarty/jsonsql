@@ -46,22 +46,22 @@ public class QueryExecutor implements FieldAccessor {
         // Load data from FROM table
         List<JsonNode> fromData = loadTableData(parsedQuery.getFromTable());
 
-        // Apply JOINs if any
-        List<JsonNode> joinedData = fromData;
-        if (parsedQuery.hasJoins()) {
-            joinedData = executeJoins(fromData, parsedQuery);
+        // Apply UNNEST operations if any (must happen before JOINs so UNNEST columns can be used in JOIN conditions)
+        List<JsonNode> unnestedData = fromData;
+        if (parsedQuery.hasUnnests()) {
+            unnestedData = executeUnnests(fromData, parsedQuery.getUnnests());
         }
 
-        // Apply UNNEST operations if any
-        List<JsonNode> unnestedData = joinedData;
-        if (parsedQuery.hasUnnests()) {
-            unnestedData = executeUnnests(joinedData, parsedQuery.getUnnests());
+        // Apply JOINs if any
+        List<JsonNode> joinedData = unnestedData;
+        if (parsedQuery.hasJoins()) {
+            joinedData = executeJoins(unnestedData, parsedQuery);
         }
 
         // Apply WHERE clause
-        List<JsonNode> filteredData = unnestedData;
+        List<JsonNode> filteredData = joinedData;
         if (parsedQuery.hasWhere()) {
-            filteredData = applyWhere(unnestedData, parsedQuery.getWhereExpression());
+            filteredData = applyWhere(joinedData, parsedQuery.getWhereExpression());
         }
 
         // Apply ORDER BY

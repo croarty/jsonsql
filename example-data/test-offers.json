@@ -1,0 +1,18 @@
+{
+    "commercialoffers": [
+        {
+            "suid": "offer_suid_1",
+            "discounts": [
+                "discount_suid_1"
+            ]
+        }
+    ],
+    "discounts": [
+        {
+            "suid": "discount_suid_1",
+            "type": "percentage",
+            "value": 15
+        }
+    ]
+}
+
