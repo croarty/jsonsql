@@ -42,9 +42,25 @@ public class QueryExecutor implements FieldAccessor {
     public String execute(String sql) throws Exception {
         // Parse the query
         ParsedQuery parsedQuery = queryParser.parse(sql);
-
-        // Load data from FROM table
-        List<JsonNode> fromData = loadTableData(parsedQuery.getFromTable());
+        
+        // Create execution context for CTEs
+        QueryExecutionContext context = new QueryExecutionContext();
+        
+        // Execute CTEs first if present
+        if (parsedQuery.hasCTEs()) {
+            executeCTEs(parsedQuery, context);
+        }
+        
+        // Execute main query with context
+        return executeQuery(parsedQuery, context);
+    }
+    
+    /**
+     * Execute a parsed query with execution context (supports recursive execution for CTEs).
+     */
+    private String executeQuery(ParsedQuery parsedQuery, QueryExecutionContext context) throws Exception {
+        // Load data from FROM table (checks CTE context first)
+        List<JsonNode> fromData = loadTableData(parsedQuery.getFromTable(), context);
 
         // Apply UNNEST operations if any (must happen before JOINs so UNNEST columns can be used in JOIN conditions)
         List<JsonNode> unnestedData = fromData;
@@ -55,7 +71,7 @@ public class QueryExecutor implements FieldAccessor {
         // Apply JOINs if any
         List<JsonNode> joinedData = unnestedData;
         if (parsedQuery.hasJoins()) {
-            joinedData = executeJoins(unnestedData, parsedQuery);
+            joinedData = executeJoins(unnestedData, parsedQuery, context);
         }
 
         // Apply WHERE clause
@@ -89,13 +105,45 @@ public class QueryExecutor implements FieldAccessor {
 
         return objectMapper.writeValueAsString(resultArray);
     }
+    
+    /**
+     * Execute all CTEs and store results in context.
+     */
+    private void executeCTEs(ParsedQuery parsedQuery, QueryExecutionContext context) throws Exception {
+        for (Map.Entry<String, ParsedQuery> cteEntry : parsedQuery.getCommonTableExpressions().entrySet()) {
+            String cteName = cteEntry.getKey();
+            ParsedQuery cteQuery = cteEntry.getValue();
+            
+            // Recursively execute the CTE query
+            String cteResultJson = executeQuery(cteQuery, context);
+            
+            // Parse the JSON result into List<JsonNode>
+            JsonNode cteResultArray = objectMapper.readTree(cteResultJson);
+            List<JsonNode> cteData = new ArrayList<>();
+            if (cteResultArray.isArray()) {
+                cteResultArray.forEach(cteData::add);
+            }
+            
+            // Store CTE result in context
+            context.setCTEResult(cteName, cteData);
+        }
+    }
 
     /**
-     * Load data for a table using its JSONPath mapping.
+     * Load data for a table using its JSONPath mapping or CTE context.
      */
-    private List<JsonNode> loadTableData(TableInfo tableInfo) throws IOException {
+    private List<JsonNode> loadTableData(TableInfo tableInfo, QueryExecutionContext context) throws IOException {
         String tableName = tableInfo.getTableName();
         
+        // Check if this is a CTE first
+        if (context != null && context.hasCTE(tableName)) {
+            // Return CTE result
+            List<JsonNode> cteData = context.getCTEResult(tableName);
+            // Wrap in table structure for consistency
+            return wrapTableData(cteData, tableInfo);
+        }
+        
+        // Otherwise, load from JSON file
         if (!mappingManager.hasMapping(tableName)) {
             throw new IllegalArgumentException(
                 "No mapping found for table: " + tableName + ". Use --add-mapping to define it."
@@ -173,6 +221,26 @@ public class QueryExecutor implements FieldAccessor {
 
         return dataList;
     }
+    
+    /**
+     * Wrap data in table structure for qualified column access.
+     */
+    private List<JsonNode> wrapTableData(List<JsonNode> data, TableInfo tableInfo) {
+        List<JsonNode> wrappedData = new ArrayList<>();
+        String effectiveName = tableInfo.getEffectiveName();
+        
+        for (JsonNode node : data) {
+            if (node.isObject()) {
+                ObjectNode wrappedNode = objectMapper.createObjectNode();
+                wrappedNode.set(effectiveName, node);
+                wrappedData.add(wrappedNode);
+            } else {
+                wrappedData.add(node);
+            }
+        }
+        
+        return wrappedData;
+    }
 
     /**
      * Find JSON file for a table name.
@@ -200,11 +268,11 @@ public class QueryExecutor implements FieldAccessor {
     /**
      * Execute JOIN operations.
      */
-    private List<JsonNode> executeJoins(List<JsonNode> leftData, ParsedQuery parsedQuery) throws IOException {
+    private List<JsonNode> executeJoins(List<JsonNode> leftData, ParsedQuery parsedQuery, QueryExecutionContext context) throws IOException {
         List<JsonNode> result = leftData;
 
         for (JoinInfo joinInfo : parsedQuery.getJoins()) {
-            List<JsonNode> rightData = loadTableData(joinInfo.getTable());
+            List<JsonNode> rightData = loadTableData(joinInfo.getTable(), context);
             result = performJoin(result, rightData, joinInfo, parsedQuery.getFromTable());
         }
 

@@ -25,9 +25,17 @@ public class QueryParser {
             }
 
             Select select = (Select) statement;
+            
+            // Create ParsedQuery early to store CTEs
+            ParsedQuery query = new ParsedQuery();
+            
+            // Parse WITH clause (CTEs) from Select level before parsing main query
+            parseWithClauseFromSelect(select, query);
+            
             PlainSelect plainSelect = getPlainSelect(select);
-
-            return buildParsedQuery(plainSelect);
+            
+            // Build the main query (CTEs already stored in query)
+            return buildParsedQuery(plainSelect, query);
         } catch (JSQLParserException e) {
             throw new QueryParseException("Invalid SQL syntax: " + e.getMessage(), e);
         }
@@ -42,7 +50,11 @@ public class QueryParser {
     }
 
     private ParsedQuery buildParsedQuery(PlainSelect plainSelect) throws QueryParseException {
-        ParsedQuery query = new ParsedQuery();
+        return buildParsedQuery(plainSelect, new ParsedQuery());
+    }
+    
+    private ParsedQuery buildParsedQuery(PlainSelect plainSelect, ParsedQuery query) throws QueryParseException {
+        // CTEs are already parsed and stored in query, so we don't need to parse them again
 
         // Parse DISTINCT
         if (plainSelect.getDistinct() != null) {
@@ -243,6 +255,78 @@ public class QueryParser {
         }
         
         query.setOrderBy(orderByInfos);
+    }
+
+    /**
+     * Parse WITH clause (Common Table Expressions) from Select statement.
+     * CTEs are defined before the main SELECT and can be referenced in the main query.
+     */
+    private void parseWithClauseFromSelect(Select select, ParsedQuery query) throws QueryParseException {
+        if (select.getWithItemsList() == null || select.getWithItemsList().isEmpty()) {
+            return;
+        }
+        
+        for (net.sf.jsqlparser.statement.select.WithItem withItem : select.getWithItemsList()) {
+            // Get CTE name from alias or name property
+            String cteName;
+            if (withItem.getAlias() != null) {
+                cteName = withItem.getAlias().getName();
+            } else {
+                // Try to extract name from string representation
+                // Format is typically "name AS (SELECT ...)" or just "name (SELECT ...)"
+                String withItemStr = withItem.toString();
+                int spaceIndex = withItemStr.indexOf(' ');
+                int parenIndex = withItemStr.indexOf('(');
+                int nameEnd = Math.min(spaceIndex > 0 ? spaceIndex : withItemStr.length(),
+                                      parenIndex > 0 ? parenIndex : withItemStr.length());
+                cteName = withItemStr.substring(0, nameEnd).trim();
+            }
+            
+            // Get the SELECT statement for this CTE
+            Select cteSelect = withItem.getSelect();
+            
+            // Handle different SELECT types (PlainSelect, ParenthesedSelect, etc.)
+            PlainSelect ctePlainSelect = extractPlainSelect(cteSelect);
+            if (ctePlainSelect == null) {
+                throw new QueryParseException("CTE must be a simple SELECT query: " + cteName);
+            }
+            
+            // Recursively parse the CTE query
+            ParsedQuery cteQuery = buildParsedQuery(ctePlainSelect);
+            
+            // Add CTE to the query
+            query.addCTE(cteName, cteQuery);
+        }
+    }
+    
+    /**
+     * Extract PlainSelect from various SELECT types (PlainSelect, ParenthesedSelect, etc.).
+     */
+    private PlainSelect extractPlainSelect(Select select) {
+        if (select instanceof PlainSelect) {
+            return (PlainSelect) select;
+        }
+        
+        // Try to get PlainSelect from ParenthesedSelect
+        if (select instanceof net.sf.jsqlparser.statement.select.ParenthesedSelect) {
+            net.sf.jsqlparser.statement.select.ParenthesedSelect parenthesed = 
+                (net.sf.jsqlparser.statement.select.ParenthesedSelect) select;
+            Select innerSelect = parenthesed.getSelect();
+            if (innerSelect instanceof PlainSelect) {
+                return (PlainSelect) innerSelect;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Parse WITH clause (Common Table Expressions).
+     * This method is called from buildParsedQuery but CTEs are actually parsed earlier.
+     */
+    private void parseWithClause(PlainSelect plainSelect, ParsedQuery query) throws QueryParseException {
+        // CTEs are parsed at the Select level, not PlainSelect level
+        // This method is a placeholder - actual parsing happens in parseWithClauseFromSelect
     }
 }
 

@@ -18,6 +18,7 @@ public class ParsedQuery {
     private Long limit;
     private Long top;
     private boolean distinct = false;
+    private java.util.Map<String, ParsedQuery> commonTableExpressions = new java.util.LinkedHashMap<>();
 
     public List<ColumnInfo> getSelectColumns() {
         return selectColumns;
@@ -112,6 +113,22 @@ public class ParsedQuery {
 
     public void setDistinct(boolean distinct) {
         this.distinct = distinct;
+    }
+
+    public java.util.Map<String, ParsedQuery> getCommonTableExpressions() {
+        return commonTableExpressions;
+    }
+
+    public void setCommonTableExpressions(java.util.Map<String, ParsedQuery> commonTableExpressions) {
+        this.commonTableExpressions = commonTableExpressions;
+    }
+
+    public void addCTE(String name, ParsedQuery cteQuery) {
+        this.commonTableExpressions.put(name, cteQuery);
+    }
+
+    public boolean hasCTEs() {
+        return commonTableExpressions != null && !commonTableExpressions.isEmpty();
     }
 }
 
