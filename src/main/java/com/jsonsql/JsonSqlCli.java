@@ -2,6 +2,7 @@ package com.jsonsql;
 
 import com.jsonsql.config.MappingManager;
 import com.jsonsql.config.QueryManager;
+import com.jsonsql.config.QueryParameterReplacer;
 import com.jsonsql.output.OutputHandler;
 import com.jsonsql.query.QueryExecutor;
 import picocli.CommandLine;
@@ -9,7 +10,7 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import java.io.File;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.Callable;
 
 @Command(
@@ -58,6 +59,9 @@ public class JsonSqlCli implements Callable<Integer> {
     
     @Option(names = {"--delete-query"}, description = "Delete a saved query")
     private String deleteQueryName;
+    
+    @Option(names = {"--param"}, description = "Parameter value for parameterized queries (format: key=value). Can be used multiple times.", arity = "1")
+    private List<String> parameters = new ArrayList<>();
 
     public static void main(String[] args) {
         int exitCode = new CommandLine(new JsonSqlCli()).execute(args);
@@ -136,6 +140,16 @@ public class JsonSqlCli implements Callable<Integer> {
         // Handle query execution
         if (query != null) {
             try {
+                // Parse and replace parameters if any
+                Map<String, String> paramMap = parseParameters(parameters);
+                if (!paramMap.isEmpty() || QueryParameterReplacer.hasParameters(query)) {
+                    query = QueryParameterReplacer.replaceParameters(query, paramMap);
+                    if (runQueryName != null) {
+                        System.out.println("SQL (with parameters): " + query);
+                        System.out.println();
+                    }
+                }
+                
                 QueryExecutor executor = new QueryExecutor(mappingManager, dataDirectory);
                 String result = executor.execute(query);
                 
@@ -143,6 +157,10 @@ public class JsonSqlCli implements Callable<Integer> {
                 outputHandler.handleOutput(result, outputFile, clipboard);
                 
                 return 0;
+            } catch (IllegalArgumentException e) {
+                // Parameter-related errors
+                System.err.println("Error: " + e.getMessage());
+                return 1;
             } catch (Exception e) {
                 System.err.println("Error executing query: " + e.getMessage());
                 if (System.getenv("DEBUG") != null) {
@@ -181,6 +199,48 @@ public class JsonSqlCli implements Callable<Integer> {
         
         System.out.println("─".repeat(80));
         System.out.println("Total: " + queries.size() + " saved quer" + (queries.size() == 1 ? "y" : "ies"));
+    }
+    
+    /**
+     * Parse parameter list from CLI arguments.
+     * Expected format: key=value
+     * 
+     * @param paramList List of parameter strings in "key=value" format
+     * @return Map of parameter names to values
+     * @throws IllegalArgumentException if parameter format is invalid
+     */
+    private Map<String, String> parseParameters(List<String> paramList) {
+        Map<String, String> paramMap = new HashMap<>();
+        
+        if (paramList == null || paramList.isEmpty()) {
+            return paramMap;
+        }
+        
+        for (String param : paramList) {
+            if (param == null || param.trim().isEmpty()) {
+                continue;
+            }
+            
+            int equalsIndex = param.indexOf('=');
+            if (equalsIndex < 0) {
+                throw new IllegalArgumentException(
+                    "Invalid parameter format: '" + param + "'. Expected format: key=value"
+                );
+            }
+            
+            String key = param.substring(0, equalsIndex).trim();
+            String value = param.substring(equalsIndex + 1).trim();
+            
+            if (key.isEmpty()) {
+                throw new IllegalArgumentException(
+                    "Parameter name cannot be empty. Format: key=value"
+                );
+            }
+            
+            paramMap.put(key, value);
+        }
+        
+        return paramMap;
     }
 }
 

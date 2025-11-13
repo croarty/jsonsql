@@ -130,6 +130,7 @@ Options:
       --run-query=<name>     Execute a saved query by name
       --list-queries         Show all saved queries
       --delete-query=<name>  Delete a saved query
+      --param=<key=value>    Parameter value for parameterized queries (can be used multiple times)
   -h, --help                 Show this help message and exit
   -V, --version              Print version information and exit
 ```
@@ -198,6 +199,60 @@ jsonsql --run-query top_orders --data-dir example-data --output results.json --p
 # Run saved query to clipboard
 jsonsql --run-query all_electronics --data-dir example-data --clipboard
 ```
+
+#### Parameterized Queries
+
+JsonSQL supports parameterized queries, allowing you to save queries with placeholders that can be filled at runtime.
+
+**Syntax:**
+- Placeholders: `${variable}` or `${variable:default_value}`
+- Provide values: `--param key=value` (can be used multiple times)
+
+**Examples:**
+
+```bash
+# Save a parameterized query
+jsonsql --save-query filtered_products \
+  --query "SELECT * FROM products WHERE price > ${min_price} AND category = '${category}'"
+
+# Run with parameters
+jsonsql --run-query filtered_products \
+  --data-dir example-data \
+  --param min_price=100 \
+  --param category=Electronics
+
+# Using default values
+jsonsql --save-query expensive_items \
+  --query "SELECT * FROM products WHERE price > ${min_price:100} ORDER BY price DESC"
+
+# Run with default (uses 100)
+jsonsql --run-query expensive_items --data-dir example-data
+
+# Override default
+jsonsql --run-query expensive_items \
+  --data-dir example-data \
+  --param min_price=500
+
+# Multiple parameters
+jsonsql --save-query search_products \
+  --query "SELECT * FROM products WHERE name LIKE '${pattern:%laptop%}' AND price < ${max_price:1000}"
+
+jsonsql --run-query search_products \
+  --data-dir example-data \
+  --param pattern=%desk% \
+  --param max_price=500
+
+# Parameters in direct queries
+jsonsql --query "SELECT * FROM products WHERE price > ${min_price}" \
+  --data-dir example-data \
+  --param min_price=200
+```
+
+**Parameter Rules:**
+- Required parameters (no default): Must be provided with `--param` or an error is thrown
+- Optional parameters (with default): Use default value if not provided
+- Parameter names: Can contain letters, numbers, and underscores
+- Parameter values: Can contain any characters (will be properly escaped)
 
 #### Delete a Saved Query
 ```bash
@@ -768,9 +823,9 @@ Planned features for future releases, organized by priority:
 - XML output format (`--format xml`)
 
 **Saved Query Enhancements:**
-- **Parameterized queries** - Variables in saved queries (e.g., `WHERE price > ${min_price}`)
-- Query templates with default values
-- Named parameters for reusability
+- ✅ **Parameterized queries** - Variables in saved queries (e.g., `WHERE price > ${min_price}`) - **IMPLEMENTED**
+- Query templates with default values (✅ supported via `${var:default}` syntax)
+- Named parameters for reusability (✅ supported)
 
 **Developer Tools:**
 - Query validation / dry-run mode (`--dry-run`)
