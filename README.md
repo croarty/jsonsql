@@ -237,6 +237,15 @@ jsonsql --query "SELECT * FROM products WHERE category = 'Electronics'"
 
 # Limit results
 jsonsql --query "SELECT TOP 10 * FROM products"
+
+# DISTINCT - unique values
+jsonsql --query "SELECT DISTINCT category FROM products"
+
+# DISTINCT with multiple columns
+jsonsql --query "SELECT DISTINCT name, category FROM products"
+
+# DISTINCT with WHERE and ORDER BY
+jsonsql --query "SELECT DISTINCT category FROM products WHERE price > 50 ORDER BY category"
 ```
 
 #### Complex WHERE Clauses
@@ -459,6 +468,8 @@ jsonsql --query "SELECT * FROM products" --output results.json --pretty
 - `SELECT *` - All fields
 - `SELECT field1, field2` - Specific fields
 - `SELECT table.field` - Qualified field names
+- `SELECT DISTINCT field` - Unique values only
+- `SELECT DISTINCT field1, field2` - Unique combinations
 
 ### FROM Clause
 - `FROM table` - Table name (mapped to JSONPath)
@@ -490,6 +501,22 @@ Examples:
 JOIN products p ON o.productId = p.id
 LEFT JOIN customers c ON o.customerId = c.id
 ```
+
+### DISTINCT Clause
+- `SELECT DISTINCT column` - Return unique values for a column
+- `SELECT DISTINCT column1, column2` - Return unique combinations of columns
+- `SELECT DISTINCT *` - Return unique rows (all columns must match)
+
+Examples:
+```sql
+SELECT DISTINCT category FROM products
+SELECT DISTINCT name, category FROM products
+SELECT DISTINCT * FROM products
+SELECT DISTINCT category FROM products WHERE price > 100
+SELECT DISTINCT category FROM products ORDER BY category
+```
+
+**Note:** DISTINCT removes duplicate rows based on all selected columns. Rows are considered duplicates if all their field values are identical.
 
 ### ORDER BY Clause
 - `ORDER BY column` - Sort ascending (default)

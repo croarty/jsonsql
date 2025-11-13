@@ -17,6 +17,7 @@ public class ParsedQuery {
     private List<OrderByInfo> orderBy = new ArrayList<>();
     private Long limit;
     private Long top;
+    private boolean distinct = false;
 
     public List<ColumnInfo> getSelectColumns() {
         return selectColumns;
@@ -103,6 +104,14 @@ public class ParsedQuery {
 
     public boolean hasUnnests() {
         return unnests != null && !unnests.isEmpty();
+    }
+
+    public boolean isDistinct() {
+        return distinct;
+    }
+
+    public void setDistinct(boolean distinct) {
+        this.distinct = distinct;
     }
 }
 

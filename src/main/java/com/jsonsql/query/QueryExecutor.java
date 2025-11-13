@@ -78,6 +78,11 @@ public class QueryExecutor implements FieldAccessor {
         // Project SELECT columns
         List<JsonNode> projectedData = projectColumns(filteredData, parsedQuery.getSelectColumns());
 
+        // Apply DISTINCT if specified
+        if (parsedQuery.isDistinct()) {
+            projectedData = applyDistinct(projectedData);
+        }
+
         // Convert to JSON array string
         ArrayNode resultArray = objectMapper.createArrayNode();
         projectedData.forEach(resultArray::add);
@@ -573,6 +578,52 @@ public class QueryExecutor implements FieldAccessor {
         }
         
         return result;
+    }
+
+    /**
+     * Apply DISTINCT to remove duplicate rows.
+     * Rows are considered duplicates if all their fields have the same values.
+     */
+    private List<JsonNode> applyDistinct(List<JsonNode> data) {
+        List<JsonNode> result = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        
+        for (JsonNode row : data) {
+            // Convert row to a canonical string representation for comparison
+            // This handles nested objects and arrays properly
+            String rowKey = rowToKey(row);
+            
+            if (!seen.contains(rowKey)) {
+                seen.add(rowKey);
+                result.add(row);
+            }
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Convert a JsonNode row to a canonical string key for duplicate detection.
+     * This sorts fields alphabetically to ensure consistent comparison.
+     */
+    private String rowToKey(JsonNode row) {
+        try {
+            // Create a sorted map of field names to values
+            Map<String, JsonNode> fieldMap = new TreeMap<>();
+            row.fields().forEachRemaining(entry -> {
+                fieldMap.put(entry.getKey(), entry.getValue());
+            });
+            
+            // Build sorted ObjectNode
+            ObjectNode sortedRow = objectMapper.createObjectNode();
+            fieldMap.forEach(sortedRow::set);
+            
+            // Serialize to JSON string for comparison
+            return objectMapper.writeValueAsString(sortedRow);
+        } catch (Exception e) {
+            // Fallback to toString if serialization fails
+            return row.toString();
+        }
     }
 
     /**

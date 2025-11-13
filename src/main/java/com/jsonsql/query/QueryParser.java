@@ -44,6 +44,11 @@ public class QueryParser {
     private ParsedQuery buildParsedQuery(PlainSelect plainSelect) throws QueryParseException {
         ParsedQuery query = new ParsedQuery();
 
+        // Parse DISTINCT
+        if (plainSelect.getDistinct() != null) {
+            query.setDistinct(true);
+        }
+
         // Parse SELECT clause
         parseSelectItems(plainSelect, query);
 

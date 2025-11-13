@@ -1,0 +1,45 @@
+{
+  "test": [
+    {
+      "id": 1,
+      "profile": {
+        "name": "Alice",
+        "settings": {
+          "theme": "dark",
+          "notifications": true
+        }
+      }
+    },
+    {
+      "id": 2,
+      "profile": {
+        "name": "Bob",
+        "settings": {
+          "theme": "dark",
+          "notifications": true
+        }
+      }
+    },
+    {
+      "id": 3,
+      "profile": {
+        "name": "Alice",
+        "settings": {
+          "theme": "light",
+          "notifications": false
+        }
+      }
+    },
+    {
+      "id": 4,
+      "profile": {
+        "name": "Bob",
+        "settings": {
+          "theme": "dark",
+          "notifications": true
+        }
+      }
+    }
+  ]
+}
+
