@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.Option;
+import com.jsonsql.config.CacheManager;
 import com.jsonsql.config.MappingManager;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
@@ -25,10 +26,16 @@ public class QueryExecutor implements FieldAccessor {
     private final ObjectMapper objectMapper;
     private final QueryParser queryParser;
     private final Configuration jsonPathConfig;
+    private final CacheManager cacheManager;
 
     public QueryExecutor(MappingManager mappingManager, File dataDirectory) {
+        this(mappingManager, dataDirectory, null);
+    }
+    
+    public QueryExecutor(MappingManager mappingManager, File dataDirectory, CacheManager cacheManager) {
         this.mappingManager = mappingManager;
         this.dataDirectory = dataDirectory;
+        this.cacheManager = cacheManager;
         this.objectMapper = new ObjectMapper();
         this.queryParser = new QueryParser();
         this.jsonPathConfig = Configuration.builder()
@@ -48,7 +55,12 @@ public class QueryExecutor implements FieldAccessor {
         
         // Execute CTEs first if present
         if (parsedQuery.hasCTEs()) {
+            if (System.getenv("DEBUG") != null) {
+                System.err.println("DEBUG: Query has CTEs, count: " + parsedQuery.getCommonTableExpressions().size());
+            }
             executeCTEs(parsedQuery, context);
+        } else if (System.getenv("DEBUG") != null) {
+            System.err.println("DEBUG: Query has no CTEs");
         }
         
         // Execute main query with context
@@ -108,25 +120,117 @@ public class QueryExecutor implements FieldAccessor {
     
     /**
      * Execute all CTEs and store results in context.
+     * Checks cache first if caching is enabled.
      */
     private void executeCTEs(ParsedQuery parsedQuery, QueryExecutionContext context) throws Exception {
+        if (System.getenv("DEBUG") != null) {
+            System.err.println("DEBUG: executeCTEs called, CTE count: " + parsedQuery.getCommonTableExpressions().size());
+        }
         for (Map.Entry<String, ParsedQuery> cteEntry : parsedQuery.getCommonTableExpressions().entrySet()) {
             String cteName = cteEntry.getKey();
             ParsedQuery cteQuery = cteEntry.getValue();
             
-            // Recursively execute the CTE query
+            if (System.getenv("DEBUG") != null) {
+                System.err.println("DEBUG: Processing CTE: " + cteName);
+            }
+            
+            List<JsonNode> cteData = null;
+            
+            // Check cache first if enabled
+            if (cacheManager != null) {
+                String cteCacheKey = generateCTECacheKey(cteName, cteQuery);
+                cteData = cacheManager.getCachedCTE(cteCacheKey);
+                
+                if (cteData != null) {
+                    // Use cached CTE result
+                    context.setCTEResult(cteName, cteData);
+                    continue; // Skip execution, use cached data
+                }
+            }
+            
+            // Not cached (or caching disabled), execute the CTE query
             String cteResultJson = executeQuery(cteQuery, context);
             
             // Parse the JSON result into List<JsonNode>
             JsonNode cteResultArray = objectMapper.readTree(cteResultJson);
-            List<JsonNode> cteData = new ArrayList<>();
+            cteData = new ArrayList<>();
             if (cteResultArray.isArray()) {
                 cteResultArray.forEach(cteData::add);
+            }
+            
+            // Save to cache if enabled
+            if (cacheManager != null && cteData != null && !cteData.isEmpty()) {
+                try {
+                    String cteCacheKey = generateCTECacheKey(cteName, cteQuery);
+                    if (System.getenv("DEBUG") != null) {
+                        System.err.println("DEBUG: Caching CTE " + cteName + " with key: " + cteCacheKey + ", data size: " + cteData.size());
+                    }
+                    cacheManager.saveCTEToCache(cteCacheKey, cteData);
+                    if (System.getenv("DEBUG") != null) {
+                        System.err.println("DEBUG: CTE cache saved successfully");
+                    }
+                } catch (Exception e) {
+                    // If cache save fails, continue without caching
+                    // This shouldn't break the query execution
+                    // Log error in debug mode
+                    if (System.getenv("DEBUG") != null) {
+                        System.err.println("Failed to cache CTE " + cteName + ": " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                }
+            } else if (System.getenv("DEBUG") != null) {
+                System.err.println("DEBUG: Not caching CTE " + cteName + " - cacheManager=" + (cacheManager != null) + ", cteData=" + (cteData != null) + ", isEmpty=" + (cteData == null ? "N/A" : cteData.isEmpty()));
             }
             
             // Store CTE result in context
             context.setCTEResult(cteName, cteData);
         }
+    }
+    
+    /**
+     * Generate a deterministic cache key for a CTE based on its query structure.
+     * The key includes: CTE name, table name, WHERE clause, and other relevant parts.
+     */
+    private String generateCTECacheKey(String cteName, ParsedQuery cteQuery) {
+        StringBuilder keyBuilder = new StringBuilder();
+        keyBuilder.append("CTE:").append(cteName).append(":");
+        
+        // Add table name
+        if (cteQuery.getFromTable() != null) {
+            keyBuilder.append("TABLE:").append(cteQuery.getFromTable().getTableName()).append(":");
+        }
+        
+        // Add WHERE clause (normalized string representation)
+        if (cteQuery.hasWhere() && cteQuery.getWhereExpression() != null) {
+            // Use toString() which gives a normalized representation
+            String whereStr = cteQuery.getWhereExpression().toString();
+            // Normalize whitespace for consistency
+            whereStr = whereStr.replaceAll("\\s+", " ").trim();
+            keyBuilder.append("WHERE:").append(whereStr).append(":");
+        }
+        
+        // Add JOINs if any
+        if (cteQuery.hasJoins()) {
+            for (var join : cteQuery.getJoins()) {
+                keyBuilder.append("JOIN:").append(join.getTable().getTableName())
+                    .append(":").append(join.getOnCondition()).append(":");
+            }
+        }
+        
+        // Add UNNESTs if any
+        if (cteQuery.hasUnnests()) {
+            for (var unnest : cteQuery.getUnnests()) {
+                keyBuilder.append("UNNEST:").append(unnest.getArrayExpression())
+                    .append(":").append(unnest.getAlias()).append(":");
+            }
+        }
+        
+        // Add DISTINCT flag
+        if (cteQuery.isDistinct()) {
+            keyBuilder.append("DISTINCT:");
+        }
+        
+        return keyBuilder.toString();
     }
 
     /**
@@ -192,33 +296,73 @@ public class QueryExecutor implements FieldAccessor {
                 throw new IOException("JSON file not found: " + jsonFile.getAbsolutePath());
             }
             
-            // Read JSON file
-            String jsonContent = Files.readString(jsonFile.toPath());
+            List<JsonNode> fileData;
             
-            // Apply JSONPath
-            Object result = JsonPath.using(jsonPathConfig).parse(jsonContent).read(jsonPathExpression);
-            
-            // Convert to list of JsonNodes
-            JsonNode resultNode = objectMapper.valueToTree(result);
-            
-            if (resultNode.isArray()) {
-                resultNode.forEach(node -> {
-                    // Add table alias/name to each row for qualified column access
-                    if (node.isObject()) {
-                        ObjectNode objNode = (ObjectNode) node;
-                        ObjectNode wrappedNode = objectMapper.createObjectNode();
-                        wrappedNode.set(tableInfo.getEffectiveName(), objNode);
-                        dataList.add(wrappedNode);
+            // Check cache first if enabled
+            if (cacheManager != null) {
+                List<JsonNode> cachedData = cacheManager.getCachedData(jsonFile, jsonPathExpression);
+                if (cachedData != null) {
+                    // Use cached data
+                    fileData = cachedData;
+                } else {
+                    // Load from file
+                    fileData = loadFromFile(jsonFile, jsonPathExpression);
+                    
+                    // Save to cache (with JSONPath for unique cache key)
+                    try {
+                        cacheManager.saveToCache(jsonFile, jsonPathExpression, fileData);
+                    } catch (IOException e) {
+                        // If cache save fails, continue without caching
+                        // This shouldn't break the query execution
                     }
-                });
-            } else if (resultNode.isObject()) {
-                // Single object, wrap it
-                ObjectNode wrappedNode = objectMapper.createObjectNode();
-                wrappedNode.set(tableInfo.getEffectiveName(), resultNode);
-                dataList.add(wrappedNode);
+                }
+            } else {
+                // No caching, load from file
+                fileData = loadFromFile(jsonFile, jsonPathExpression);
+            }
+            
+            // Wrap each row with table name for qualified column access
+            for (JsonNode node : fileData) {
+                if (node.isObject()) {
+                    ObjectNode wrappedNode = objectMapper.createObjectNode();
+                    wrappedNode.set(tableInfo.getEffectiveName(), (ObjectNode) node);
+                    dataList.add(wrappedNode);
+                } else {
+                    dataList.add(node);
+                }
             }
         }
 
+        return dataList;
+    }
+    
+    /**
+     * Load data from a JSON file and apply JSONPath.
+     * Returns unwrapped data (without table name wrapper).
+     */
+    private List<JsonNode> loadFromFile(File jsonFile, String jsonPathExpression) throws IOException {
+        // Read JSON file
+        String jsonContent = Files.readString(jsonFile.toPath());
+        
+        // Apply JSONPath
+        Object result = JsonPath.using(jsonPathConfig).parse(jsonContent).read(jsonPathExpression);
+        
+        // Convert to list of JsonNodes
+        JsonNode resultNode = objectMapper.valueToTree(result);
+        
+        List<JsonNode> dataList = new ArrayList<>();
+        
+        if (resultNode.isArray()) {
+            resultNode.forEach(node -> {
+                if (node.isObject()) {
+                    dataList.add(node);
+                }
+            });
+        } else if (resultNode.isObject()) {
+            // Single object
+            dataList.add(resultNode);
+        }
+        
         return dataList;
     }
     

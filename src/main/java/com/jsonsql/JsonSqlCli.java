@@ -1,5 +1,6 @@
 package com.jsonsql;
 
+import com.jsonsql.config.CacheManager;
 import com.jsonsql.config.MappingManager;
 import com.jsonsql.config.QueryManager;
 import com.jsonsql.config.QueryParameterReplacer;
@@ -62,6 +63,12 @@ public class JsonSqlCli implements Callable<Integer> {
     
     @Option(names = {"--param"}, description = "Parameter value for parameterized queries (format: key=value). Can be used multiple times.", arity = "1")
     private List<String> parameters = new ArrayList<>();
+    
+    @Option(names = {"--enable-cache"}, description = "Enable disk-based caching of parsed JSON data for faster subsequent queries")
+    private boolean enableCache;
+    
+    @Option(names = {"--clear-cache"}, description = "Clear all cached data for mapped tables")
+    private boolean clearCache;
 
     public static void main(String[] args) {
         int exitCode = new CommandLine(new JsonSqlCli()).execute(args);
@@ -85,6 +92,14 @@ public class JsonSqlCli implements Callable<Integer> {
             String jsonPath = addMapping[1];
             mappingManager.addMapping(alias, jsonPath);
             System.out.println("Mapping added: " + alias + " -> " + jsonPath);
+            return 0;
+        }
+        
+        // Handle clear-cache command
+        if (clearCache) {
+            CacheManager cacheManager = new CacheManager(dataDirectory);
+            int clearedCount = cacheManager.clearAllCaches(mappingManager, dataDirectory);
+            System.out.println("Cache cleared: " + clearedCount + " file(s) removed");
             return 0;
         }
         
@@ -150,7 +165,9 @@ public class JsonSqlCli implements Callable<Integer> {
                     }
                 }
                 
-                QueryExecutor executor = new QueryExecutor(mappingManager, dataDirectory);
+                // Create CacheManager if caching is enabled
+                CacheManager cacheManager = enableCache ? new CacheManager(dataDirectory) : null;
+                QueryExecutor executor = new QueryExecutor(mappingManager, dataDirectory, cacheManager);
                 String result = executor.execute(query);
                 
                 OutputHandler outputHandler = new OutputHandler(prettyPrint);
