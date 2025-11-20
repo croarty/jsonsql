@@ -99,7 +99,10 @@ public class JsonSqlCli implements Callable<Integer> {
         if (clearCache) {
             CacheManager cacheManager = new CacheManager(dataDirectory);
             int clearedCount = cacheManager.clearAllCaches(mappingManager, dataDirectory);
-            System.out.println("Cache cleared: " + clearedCount + " file(s) removed");
+            System.out.println("Cache cleared: " + clearedCount + " file(s) removed from " + dataDirectory.getAbsolutePath());
+            if (clearedCount == 0) {
+                System.out.println("Note: No cache files found. Make sure --data-dir points to the correct directory.");
+            }
             return 0;
         }
         
