@@ -30,5 +30,6 @@
   "27_complex_nested" : "SELECT name, price, category FROM ecommerce_products WHERE ((category = 'Electronics' AND price < 50) OR (category = 'Stationery' AND price < 20)) AND inStock = true",
   "28_pending_deliveries" : "SELECT o.orderId, p.name, o.orderDate, o.status FROM ecommerce_orders o JOIN ecommerce_products p ON o.productId = p.id WHERE o.deliveryDate IS NULL AND o.status != 'cancelled' ORDER BY o.orderDate",
   "29_mid_price_range" : "SELECT name, category, price, brand FROM ecommerce_products WHERE price >= 50 AND price <= 150 ORDER BY category, price DESC",
-  "30_showcase_all_operators" : "SELECT o.orderId, p.name, p.category, o.status FROM ecommerce_orders o JOIN ecommerce_products p ON o.productId = p.id WHERE o.status IN ('delivered', 'shipped') AND p.category NOT IN ('Stationery') AND p.price > 20 AND p.name LIKE '%e%' AND o.deliveryDate IS NOT NULL ORDER BY p.price DESC LIMIT 20"
+  "30_showcase_all_operators" : "SELECT o.orderId, p.name, p.category, o.status FROM ecommerce_orders o JOIN ecommerce_products p ON o.productId = p.id WHERE o.status IN ('delivered', 'shipped') AND p.category NOT IN ('Stationery') AND p.price > 20 AND p.name LIKE '%e%' AND o.deliveryDate IS NOT NULL ORDER BY p.price DESC LIMIT 20",
+  "filtered_products" : "SELECT * FROM products WHERE price > ${min_price} AND category = '${category}'"
 }
