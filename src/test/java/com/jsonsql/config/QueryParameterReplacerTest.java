@@ -280,5 +280,66 @@ class QueryParameterReplacerTest {
         
         assertEquals("SELECT * FROM products WHERE name = ''", result);
     }
+
+    @Test
+    void testNullValueForRequiredParameterThrows() {
+        String query = "SELECT * FROM products WHERE price > ${min_price}";
+        Map<String, String> params = new HashMap<>();
+        params.put("min_price", null);
+
+        IllegalArgumentException ex = assertThrows(
+            IllegalArgumentException.class,
+            () -> QueryParameterReplacer.replaceParameters(query, params));
+        assertTrue(ex.getMessage().contains("min_price"));
+    }
+
+    @Test
+    void testEmptyValueForRequiredParameterThrows() {
+        String query = "SELECT * FROM products WHERE price > ${min_price}";
+        Map<String, String> params = new HashMap<>();
+        params.put("min_price", "");
+
+        IllegalArgumentException ex = assertThrows(
+            IllegalArgumentException.class,
+            () -> QueryParameterReplacer.replaceParameters(query, params));
+        assertTrue(ex.getMessage().contains("Missing required parameters"));
+        assertTrue(ex.getMessage().contains("min_price"));
+    }
+
+    @Test
+    void testNullValueWithDefaultUsesDefault() {
+        // A null provided value should not cause an NPE; the default is used instead.
+        String query = "SELECT * FROM products WHERE price > ${min_price:50}";
+        Map<String, String> params = new HashMap<>();
+        params.put("min_price", null);
+
+        String result = QueryParameterReplacer.replaceParameters(query, params);
+
+        assertEquals("SELECT * FROM products WHERE price > 50", result);
+    }
+
+    @Test
+    void testEmptyValueWithDefaultUsesProvidedEmpty() {
+        // An explicitly provided empty value for a parameter that has a default overrides
+        // the default with the empty string (the value was explicitly supplied).
+        String query = "SELECT * FROM products WHERE name = '${name:Default}'";
+        Map<String, String> params = new HashMap<>();
+        params.put("name", "");
+
+        String result = QueryParameterReplacer.replaceParameters(query, params);
+
+        assertEquals("SELECT * FROM products WHERE name = ''", result);
+    }
+
+    @Test
+    void testRegexSpecialCharactersInProvidedValueAreLiteral() {
+        // Replacement values containing regex/backreference characters must be inserted literally
+        String query = "SELECT * FROM t WHERE name = '${name}'";
+        Map<String, String> params = Map.of("name", "a$1\\b");
+
+        String result = QueryParameterReplacer.replaceParameters(query, params);
+
+        assertEquals("SELECT * FROM t WHERE name = 'a$1\\b'", result);
+    }
 }
 

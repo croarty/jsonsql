@@ -10,7 +10,6 @@ import com.jayway.jsonpath.Option;
 import com.jsonsql.config.CacheManager;
 import com.jsonsql.config.MappingManager;
 import net.sf.jsqlparser.expression.Expression;
-import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 
 import java.io.File;
 import java.io.IOException;
@@ -92,23 +91,24 @@ public class QueryExecutor implements FieldAccessor {
             filteredData = applyWhere(joinedData, parsedQuery.getWhereExpression());
         }
 
-        // Apply ORDER BY
+        // Apply ORDER BY before projection so sort keys not present in the SELECT list
+        // (e.g. ORDER BY id while selecting only name) remain available.
         if (parsedQuery.hasOrderBy()) {
             filteredData = applyOrderBy(filteredData, parsedQuery.getOrderBy());
-        }
-
-        // Apply TOP/LIMIT
-        if (parsedQuery.getEffectiveLimit() != null) {
-            int limit = parsedQuery.getEffectiveLimit().intValue();
-            filteredData = filteredData.subList(0, Math.min(limit, filteredData.size()));
         }
 
         // Project SELECT columns
         List<JsonNode> projectedData = projectColumns(filteredData, parsedQuery.getSelectColumns());
 
-        // Apply DISTINCT if specified
+        // Apply DISTINCT after projection (dedupe the projected rows, preserving sorted order)
         if (parsedQuery.isDistinct()) {
             projectedData = applyDistinct(projectedData);
+        }
+
+        // Apply TOP/LIMIT last, so it operates on the final ordered/projected/deduped result set
+        if (parsedQuery.getEffectiveLimit() != null) {
+            int limit = parsedQuery.getEffectiveLimit().intValue();
+            projectedData = projectedData.subList(0, Math.min(limit, projectedData.size()));
         }
 
         // Convert to JSON array string
@@ -225,11 +225,52 @@ public class QueryExecutor implements FieldAccessor {
             }
         }
         
+        // Add SELECT column list (projection affects the cached result)
+        if (cteQuery.getSelectColumns() != null && !cteQuery.getSelectColumns().isEmpty()) {
+            keyBuilder.append("SELECT:");
+            for (var col : cteQuery.getSelectColumns()) {
+                keyBuilder.append(col.getExpression());
+                if (col.hasAlias()) {
+                    keyBuilder.append(" AS ").append(col.getAlias());
+                }
+                keyBuilder.append(",");
+            }
+            keyBuilder.append(":");
+        }
+
+        // Add ORDER BY (ordering affects the cached result, especially combined with LIMIT)
+        if (cteQuery.hasOrderBy()) {
+            keyBuilder.append("ORDERBY:");
+            for (OrderByInfo ob : cteQuery.getOrderBy()) {
+                keyBuilder.append(ob.getColumn()).append(ob.isAscending() ? " ASC" : " DESC").append(",");
+            }
+            keyBuilder.append(":");
+        }
+
+        // Add LIMIT / TOP (row limiting affects the cached result)
+        if (cteQuery.getEffectiveLimit() != null) {
+            keyBuilder.append("LIMIT:").append(cteQuery.getEffectiveLimit()).append(":");
+        }
+
         // Add DISTINCT flag
         if (cteQuery.isDistinct()) {
             keyBuilder.append("DISTINCT:");
         }
-        
+
+        // Add source freshness fingerprint so editing the underlying JSON invalidates the CTE cache
+        String fromFingerprint = sourceFingerprint(cteQuery.getFromTable());
+        if (!fromFingerprint.isEmpty()) {
+            keyBuilder.append("SRC:").append(fromFingerprint).append(":");
+        }
+        if (cteQuery.hasJoins()) {
+            for (var join : cteQuery.getJoins()) {
+                String joinFingerprint = sourceFingerprint(join.getTable());
+                if (!joinFingerprint.isEmpty()) {
+                    keyBuilder.append("JOINSRC:").append(joinFingerprint).append(":");
+                }
+            }
+        }
+
         return keyBuilder.toString();
     }
 
@@ -257,42 +298,8 @@ public class QueryExecutor implements FieldAccessor {
         // Get the JSONPath (without filename prefix if present)
         String jsonPathExpression = mappingManager.getJsonPathOnly(tableName);
         
-        // Check if mapping specifies a filename/path, otherwise use table name
-        String fileName = mappingManager.getFileName(tableName);
-        
-        List<File> jsonFiles = new ArrayList<>();
-        
-        if (fileName != null) {
-            // Use filename/path from mapping - could be file, directory, or relative path
-            File fileOrDir = new File(dataDirectory, fileName);
-            
-            // Handle absolute paths
-            if (!fileOrDir.isAbsolute() && new File(fileName).isAbsolute()) {
-                fileOrDir = new File(fileName);
-            }
-            
-            if (fileOrDir.isDirectory()) {
-                // Recursively load all .json files from the directory tree
-                try (java.util.stream.Stream<java.nio.file.Path> stream = Files.walk(fileOrDir.toPath())) {
-                    List<File> found = stream
-                        .filter(Files::isRegularFile)
-                        .filter(p -> p.getFileName().toString().toLowerCase().endsWith(".json"))
-                        .sorted()
-                        .map(java.nio.file.Path::toFile)
-                        .collect(java.util.stream.Collectors.toList());
-                    if (found.isEmpty()) {
-                        throw new IOException("No JSON files found in directory tree: " + fileOrDir.getAbsolutePath());
-                    }
-                    jsonFiles.addAll(found);
-                }
-            } else {
-                // Single file
-                jsonFiles.add(fileOrDir);
-            }
-        } else {
-            // Fall back to using table name as filename
-            jsonFiles.add(findJsonFile(tableName));
-        }
+        // Resolve the JSON file(s) backing this table
+        List<File> jsonFiles = resolveJsonFiles(tableName);
         
         // Load and combine data from all files
         List<JsonNode> dataList = new ArrayList<>();
@@ -340,6 +347,74 @@ public class QueryExecutor implements FieldAccessor {
         }
 
         return dataList;
+    }
+
+    /**
+     * Resolve the JSON file(s) backing a mapped table. Handles single files,
+     * relative/absolute paths, and directories (recursively).
+     */
+    private List<File> resolveJsonFiles(String tableName) throws IOException {
+        String fileName = mappingManager.getFileName(tableName);
+        List<File> jsonFiles = new ArrayList<>();
+
+        if (fileName != null) {
+            // Use filename/path from mapping - could be file, directory, or relative path
+            File fileOrDir = new File(dataDirectory, fileName);
+
+            // Handle absolute paths
+            if (!fileOrDir.isAbsolute() && new File(fileName).isAbsolute()) {
+                fileOrDir = new File(fileName);
+            }
+
+            if (fileOrDir.isDirectory()) {
+                // Recursively load all .json files from the directory tree
+                try (java.util.stream.Stream<java.nio.file.Path> stream = Files.walk(fileOrDir.toPath())) {
+                    List<File> found = stream
+                        .filter(Files::isRegularFile)
+                        .filter(p -> p.getFileName().toString().toLowerCase().endsWith(".json"))
+                        .sorted()
+                        .map(java.nio.file.Path::toFile)
+                        .collect(java.util.stream.Collectors.toList());
+                    if (found.isEmpty()) {
+                        throw new IOException("No JSON files found in directory tree: " + fileOrDir.getAbsolutePath());
+                    }
+                    jsonFiles.addAll(found);
+                }
+            } else {
+                // Single file
+                jsonFiles.add(fileOrDir);
+            }
+        } else {
+            // Fall back to using table name as filename
+            jsonFiles.add(findJsonFile(tableName));
+        }
+
+        return jsonFiles;
+    }
+
+    /**
+     * Build a freshness fingerprint (path + last-modified + size) for a table's backing
+     * file(s). Returns an empty string for unmapped tables (e.g. CTE references), which
+     * have no source file. Used to make CTE cache keys sensitive to source changes.
+     */
+    private String sourceFingerprint(TableInfo tableInfo) {
+        if (tableInfo == null) {
+            return "";
+        }
+        String tableName = tableInfo.getTableName();
+        if (tableName == null || !mappingManager.hasMapping(tableName)) {
+            return "";
+        }
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (File f : resolveJsonFiles(tableName)) {
+                sb.append(f.getAbsolutePath()).append('@')
+                  .append(f.lastModified()).append(':').append(f.length()).append(';');
+            }
+            return sb.toString();
+        } catch (IOException e) {
+            return "";
+        }
     }
     
     /**
@@ -471,9 +546,24 @@ public class QueryExecutor implements FieldAccessor {
      * Parse JOIN ON condition into left and right field paths.
      */
     private JoinCondition parseJoinCondition(String onCondition) {
-        // Simple parser for "a.b = c.d" format
-        String[] parts = onCondition.split("=");
-        if (parts.length != 2) {
+        // Only a single equi-join "a.b = c.d" is supported.
+        String normalized = onCondition.trim();
+        String upper = normalized.toUpperCase();
+
+        if (upper.contains(" AND ") || upper.contains(" OR ")) {
+            throw new IllegalArgumentException(
+                "Only a single equi-join condition is supported in JOIN ON, got: " + onCondition);
+        }
+
+        // Reject non-equality comparison operators (>=, <=, <>, !=, >, <).
+        if (normalized.contains(">=") || normalized.contains("<=") || normalized.contains("<>")
+            || normalized.contains("!=") || normalized.contains(">") || normalized.contains("<")) {
+            throw new IllegalArgumentException(
+                "Only equi-join (=) conditions are supported in JOIN ON, got: " + onCondition);
+        }
+
+        String[] parts = normalized.split("=");
+        if (parts.length != 2 || parts[0].trim().isEmpty() || parts[1].trim().isEmpty()) {
             throw new IllegalArgumentException("Invalid JOIN ON condition: " + onCondition);
         }
 
@@ -487,11 +577,52 @@ public class QueryExecutor implements FieldAccessor {
         JsonNode leftValue = getFieldValue(leftRow, condition.leftField());
         JsonNode rightValue = getFieldValue(rightRow, condition.rightField());
 
-        if (leftValue == null || rightValue == null) {
+        return joinValuesMatch(leftValue, rightValue);
+    }
+
+    /**
+     * Compare two join key values with type coercion.
+     * SQL NULL (missing or explicit null) never matches. Numbers compare numerically,
+     * and a number matches a numeric string (e.g. 1 matches "1").
+     */
+    private boolean joinValuesMatch(JsonNode leftValue, JsonNode rightValue) {
+        // Treat missing and explicit JSON null as SQL NULL, which never matches.
+        if (leftValue == null || leftValue.isNull() || rightValue == null || rightValue.isNull()) {
             return false;
         }
 
-        return leftValue.equals(rightValue);
+        // Numeric comparison when both are numbers.
+        if (leftValue.isNumber() && rightValue.isNumber()) {
+            return leftValue.asDouble() == rightValue.asDouble();
+        }
+
+        // Mixed number/string: compare numerically if the string parses as a number.
+        if (leftValue.isNumber() || rightValue.isNumber()) {
+            Double l = parseDoubleOrNull(leftValue.asText());
+            Double r = parseDoubleOrNull(rightValue.asText());
+            if (l != null && r != null) {
+                return l.doubleValue() == r.doubleValue();
+            }
+        }
+
+        // Booleans compare by value.
+        if (leftValue.isBoolean() && rightValue.isBoolean()) {
+            return leftValue.asBoolean() == rightValue.asBoolean();
+        }
+
+        // Fall back to textual comparison.
+        return leftValue.asText().equals(rightValue.asText());
+    }
+
+    private Double parseDoubleOrNull(String text) {
+        if (text == null) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(text.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /**
@@ -699,29 +830,32 @@ public class QueryExecutor implements FieldAccessor {
                 String expression = column.getExpression().trim();
                 JsonNode value = getFieldValueFlexible(row, expression);
                 
-                if (value != null) {
-                    String outputName;
+                String outputName;
+                if (column.hasAlias()) {
+                    // Use explicit alias
+                    outputName = column.getAlias();
+                } else {
+                    // Determine output name based on collision detection
+                    String simpleName = expression.contains(".") 
+                        ? expression.substring(expression.lastIndexOf('.') + 1)
+                        : expression;
                     
-                    if (column.hasAlias()) {
-                        // Use explicit alias
-                        outputName = column.getAlias();
+                    // Use qualified name if collision detected, otherwise use simple name
+                    if (outputNameCounts.get(simpleName) > 1) {
+                        // Collision - use qualified name
+                        outputName = expression;
                     } else {
-                        // Determine output name based on collision detection
-                        String simpleName = expression.contains(".") 
-                            ? expression.substring(expression.lastIndexOf('.') + 1)
-                            : expression;
-                        
-                        // Use qualified name if collision detected, otherwise use simple name
-                        if (outputNameCounts.get(simpleName) > 1) {
-                            // Collision - use qualified name
-                            outputName = expression;
-                        } else {
-                            // No collision - use simple name
-                            outputName = simpleName;
-                        }
+                        // No collision - use simple name
+                        outputName = simpleName;
                     }
-                    
+                }
+                
+                // Explicitly selected columns are always present in the output; a missing
+                // or null source value is emitted as JSON null rather than omitted.
+                if (value != null) {
                     projectedRow.set(outputName, value);
+                } else {
+                    projectedRow.putNull(outputName);
                 }
             }
             

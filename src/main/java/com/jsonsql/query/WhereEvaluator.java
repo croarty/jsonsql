@@ -6,6 +6,8 @@ import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.conditional.OrExpression;
 import net.sf.jsqlparser.expression.operators.relational.*;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -15,6 +17,9 @@ import java.util.regex.Pattern;
 public class WhereEvaluator {
     
     private final FieldAccessor fieldAccessor;
+    // Cache of compiled LIKE/ILIKE patterns, keyed by regex + case-insensitivity, so the
+    // pattern is compiled once per evaluator (one per WHERE filter) instead of once per row.
+    private final Map<String, Pattern> patternCache = new HashMap<>();
     
     public WhereEvaluator(FieldAccessor fieldAccessor) {
         this.fieldAccessor = fieldAccessor;
@@ -77,10 +82,9 @@ public class WhereEvaluator {
         // Handle LIKE operator
         if (expression instanceof LikeExpression) {
             LikeExpression likeExpr = (LikeExpression) expression;
-            // Check if this is ILIKE (case-insensitive LIKE)
-            // JSqlParser may parse ILIKE as LikeExpression, so we check the string representation
-            String exprString = expression.toString().toUpperCase();
-            boolean caseInsensitive = exprString.contains("ILIKE");
+            // Detect ILIKE (case-insensitive LIKE) directly from the parsed AST keyword rather
+            // than inspecting the toString(), which is fragile when a value contains "ILIKE".
+            boolean caseInsensitive = likeExpr.getLikeKeyWord() == LikeExpression.KeyWord.ILIKE;
             return evaluateLike(row, likeExpr, caseInsensitive);
         }
         
@@ -94,8 +98,11 @@ public class WhereEvaluator {
             return evaluateIn(row, (InExpression) expression);
         }
         
-        // Unsupported expression type
-        return false;
+        // Unsupported expression type - fail loudly instead of silently excluding all rows
+        throw new UnsupportedExpressionException(
+            "Unsupported WHERE expression: " + expression +
+            " (type: " + expression.getClass().getSimpleName() + ")"
+        );
     }
     
     private boolean evaluateComparison(JsonNode row, ComparisonOperator comparison, String operator) {
@@ -176,6 +183,10 @@ public class WhereEvaluator {
                 return false;
             }
         }
+        // Fall back to lexicographic comparison for textual values
+        if (fieldValue.isTextual()) {
+            return fieldValue.asText().compareTo(compareValue) > 0;
+        }
         return false;
     }
     
@@ -191,6 +202,10 @@ public class WhereEvaluator {
             } catch (NumberFormatException e) {
                 return false;
             }
+        }
+        // Fall back to lexicographic comparison for textual values
+        if (fieldValue.isTextual()) {
+            return fieldValue.asText().compareTo(compareValue) < 0;
         }
         return false;
     }
@@ -221,10 +236,11 @@ public class WhereEvaluator {
         // Convert SQL LIKE pattern to regex
         String regexPattern = convertLikePatternToRegex(pattern);
         
-        // Evaluate pattern match
-        // Use CASE_INSENSITIVE flag if needed (though we already lowercased)
-        int flags = 0;
-        boolean matches = Pattern.compile(regexPattern, flags).matcher(fieldText).matches();
+        // Evaluate pattern match using a cached compiled pattern (we already lowercased above
+        // when case-insensitive, so no flags are needed here).
+        String cacheKey = (caseInsensitive ? "i:" : "s:") + regexPattern;
+        Pattern compiled = patternCache.computeIfAbsent(cacheKey, k -> Pattern.compile(regexPattern));
+        boolean matches = compiled.matcher(fieldText).matches();
         
         // Handle NOT LIKE / NOT ILIKE
         return likeExpr.isNot() ? !matches : matches;
@@ -286,8 +302,11 @@ public class WhereEvaluator {
             return inExpr.isNot(); // IN returns false, NOT IN returns true
         }
         
-        // Unsupported right expression type
-        return false;
+        // Unsupported right expression type - fail loudly instead of silently excluding all rows
+        throw new UnsupportedExpressionException(
+            "Unsupported IN expression right-hand side: " + inExpr +
+            " (type: " + (rightExpression == null ? "null" : rightExpression.getClass().getSimpleName()) + ")"
+        );
     }
     
     /**

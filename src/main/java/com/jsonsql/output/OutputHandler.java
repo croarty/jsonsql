@@ -3,10 +3,12 @@ package com.jsonsql.output;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.awt.GraphicsEnvironment;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 
 /**
@@ -30,17 +32,19 @@ public class OutputHandler {
         // Output to file
         if (outputFile != null) {
             // Create parent directories if they don't exist
-            if (outputFile.getParentFile() != null) {
-                outputFile.getParentFile().mkdirs();
+            File parent = outputFile.getParentFile();
+            if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) {
+                throw new IOException("Failed to create output directory: " + parent.getAbsolutePath());
             }
-            Files.writeString(outputFile.toPath(), output);
-            System.out.println("Output written to: " + outputFile.getAbsolutePath());
+            // Write explicitly as UTF-8 for portability across platforms
+            Files.writeString(outputFile.toPath(), output, StandardCharsets.UTF_8);
+            System.err.println("Output written to: " + outputFile.getAbsolutePath());
         }
 
         // Output to clipboard
         if (clipboard) {
             copyToClipboard(output);
-            System.out.println("Output copied to clipboard");
+            System.err.println("Output copied to clipboard");
         }
 
         // Output to stdout if no file specified
@@ -64,10 +68,20 @@ public class OutputHandler {
 
     /**
      * Copy text to system clipboard.
+     * Throws a clear IOException when no graphical environment / clipboard is available
+     * (e.g. headless servers) instead of leaking an AWT HeadlessException.
      */
-    private void copyToClipboard(String text) {
-        StringSelection selection = new StringSelection(text);
-        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+    private void copyToClipboard(String text) throws IOException {
+        if (GraphicsEnvironment.isHeadless()) {
+            throw new IOException(
+                "Clipboard is not available in a headless environment. Use --output to write to a file instead.");
+        }
+        try {
+            StringSelection selection = new StringSelection(text);
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+        } catch (Exception e) {
+            throw new IOException("Failed to copy output to clipboard: " + e.getMessage(), e);
+        }
     }
 }
 

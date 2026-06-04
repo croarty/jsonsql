@@ -28,8 +28,9 @@ public class CacheManager {
         this.typeFactory = TypeFactory.defaultInstance();
         
         // Ensure cache directory exists
-        if (!cacheDirectory.exists()) {
-            cacheDirectory.mkdirs();
+        if (!cacheDirectory.exists() && !cacheDirectory.mkdirs() && !cacheDirectory.exists()) {
+            throw new IllegalStateException(
+                "Failed to create cache directory: " + cacheDirectory.getAbsolutePath());
         }
     }
     
@@ -75,8 +76,8 @@ public class CacheManager {
         
         // Ensure parent directory exists
         File parentDir = cacheFile.getParentFile();
-        if (parentDir != null && !parentDir.exists()) {
-            parentDir.mkdirs();
+        if (parentDir != null && !parentDir.exists() && !parentDir.mkdirs() && !parentDir.exists()) {
+            throw new IOException("Failed to create cache directory: " + parentDir.getAbsolutePath());
         }
         
         // Write data as JSON array
@@ -156,19 +157,25 @@ public class CacheManager {
      * This ensures different JSONPaths on the same file get different cache entries.
      */
     private File getCacheFile(File jsonFile, String jsonPathExpression) {
+        // Fold the source file's last-modified time and size into the cache key so that
+        // editing the source JSON automatically invalidates the cache (a changed file
+        // produces a different cache filename, i.e. a cache miss).
+        long lastModified = jsonFile.lastModified();
+        long length = jsonFile.length();
         try {
             String absolutePath = jsonFile.getAbsolutePath();
-            // Combine file path and JSONPath for unique cache key
-            String cacheKey = absolutePath + "|" + jsonPathExpression;
+            // Combine file path, JSONPath, mtime and size for a freshness-sensitive cache key
+            String cacheKey = absolutePath + "|" + jsonPathExpression + "|" + lastModified + "|" + length;
             String hash = hashPath(cacheKey);
             String cacheFileName = hash + ".cache";
             return new File(cacheDirectory, cacheFileName);
         } catch (Exception e) {
-            // Fallback to simple filename-based cache
+            // Fallback to simple filename-based cache (still freshness-sensitive)
             String fileName = jsonFile.getName();
             String jsonPathHash = jsonPathExpression != null ? 
                 String.valueOf(jsonPathExpression.hashCode()) : "default";
-            String cacheFileName = fileName.replace(".json", "") + "_" + jsonPathHash + ".cache";
+            String cacheFileName = fileName.replace(".json", "") + "_" + jsonPathHash
+                + "_" + lastModified + "_" + length + ".cache";
             return new File(cacheDirectory, cacheFileName);
         }
     }
@@ -179,7 +186,7 @@ public class CacheManager {
      */
     private String hashPath(String cacheKey) throws NoSuchAlgorithmException {
         MessageDigest md = MessageDigest.getInstance("MD5");
-        byte[] hashBytes = md.digest(cacheKey.getBytes());
+        byte[] hashBytes = md.digest(cacheKey.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         
         StringBuilder sb = new StringBuilder();
         for (byte b : hashBytes) {
@@ -235,8 +242,8 @@ public class CacheManager {
         
         // Ensure parent directory exists
         File parentDir = cacheFile.getParentFile();
-        if (parentDir != null && !parentDir.exists()) {
-            parentDir.mkdirs();
+        if (parentDir != null && !parentDir.exists() && !parentDir.mkdirs() && !parentDir.exists()) {
+            throw new IOException("Failed to create cache directory: " + parentDir.getAbsolutePath());
         }
         
         // Write data as JSON array

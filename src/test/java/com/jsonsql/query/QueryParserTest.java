@@ -121,6 +121,33 @@ class QueryParserTest {
     }
 
     @Test
+    void testLimitZeroIsAllowed() throws QueryParseException {
+        ParsedQuery query = parser.parse("SELECT * FROM products LIMIT 0");
+        assertEquals(0L, query.getLimit());
+    }
+
+    @Test
+    void testNegativeLimitThrows() {
+        QueryParseException ex = assertThrows(QueryParseException.class,
+            () -> parser.parse("SELECT * FROM products LIMIT -5"));
+        assertTrue(ex.getMessage().toUpperCase().contains("LIMIT"));
+    }
+
+    @Test
+    void testNegativeTopThrows() {
+        // A negative TOP is rejected either by the SQL grammar or by our validation;
+        // either way it must not be accepted as a valid query.
+        assertThrows(QueryParseException.class,
+            () -> parser.parse("SELECT TOP -3 * FROM products"));
+    }
+
+    @Test
+    void testTopZeroIsAllowed() throws QueryParseException {
+        ParsedQuery query = parser.parse("SELECT TOP 0 * FROM products");
+        assertEquals(0L, query.getTop());
+    }
+
+    @Test
     void testComplexQuery() throws QueryParseException {
         ParsedQuery query = parser.parse(
             "SELECT TOP 10 p.name, o.quantity, o.orderDate " +

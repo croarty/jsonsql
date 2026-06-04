@@ -76,9 +76,27 @@ public class JsonSqlCli implements Callable<Integer> {
     }
 
     @Override
-    public Integer call() throws Exception {
-        MappingManager mappingManager = new MappingManager(configFile);
-        QueryManager queryManager = new QueryManager(queriesFile);
+    public Integer call() {
+        // Reject ambiguous combinations of mutually-exclusive action flags up front.
+        String exclusivityError = checkActionExclusivity();
+        if (exclusivityError != null) {
+            System.err.println("Error: " + exclusivityError);
+            return 1;
+        }
+
+        // Construct config-backed managers, surfacing corrupt-config errors as friendly messages.
+        MappingManager mappingManager;
+        QueryManager queryManager;
+        try {
+            mappingManager = new MappingManager(configFile);
+            queryManager = new QueryManager(queriesFile);
+        } catch (RuntimeException e) {
+            System.err.println("Error loading configuration: " + e.getMessage());
+            if (isDebugEnabled()) {
+                e.printStackTrace();
+            }
+            return 1;
+        }
 
         // Handle list-tables command
         if (listTables) {
@@ -90,13 +108,26 @@ public class JsonSqlCli implements Callable<Integer> {
         if (addMapping != null && addMapping.length == 2) {
             String alias = addMapping[0];
             String jsonPath = addMapping[1];
-            mappingManager.addMapping(alias, jsonPath);
+            try {
+                mappingManager.addMapping(alias, jsonPath);
+            } catch (RuntimeException e) {
+                System.err.println("Error adding mapping: " + e.getMessage());
+                if (isDebugEnabled()) {
+                    e.printStackTrace();
+                }
+                return 1;
+            }
             System.out.println("Mapping added: " + alias + " -> " + jsonPath);
             return 0;
         }
         
         // Handle clear-cache command
         if (clearCache) {
+            String dataDirError = validateDataDirectory();
+            if (dataDirError != null) {
+                System.err.println("Error: " + dataDirError);
+                return 1;
+            }
             CacheManager cacheManager = new CacheManager(dataDirectory);
             int clearedCount = cacheManager.clearAllCaches(mappingManager, dataDirectory);
             System.out.println("Cache cleared: " + clearedCount + " file(s) removed from " + dataDirectory.getAbsolutePath());
@@ -149,50 +180,135 @@ public class JsonSqlCli implements Callable<Integer> {
                 return 1;
             }
             query = queryManager.getQuery(runQueryName);
-            System.out.println("Running saved query: " + runQueryName);
-            System.out.println("SQL: " + query);
-            System.out.println();
+            // Informational messages go to stderr so stdout carries only result data (pipe-friendly)
+            System.err.println("Running saved query: " + runQueryName);
+            System.err.println("SQL: " + query);
             // Fall through to execute the query
         }
 
         // Handle query execution
         if (query != null) {
+            String dataDirError = validateDataDirectory();
+            if (dataDirError != null) {
+                System.err.println("Error: " + dataDirError);
+                return 1;
+            }
+
+            String result;
             try {
                 // Parse and replace parameters if any
                 Map<String, String> paramMap = parseParameters(parameters);
                 if (!paramMap.isEmpty() || QueryParameterReplacer.hasParameters(query)) {
                     query = QueryParameterReplacer.replaceParameters(query, paramMap);
                     if (runQueryName != null) {
-                        System.out.println("SQL (with parameters): " + query);
-                        System.out.println();
+                        System.err.println("SQL (with parameters): " + query);
                     }
                 }
                 
                 // Create CacheManager if caching is enabled
                 CacheManager cacheManager = enableCache ? new CacheManager(dataDirectory) : null;
                 QueryExecutor executor = new QueryExecutor(mappingManager, dataDirectory, cacheManager);
-                String result = executor.execute(query);
-                
-                OutputHandler outputHandler = new OutputHandler(prettyPrint);
-                outputHandler.handleOutput(result, outputFile, clipboard);
-                
-                return 0;
+                result = executor.execute(query);
             } catch (IllegalArgumentException e) {
-                // Parameter-related errors
+                // Parameter / mapping / query argument errors
                 System.err.println("Error: " + e.getMessage());
                 return 1;
             } catch (Exception e) {
                 System.err.println("Error executing query: " + e.getMessage());
-                if (System.getenv("DEBUG") != null) {
+                if (isDebugEnabled()) {
                     e.printStackTrace();
                 }
                 return 1;
             }
+
+            // Output handling has its own error reporting, distinct from query execution
+            try {
+                OutputHandler outputHandler = new OutputHandler(prettyPrint);
+                outputHandler.handleOutput(result, outputFile, clipboard);
+            } catch (Exception e) {
+                System.err.println("Error writing output: " + e.getMessage());
+                if (isDebugEnabled()) {
+                    e.printStackTrace();
+                }
+                return 1;
+            }
+
+            return 0;
         }
 
         // No valid command provided
-        System.err.println("Please provide a query (--query), use --run-query, or use --list-tables/--list-queries");
+        System.err.println("No action specified. Provide one of:");
+        System.err.println("  --query <sql>           Execute an inline SQL query");
+        System.err.println("  --run-query <name>      Execute a saved query");
+        System.err.println("  --save-query <name> --query <sql>   Save a query");
+        System.err.println("  --delete-query <name>   Delete a saved query");
+        System.err.println("  --list-tables           List configured mappings");
+        System.err.println("  --list-queries          List saved queries");
+        System.err.println("  --add-mapping <a> <p>   Add a JSONPath mapping");
+        System.err.println("  --clear-cache           Clear cached data");
         return 1;
+    }
+
+    /**
+     * Determine whether DEBUG diagnostics (stack traces) should be printed.
+     * Enabled only when the DEBUG env var holds a truthy value; values like
+     * "", "0", "false", "no", "off" are treated as disabled.
+     */
+    static boolean isDebugEnabled() {
+        String debug = System.getenv("DEBUG");
+        if (debug == null) {
+            return false;
+        }
+        String v = debug.trim().toLowerCase();
+        return !(v.isEmpty() || v.equals("0") || v.equals("false") || v.equals("no") || v.equals("off"));
+    }
+
+    /**
+     * Validate that the configured data directory exists and is a readable directory.
+     * Returns an error message, or null when valid.
+     */
+    private String validateDataDirectory() {
+        if (dataDirectory == null) {
+            return "Data directory is not specified";
+        }
+        if (!dataDirectory.exists()) {
+            return "Data directory does not exist: " + dataDirectory.getAbsolutePath();
+        }
+        if (!dataDirectory.isDirectory()) {
+            return "Data directory is not a directory: " + dataDirectory.getAbsolutePath();
+        }
+        return null;
+    }
+
+    /**
+     * Detect mutually-exclusive action flags. Returns an error message when more than one
+     * primary action is requested, or null when the combination is valid.
+     * Note: --save-query consumes --query as its payload, and --run-query populates the query,
+     * so those pairings are handled specially rather than counted as two separate actions.
+     */
+    private String checkActionExclusivity() {
+        int actions = 0;
+        if (listTables) actions++;
+        if (addMapping != null) actions++;
+        if (clearCache) actions++;
+        if (listQueries) actions++;
+        if (deleteQueryName != null) actions++;
+        if (saveQueryName != null) actions++;
+        if (runQueryName != null) actions++;
+        // Inline query execution counts as an action only when not used as a save payload
+        // and not combined with run-query (handled separately below).
+        if (query != null && saveQueryName == null && runQueryName == null) actions++;
+
+        if (actions > 1) {
+            return "Multiple actions specified. Use only one of --query, --run-query, --save-query, "
+                + "--delete-query, --list-tables, --list-queries, --add-mapping, or --clear-cache at a time.";
+        }
+
+        if (runQueryName != null && query != null) {
+            return "Cannot combine --run-query with --query. Use one or the other.";
+        }
+
+        return null;
     }
     
     /**

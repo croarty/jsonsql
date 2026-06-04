@@ -39,9 +39,13 @@ public class QueryParameterReplacer {
             String paramName = matcher.group(1);
             String defaultValue = matcher.group(2); // May be null
             
-            // If no default value, this parameter is required
-            if (defaultValue == null && !parameters.containsKey(paramName)) {
-                requiredParams.add(paramName);
+            // If no default value, this parameter is required. A missing, null, or empty
+            // provided value all count as "not supplied" for a required parameter.
+            if (defaultValue == null) {
+                String provided = parameters.get(paramName);
+                if (provided == null || provided.isEmpty()) {
+                    requiredParams.add(paramName);
+                }
             }
         }
         
@@ -62,9 +66,10 @@ public class QueryParameterReplacer {
             String defaultValue = matcher.group(2);
             
             String replacement;
-            if (parameters.containsKey(paramName)) {
-                // Use provided value
-                replacement = parameters.get(paramName);
+            String provided = parameters.get(paramName);
+            if (provided != null) {
+                // Use provided value (guard against null to avoid NPE in quoteReplacement)
+                replacement = provided;
             } else if (defaultValue != null) {
                 // Use default value
                 replacement = defaultValue;

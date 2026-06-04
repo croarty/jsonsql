@@ -186,6 +186,48 @@ class QueryManagerTest {
         
         assertEquals(sql, queryManager.getQuery("special"));
     }
+
+    @Test
+    void testCorruptStoreSurfacesError() throws IOException {
+        // A corrupt (non-JSON) store must surface an error rather than silently resetting,
+        // which would otherwise let the next save permanently overwrite user data.
+        Files.writeString(testConfigFile.toPath(), "{ this is not valid json ]");
+
+        RuntimeException ex = assertThrows(RuntimeException.class,
+            () -> new QueryManager(testConfigFile));
+        assertTrue(ex.getMessage().toLowerCase().contains("saved queries")
+            || ex.getMessage().toLowerCase().contains("corrupt"));
+    }
+
+    @Test
+    void testStructurallyInvalidStoreSurfacesError() throws IOException {
+        // A JSON array is not a String->String map and must be rejected at load time.
+        Files.writeString(testConfigFile.toPath(), "[1, 2, 3]");
+
+        assertThrows(RuntimeException.class, () -> new QueryManager(testConfigFile));
+    }
+
+    @Test
+    void testSaveLeavesNoTempFiles() throws IOException {
+        queryManager.saveQuery("q1", "SELECT * FROM products");
+        queryManager.saveQuery("q2", "SELECT * FROM orders");
+
+        File parent = testConfigFile.getAbsoluteFile().getParentFile();
+        File[] tmpFiles = parent.listFiles((d, n) ->
+            n.startsWith(testConfigFile.getName()) && n.endsWith(".tmp"));
+        assertTrue(tmpFiles == null || tmpFiles.length == 0,
+            "Atomic write should not leave temp files behind");
+    }
+
+    @Test
+    void testAtomicWritePreservesValidFileOnReload() throws IOException {
+        queryManager.saveQuery("q1", "SELECT 1");
+        queryManager.saveQuery("q2", "SELECT 2");
+
+        QueryManager reloaded = new QueryManager(testConfigFile);
+        assertEquals("SELECT 1", reloaded.getQuery("q1"));
+        assertEquals("SELECT 2", reloaded.getQuery("q2"));
+    }
     
     @Test
     void testMultipleDeletesAndAdds() throws IOException {

@@ -142,8 +142,9 @@ class ErrorHandlingTest {
 
         assertEquals(1, resultNode.size());
         assertTrue(resultNode.get(0).has("id"));
-        // nonexistent field should be missing
-        assertFalse(resultNode.get(0).has("nonexistent"));
+        // Explicitly selected column that does not exist in the source is emitted as null
+        assertTrue(resultNode.get(0).has("nonexistent"));
+        assertTrue(resultNode.get(0).get("nonexistent").isNull());
     }
 
     @Test

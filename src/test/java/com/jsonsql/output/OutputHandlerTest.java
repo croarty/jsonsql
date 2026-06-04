@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -55,6 +56,29 @@ class OutputHandlerTest {
         assertDoesNotThrow(() -> 
             outputHandler.handleOutput(testJson, outputFile, false)
         );
+    }
+
+    @Test
+    void testFileOutputIsUtf8Encoded() throws Exception {
+        // Non-ASCII content must be written as UTF-8 regardless of the platform default charset
+        String unicodeJson = "[{\"name\":\"Caf\u00e9 \u00fcber \u2603\"}]";
+        File outputFile = tempDir.resolve("unicode.json").toFile();
+
+        outputHandler.handleOutput(unicodeJson, outputFile, false);
+
+        byte[] bytes = Files.readAllBytes(outputFile.toPath());
+        String decoded = new String(bytes, StandardCharsets.UTF_8);
+        assertEquals(unicodeJson, decoded);
+    }
+
+    @Test
+    void testNestedParentDirectoriesAreCreated() throws Exception {
+        File outputFile = tempDir.resolve("a/b/c/output.json").toFile();
+
+        outputHandler.handleOutput(testJson, outputFile, false);
+
+        assertTrue(outputFile.exists());
+        assertEquals(testJson, Files.readString(outputFile.toPath()));
     }
 }
 

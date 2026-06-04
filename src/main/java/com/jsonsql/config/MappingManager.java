@@ -50,7 +50,9 @@ public class MappingManager {
         try {
             ObjectNode root = objectMapper.createObjectNode();
             mappings.forEach(root::put);
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(configFile, root);
+            // Atomic write (temp file + move) so a crash mid-write cannot corrupt the config
+            byte[] content = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(root);
+            QueryManager.writeAtomically(configFile, content);
         } catch (IOException e) {
             throw new RuntimeException("Failed to save mappings to " + configFile, e);
         }
@@ -66,9 +68,44 @@ public class MappingManager {
         if (jsonPath == null || jsonPath.isBlank()) {
             throw new IllegalArgumentException("JSONPath cannot be empty");
         }
+
+        // Validate the resulting shape: the JSONPath portion (after any "filename:" prefix)
+        // must start with '$'. This catches malformed mappings like "products" or
+        // "file.json:items" at add time rather than at query time.
+        String pathPart = jsonPathPartOf(jsonPath);
+        if (pathPart == null || !pathPart.startsWith("$")) {
+            throw new IllegalArgumentException(
+                "Invalid mapping '" + jsonPath + "'. Expected a JSONPath starting with '$', " +
+                "optionally prefixed by a file or directory path as \"path:$.json.path\".");
+        }
         
         mappings.put(alias, jsonPath);
         saveMappings();
+    }
+
+    /**
+     * Index of the "filename:JSONPath" delimiter (the ':' immediately preceding the '$'
+     * that begins the JSONPath). Returns -1 when the mapping is a bare JSONPath (starts
+     * with '$') or has no such delimiter. Using ":$" as the delimiter keeps Windows
+     * drive-letter paths (e.g. "C:\\data\\orders.json:$.orders") intact.
+     */
+    private int filenameDelimiterIndex(String mapping) {
+        if (mapping == null || mapping.startsWith("$")) {
+            return -1;
+        }
+        int idx = mapping.indexOf(":$");
+        return idx > 0 ? idx : -1;
+    }
+
+    /**
+     * Extract the JSONPath portion of a raw mapping value.
+     */
+    private String jsonPathPartOf(String mapping) {
+        if (mapping == null) {
+            return null;
+        }
+        int idx = filenameDelimiterIndex(mapping);
+        return idx > 0 ? mapping.substring(idx + 1) : mapping;
     }
 
     /**
@@ -87,11 +124,9 @@ public class MappingManager {
         if (mapping == null) {
             return null;
         }
-        // Check if mapping contains filename (format: "filename:jsonpath")
-        if (mapping.contains(":") && !mapping.startsWith("$")) {
-            return mapping.substring(0, mapping.indexOf(":"));
-        }
-        return null;
+        // Format: "filename:$.jsonpath" - filename precedes the ":$" delimiter
+        int idx = filenameDelimiterIndex(mapping);
+        return idx > 0 ? mapping.substring(0, idx) : null;
     }
     
     /**
@@ -102,11 +137,9 @@ public class MappingManager {
         if (mapping == null) {
             return null;
         }
-        // Check if mapping contains filename (format: "filename:jsonpath")
-        if (mapping.contains(":") && !mapping.startsWith("$")) {
-            return mapping.substring(mapping.indexOf(":") + 1);
-        }
-        return mapping;
+        // Format: "filename:$.jsonpath" - JSONPath begins at the '$' after the ":$" delimiter
+        int idx = filenameDelimiterIndex(mapping);
+        return idx > 0 ? mapping.substring(idx + 1) : mapping;
     }
 
     /**

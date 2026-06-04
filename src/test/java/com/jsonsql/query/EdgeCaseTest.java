@@ -103,10 +103,11 @@ class EdgeCaseTest {
         JsonNode resultNode = objectMapper.readTree(result);
 
         assertEquals(3, resultNode.size());
-        // Second item missing price
-        assertFalse(resultNode.get(1).has("price"));
-        // Third item missing name
-        assertFalse(resultNode.get(2).has("name"));
+        // Explicitly selected columns are always present; missing source values are emitted as null
+        assertTrue(resultNode.get(1).has("price"));
+        assertTrue(resultNode.get(1).get("price").isNull());
+        assertTrue(resultNode.get(2).has("name"));
+        assertTrue(resultNode.get(2).get("name").isNull());
     }
 
     @Test
@@ -300,8 +301,9 @@ class EdgeCaseTest {
 
         // Should have all left rows even with no matches
         assertEquals(2, resultNode.size());
-        // Right values should be missing/null
-        assertFalse(resultNode.get(0).has("value"));
+        // Right values are unmatched; explicitly selected r.value is emitted as null
+        assertTrue(resultNode.get(0).has("value"));
+        assertTrue(resultNode.get(0).get("value").isNull());
     }
 
     @Test

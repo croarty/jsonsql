@@ -208,14 +208,15 @@ class MissingFieldsTest {
     
     @Test
     void testSelectSpecificFieldsWithMissing() throws Exception {
-        // Selecting specific fields should still work, missing fields appear as missing
+        // Explicitly selected columns are always present; a missing source value is emitted as null
         String sql = "SELECT id, name, description FROM products";
         String jsonResult = executor.execute(sql);
         JsonNode result = objectMapper.readTree(jsonResult);
         
         assertEquals(4, result.size());
-        // Row 2 won't have description field
-        assertFalse(result.get(1).has("description"));
+        // Row 2 is missing description in the source -> emitted as JSON null
+        assertTrue(result.get(1).has("description"));
+        assertTrue(result.get(1).get("description").isNull());
     }
     
     @Test
@@ -237,10 +238,11 @@ class MissingFieldsTest {
         JsonNode result = objectMapper.readTree(jsonResult);
         
         assertEquals(4, result.size());
-        // Bob: missing email in schema becomes missing in output
-        // Charlie: missing email becomes missing
+        // Explicitly selected email column is always present in output:
+        // Charlie: missing email in source -> emitted as null
         // Diana: null email stays null
-        assertFalse(result.get(2).has("email")); // Charlie - missing
+        assertTrue(result.get(2).has("email"));   // Charlie - missing -> null
+        assertTrue(result.get(2).get("email").isNull());
         assertTrue(result.get(3).has("email"));   // Diana - null
         assertTrue(result.get(3).get("email").isNull());
     }

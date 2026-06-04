@@ -169,6 +169,71 @@ class MappingManagerTest {
     }
 
     @Test
+    void testWindowsAbsolutePathMapping() {
+        // A Windows absolute path contains a drive-letter colon that must not be mistaken
+        // for the filename:jsonpath delimiter.
+        mappingManager.addMapping("win", "C:\\data\\orders.json:$.orders");
+
+        assertEquals("C:\\data\\orders.json", mappingManager.getFileName("win"));
+        assertEquals("$.orders", mappingManager.getJsonPathOnly("win"));
+    }
+
+    @Test
+    void testWindowsAbsolutePathWithNestedJsonPath() {
+        mappingManager.addMapping("win", "D:\\app\\data\\store.json:$.store.products[*]");
+
+        assertEquals("D:\\app\\data\\store.json", mappingManager.getFileName("win"));
+        assertEquals("$.store.products[*]", mappingManager.getJsonPathOnly("win"));
+    }
+
+    @Test
+    void testUnixAbsolutePathMapping() {
+        mappingManager.addMapping("nix", "/var/data/orders.json:$.orders");
+
+        assertEquals("/var/data/orders.json", mappingManager.getFileName("nix"));
+        assertEquals("$.orders", mappingManager.getJsonPathOnly("nix"));
+    }
+
+    @Test
+    void testRelativeSubdirectoryMapping() {
+        mappingManager.addMapping("sub", "subdir/data.json:$.items");
+
+        assertEquals("subdir/data.json", mappingManager.getFileName("sub"));
+        assertEquals("$.items", mappingManager.getJsonPathOnly("sub"));
+    }
+
+    @Test
+    void testDirectoryMapping() {
+        mappingManager.addMapping("archive", "archive:$.products");
+
+        assertEquals("archive", mappingManager.getFileName("archive"));
+        assertEquals("$.products", mappingManager.getJsonPathOnly("archive"));
+    }
+
+    @Test
+    void testAddMappingRejectsMissingDollarJsonPath() {
+        // No '$' at all -> malformed
+        assertThrows(IllegalArgumentException.class,
+            () -> mappingManager.addMapping("bad", "products"));
+    }
+
+    @Test
+    void testAddMappingRejectsFilenameWithoutDollarJsonPath() {
+        // filename present but JSONPath part doesn't start with '$'
+        assertThrows(IllegalArgumentException.class,
+            () -> mappingManager.addMapping("bad", "file.json:items"));
+    }
+
+    @Test
+    void testWindowsPathPersistsAcrossReload() {
+        mappingManager.addMapping("win", "C:\\data\\orders.json:$.orders");
+
+        MappingManager reloaded = new MappingManager(configFile);
+        assertEquals("C:\\data\\orders.json", reloaded.getFileName("win"));
+        assertEquals("$.orders", reloaded.getJsonPathOnly("win"));
+    }
+
+    @Test
     void testPersistenceWithFilename() {
         mappingManager.addMapping("products", "ecommerce.json:$.store.data.products");
         mappingManager.addMapping("orders", "data.json:$.orders");

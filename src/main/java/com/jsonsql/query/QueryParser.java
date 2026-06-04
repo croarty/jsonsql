@@ -80,13 +80,29 @@ public class QueryParser {
 
         // Parse TOP/LIMIT
         if (plainSelect.getLimit() != null && plainSelect.getLimit().getRowCount() != null) {
-            query.setLimit(Long.parseLong(plainSelect.getLimit().getRowCount().toString()));
+            query.setLimit(parseRowCount(plainSelect.getLimit().getRowCount().toString(), "LIMIT"));
         }
         if (plainSelect.getTop() != null && plainSelect.getTop().getExpression() != null) {
-            query.setTop(Long.parseLong(plainSelect.getTop().getExpression().toString()));
+            query.setTop(parseRowCount(plainSelect.getTop().getExpression().toString(), "TOP"));
         }
 
         return query;
+    }
+
+    /**
+     * Parse and validate a LIMIT/TOP row count: must be a non-negative integer.
+     */
+    private long parseRowCount(String raw, String clause) throws QueryParseException {
+        long value;
+        try {
+            value = Long.parseLong(raw.trim());
+        } catch (NumberFormatException e) {
+            throw new QueryParseException(clause + " must be a non-negative integer, got: " + raw);
+        }
+        if (value < 0) {
+            throw new QueryParseException(clause + " must not be negative, got: " + value);
+        }
+        return value;
     }
 
     private void parseSelectItems(PlainSelect plainSelect, ParsedQuery query) {
@@ -318,15 +334,6 @@ public class QueryParser {
         }
         
         return null;
-    }
-
-    /**
-     * Parse WITH clause (Common Table Expressions).
-     * This method is called from buildParsedQuery but CTEs are actually parsed earlier.
-     */
-    private void parseWithClause(PlainSelect plainSelect, ParsedQuery query) throws QueryParseException {
-        // CTEs are parsed at the Select level, not PlainSelect level
-        // This method is a placeholder - actual parsing happens in parseWithClauseFromSelect
     }
 }
 
