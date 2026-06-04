@@ -673,7 +673,7 @@ data/
 ```
 
 ```bash
-# Map to directory - loads ALL .json files in that directory
+# Map to directory - loads ALL .json files in that directory (recursively, including subdirectories)
 jsonsql --add-mapping all_products "products:$.products" --data-dir data
 jsonsql --add-mapping all_orders "orders:$.orders" --data-dir data
 

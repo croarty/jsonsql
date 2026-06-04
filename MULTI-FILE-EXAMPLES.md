@@ -57,7 +57,7 @@ Each file has the same structure:
 
 **Setup:**
 ```bash
-# Map to the directory - automatically loads ALL .json files
+# Map to the directory - automatically loads ALL .json files (recursively, including subdirectories)
 jsonsql --add-mapping all_products "products:$.products" --data-dir data
 ```
 
@@ -199,7 +199,7 @@ Split large datasets across multiple files for easier management and faster load
 
 ### 3. **Performance**
 - Only loads files you need
-- Same JSONPath applied to all files in a directory
+- Same JSONPath applied to all files in a directory (and its subdirectories)
 - Efficient combination of data from multiple sources
 
 ### 4. **Organization**

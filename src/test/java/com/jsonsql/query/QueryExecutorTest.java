@@ -381,6 +381,73 @@ class QueryExecutorTest {
     }
 
     @Test
+    void testRecursiveDirectoryLoading() throws Exception {
+        // Directory with a top-level file plus nested subdirectories
+        File archiveDir = dataDir.toPath().resolve("archive").toFile();
+        File dir2023 = archiveDir.toPath().resolve("2023").toFile();
+        File dir2024 = archiveDir.toPath().resolve("2024").toFile();
+        archiveDir.mkdirs();
+        dir2023.mkdirs();
+        dir2024.mkdirs();
+
+        String topLevel = """
+        {"products": [{"id": 1, "name": "Top A"}]}
+        """;
+        String products2023 = """
+        {"products": [{"id": 2, "name": "Y2023 B"}, {"id": 3, "name": "Y2023 C"}]}
+        """;
+        String products2024 = """
+        {"products": [{"id": 4, "name": "Y2024 D"}]}
+        """;
+
+        Files.writeString(archiveDir.toPath().resolve("current.json"), topLevel);
+        Files.writeString(dir2023.toPath().resolve("q1.json"), products2023);
+        Files.writeString(dir2024.toPath().resolve("q1.json"), products2024);
+
+        mappingManager.addMapping("archive", "archive:$.products");
+
+        String result = queryExecutor.execute("SELECT * FROM archive");
+        JsonNode resultNode = objectMapper.readTree(result);
+
+        // Should combine rows from the top level and both subdirectories
+        assertEquals(4, resultNode.size());
+
+        boolean hasTop = false;
+        boolean hasY2023 = false;
+        boolean hasY2024 = false;
+        for (JsonNode product : resultNode) {
+            String name = product.get("name").asText();
+            if (name.equals("Top A")) hasTop = true;
+            if (name.equals("Y2023 C")) hasY2023 = true;
+            if (name.equals("Y2024 D")) hasY2024 = true;
+        }
+        assertTrue(hasTop, "Should include top-level file");
+        assertTrue(hasY2023, "Should include file from 2023 subdirectory");
+        assertTrue(hasY2024, "Should include file from 2024 subdirectory");
+    }
+
+    @Test
+    void testDeeplyNestedDirectoryLoading() throws Exception {
+        // Multiple levels of nesting: root/a/b/c/data.json
+        File rootDir = dataDir.toPath().resolve("deep").toFile();
+        File leafDir = rootDir.toPath().resolve("a").resolve("b").resolve("c").toFile();
+        leafDir.mkdirs();
+
+        String deepData = """
+        {"products": [{"id": 99, "name": "Deep Item"}]}
+        """;
+        Files.writeString(leafDir.toPath().resolve("data.json"), deepData);
+
+        mappingManager.addMapping("deep", "deep:$.products");
+
+        String result = queryExecutor.execute("SELECT * FROM deep");
+        JsonNode resultNode = objectMapper.readTree(result);
+
+        assertEquals(1, resultNode.size());
+        assertEquals("Deep Item", resultNode.get(0).get("name").asText());
+    }
+
+    @Test
     void testJoinAcrossMultipleFiles() throws Exception {
         // Create directories with multiple files
         File productsDir = dataDir.toPath().resolve("split-products").toFile();

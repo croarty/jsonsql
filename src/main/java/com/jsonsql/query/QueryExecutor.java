@@ -272,12 +272,18 @@ public class QueryExecutor implements FieldAccessor {
             }
             
             if (fileOrDir.isDirectory()) {
-                // Load all .json files from directory
-                File[] files = fileOrDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".json"));
-                if (files != null && files.length > 0) {
-                    jsonFiles.addAll(Arrays.asList(files));
-                } else {
-                    throw new IOException("No JSON files found in directory: " + fileOrDir.getAbsolutePath());
+                // Recursively load all .json files from the directory tree
+                try (java.util.stream.Stream<java.nio.file.Path> stream = Files.walk(fileOrDir.toPath())) {
+                    List<File> found = stream
+                        .filter(Files::isRegularFile)
+                        .filter(p -> p.getFileName().toString().toLowerCase().endsWith(".json"))
+                        .sorted()
+                        .map(java.nio.file.Path::toFile)
+                        .collect(java.util.stream.Collectors.toList());
+                    if (found.isEmpty()) {
+                        throw new IOException("No JSON files found in directory tree: " + fileOrDir.getAbsolutePath());
+                    }
+                    jsonFiles.addAll(found);
                 }
             } else {
                 // Single file
