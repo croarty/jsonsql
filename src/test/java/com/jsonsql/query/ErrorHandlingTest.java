@@ -70,7 +70,7 @@ class ErrorHandlingTest {
         mappingManager.addMapping("invalid_path", "test.json:$.nonexistent.path");
 
         // Should handle gracefully when path doesn't exist
-        String result = queryExecutor.execute("SELECT * FROM invalid_path");
+        queryExecutor.execute("SELECT * FROM invalid_path");
         // May return empty or throw exception - either is acceptable
     }
 
@@ -109,7 +109,7 @@ class ErrorHandlingTest {
 
     @Test
     void testInvalidJoinSyntax() {
-        Exception exception = assertThrows(Exception.class, () -> 
+        assertThrows(Exception.class, () -> 
             queryExecutor.execute("SELECT * FROM table1 JOIN table2")
         );
         // Should complain about missing ON clause
@@ -193,7 +193,7 @@ class ErrorHandlingTest {
         mappingManager.addMapping("test", "test.json:$.items");
 
         // Invalid operator should be handled gracefully (returns empty or error)
-        String result = queryExecutor.execute("SELECT * FROM test WHERE id <> 1");
+        queryExecutor.execute("SELECT * FROM test WHERE id <> 1");
         // <> is valid SQL for != so this should actually work or be rejected by parser
     }
 

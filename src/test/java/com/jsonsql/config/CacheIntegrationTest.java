@@ -19,7 +19,6 @@ import static org.junit.jupiter.api.Assertions.*;
 class CacheIntegrationTest {
     
     private File testDir;
-    private QueryExecutor executorWithoutCache;
     private QueryExecutor executorWithCache;
     private ObjectMapper objectMapper;
     private MappingManager mappingManager;
@@ -39,7 +38,6 @@ class CacheIntegrationTest {
         createTestFiles();
         
         // Create executors
-        executorWithoutCache = new QueryExecutor(mappingManager, testDir);
         cacheManager = new CacheManager(testDir);
         executorWithCache = new QueryExecutor(mappingManager, testDir, cacheManager);
     }

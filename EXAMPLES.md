@@ -9,11 +9,11 @@ First, build the project:
 mvn clean package
 ```
 
-The executable JAR will be at `target/jsonsql-1.0.0.jar`.
+The executable JAR will be at `target/jsonsql-1.1.0.jar`.
 
 For convenience, create an alias:
 ```bash
-alias jsonsql='java -jar target/jsonsql-1.0.0.jar'
+alias jsonsql='java -jar target/jsonsql-1.1.0.jar'
 ```
 
 ## Example 1: Basic Setup

@@ -287,10 +287,9 @@ public class WhereEvaluator {
         // Handle ExpressionList (the typical case)
         if (rightExpression instanceof ParenthesedExpressionList) {
             ParenthesedExpressionList<?> expressionList = (ParenthesedExpressionList<?>) rightExpression;
-            var expressions = expressionList.getExpressions();
             
-            // Check if field value matches any value in the list
-            for (var expr : expressions) {
+            // ExpressionList extends List directly (getExpressions() is deprecated)
+            for (var expr : expressionList) {
                 String listValue = extractLiteralValue(expr);
                 if (compareEqualsForIn(fieldValue, listValue)) {
                     // Found a match

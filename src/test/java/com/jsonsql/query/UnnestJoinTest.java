@@ -24,14 +24,12 @@ public class UnnestJoinTest {
     @TempDir
     File tempDir;
 
-    private QueryParser queryParser;
     private QueryExecutor queryExecutor;
     private MappingManager mappingManager;
     private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() throws Exception {
-        queryParser = new QueryParser();
         
         // Create a temporary config file for MappingManager
         File configFile = new File(tempDir, "mappings.json");
