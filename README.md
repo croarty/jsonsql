@@ -5,18 +5,20 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
 ## Features
 
 - **SQL-like Query Syntax**: Write familiar SQL queries against JSON data
-  - `SELECT` - Project specific fields or all fields with `*`, with `AS` aliases
+  - `SELECT` / `SELECT DISTINCT` - Project specific fields or all fields with `*`, with `AS` aliases
   - `FROM` - Specify data sources with table aliases
-  - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses, LIKE, IN, IS NULL)
+  - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses, LIKE, ILIKE, IN, IS NULL)
   - `JOIN` / `LEFT JOIN` - Combine data from multiple sources
+  - `WITH` - Common Table Expressions (CTEs) for composing queries
   - `UNNEST` - Flatten arrays into individual rows
   - `TOP x` / `LIMIT` - Limit result sets
   - `ORDER BY` - Sort results ascending or descending
 - **Schema-less Design**: Works with any JSON structure without predefined models
 - **JSONPath Mapping**: Define shortcuts for complex JSONPath expressions
-- **Saved Queries**: Save and reuse frequently-used queries by name
-- **Flexible Output**: Write to stdout, file, or clipboard
-- **Performance Optimized**: Designed for large and complex JSON documents
+- **Saved Queries**: Save and reuse frequently-used queries by name, including parameterized queries
+- **Flexible Output**: Write to stdout, file, or clipboard (clean stdout/stderr separation for piping)
+- **Optional Disk Caching**: Persist parsed JSON between runs with `--enable-cache`; auto-invalidated when sources change
+- **Recursive Directory Loading**: Map a directory to load and combine all `.json` files within it (including subdirectories)
 - **Table Aliases**: Use aliases for cleaner queries (e.g., `FROM orders o`)
 
 ## Requirements
@@ -104,12 +106,13 @@ jsonsql --query "SELECT p.name, o.quantity FROM orders o LEFT JOIN products p ON
 ### Command Line Options
 
 ```
-Usage: jsonsql [-chV] [--clipboard] [--list-queries] [--list-tables] [--pretty]
-               [--add-mapping=<addMapping> <addMapping>]
+Usage: jsonsql [-hV] [--clear-cache] [--clipboard] [--enable-cache]
+               [--list-queries] [--list-tables] [--pretty]
                [-c=<configFile>] [-d=<dataDirectory>]
-               [--delete-query=<deleteQueryName>] [-o=<outputFile>]
-               [-q=<query>] [--queries-file=<queriesFile>]
-               [--run-query=<runQueryName>] [--save-query=<saveQueryName>]
+               [--delete-query=<name>] [-o=<outputFile>] [-q=<query>]
+               [--queries-file=<queriesFile>] [--run-query=<name>]
+               [--save-query=<name>] [--param=<key=value>]...
+               [--add-mapping=<alias> <jsonpath>]...
 
 Options:
   -q, --query=<query>        SQL query to execute
@@ -130,10 +133,20 @@ Options:
       --run-query=<name>     Execute a saved query by name
       --list-queries         Show all saved queries
       --delete-query=<name>  Delete a saved query
-      --param=<key=value>    Parameter value for parameterized queries (can be used multiple times)
+      --param=<key=value>    Parameter value for parameterized queries
+                             (can be used multiple times)
+      --enable-cache         Enable disk-based caching of parsed JSON data for
+                             faster subsequent queries
+      --clear-cache          Clear all cached data for mapped tables
   -h, --help                 Show this help message and exit
   -V, --version              Print version information and exit
 ```
+
+Only one primary action may be specified per invocation (for example, you cannot
+combine `--query` with `--list-tables`, or `--run-query` with `--query`); doing so
+exits with an error. The tool returns exit code `0` on success and `1` on error.
+Result data is written to stdout; informational and error messages are written to
+stderr (set `DEBUG` to a truthy value for full stack traces).
 
 ### Configuration Management
 
@@ -252,7 +265,7 @@ jsonsql --query "SELECT * FROM products WHERE price > ${min_price}" \
 - Required parameters (no default): Must be provided with `--param` or an error is thrown
 - Optional parameters (with default): Use default value if not provided
 - Parameter names: Can contain letters, numbers, and underscores
-- Parameter values: Can contain any characters (will be properly escaped)
+- Parameter values: Inserted literally into the SQL text before parsing (no SQL escaping is performed). Treat saved queries and parameter values as trusted input — untrusted values can alter the query (SQL-injection style).
 
 #### Delete a Saved Query
 ```bash
@@ -267,10 +280,10 @@ jsonsql --delete-query old_query
 
 **Pre-configured Queries:**
 
-This repository includes 32 pre-configured example queries demonstrating all features:
+This repository ships 32 pre-configured example queries demonstrating all features (30 feature-numbered `01_`–`30_` queries plus the named `completed_orders` and `expensive_electronics` examples):
 - See [SAVED-QUERIES-REFERENCE.md](SAVED-QUERIES-REFERENCE.md) for complete documentation
-- Queries numbered 01-30 showcase specific features
-- Covers: SELECT, WHERE (all operators), JOIN, LIKE, IN, IS NULL, ORDER BY, TOP/LIMIT
+- The numbered queries (`01_`–`30_`) each showcase a specific feature
+- Covers: SELECT, WHERE (all operators), JOIN, LIKE, ILIKE, IN, IS NULL, DISTINCT, ORDER BY, TOP/LIMIT
 - Run any query: `jsonsql --run-query <name> --data-dir example-data --pretty`
 
 ### Query Examples
@@ -519,12 +532,16 @@ jsonsql --query "SELECT * FROM products" --output results.json --pretty
 
 ## SQL Syntax Support
 
+> **Query phase order:** clauses are applied in the order **WHERE → ORDER BY → projection (SELECT list) → DISTINCT → LIMIT/TOP**. This means sorting happens against the full source rows (you can `ORDER BY` a column you do not select), `DISTINCT` is applied to the projected columns, and `LIMIT`/`TOP` is applied last (after de-duplication).
+
 ### SELECT Clause
 - `SELECT *` - All fields
 - `SELECT field1, field2` - Specific fields
 - `SELECT table.field` - Qualified field names
 - `SELECT DISTINCT field` - Unique values only
 - `SELECT DISTINCT field1, field2` - Unique combinations
+
+**Projection and missing values:** When you list explicit columns, every selected column is always present in each output row. If a row has no value for a selected field (the field is absent or JSON `null`), it is emitted as JSON `null` rather than omitted, so all rows share the same keys. `SELECT *` behaves differently — it returns each row's fields as-is and does **not** add keys for absent fields.
 
 ### FROM Clause
 - `FROM table` - Table name (mapped to JSONPath)
@@ -538,6 +555,10 @@ Supported operators:
 - `<` - Less than
 - `>=` - Greater than or equal
 - `<=` - Less than or equal
+- `LIKE` / `NOT LIKE`, `ILIKE` - Pattern matching (`%` and `_` wildcards; `ILIKE` is case-insensitive)
+- `IN (...)` / `NOT IN (...)` - Value lists
+- `IS NULL` / `IS NOT NULL` - Null checks
+- `AND` / `OR` / `NOT` - Boolean combinations
 
 Examples:
 ```sql
@@ -546,6 +567,12 @@ WHERE category = 'Tools'
 WHERE quantity >= 5
 WHERE status != 'cancelled'
 ```
+
+**Comparison behavior:**
+- The relational operators `>`, `<`, `>=`, `<=` compare numbers numerically. When either operand is non-numeric text, they fall back to lexicographic (alphabetical) string comparison (e.g. `WHERE name >= 'M'`).
+- SQL `NULL` values never satisfy a comparison.
+
+**Unsupported expressions fail loudly:** Constructs that are not yet implemented — such as `BETWEEN`, subqueries (e.g. `IN (SELECT ...)`), or other unsupported WHERE syntax — now raise a clear error instead of silently returning zero rows. This prevents misleading empty results.
 
 ### JOIN Clause
 - `JOIN table ON condition` - Inner join
@@ -556,6 +583,11 @@ Examples:
 JOIN products p ON o.productId = p.id
 LEFT JOIN customers c ON o.customerId = c.id
 ```
+
+**JOIN constraints:**
+- Only a single **equi-join** is supported: the `ON` condition must be one `left = right` equality. Compound conditions (`... AND ...`) and range operators (`>`, `>=`, `<`, `<=`, etc.) in `ON` raise a clear error.
+- Join keys use light type coercion: a numeric value matches its string representation (e.g. `5` matches `"5"`), so mismatched JSON types still join as expected.
+- SQL `NULL` join keys never match anything (including other nulls).
 
 ### DISTINCT Clause
 - `SELECT DISTINCT column` - Return unique values for a column
@@ -571,7 +603,7 @@ SELECT DISTINCT category FROM products WHERE price > 100
 SELECT DISTINCT category FROM products ORDER BY category
 ```
 
-**Note:** DISTINCT removes duplicate rows based on all selected columns. Rows are considered duplicates if all their field values are identical.
+**Note:** DISTINCT removes duplicate rows based on all selected columns. Rows are considered duplicates if all their field values are identical. Because DISTINCT runs **before** `LIMIT`/`TOP`, a query like `SELECT DISTINCT category FROM products LIMIT 5` returns up to 5 *distinct* categories (de-duplication happens first, then the limit is applied).
 
 ### ORDER BY Clause
 - `ORDER BY column` - Sort ascending (default)
@@ -598,6 +630,33 @@ ORDER BY p.name, o.orderDate DESC
 - `SELECT TOP n` - Limit to first n results
 - `SELECT ... LIMIT n` - Alternative syntax
 
+**Note:** `n` must be a non-negative integer; negative values are rejected with an error. The limit is applied **last** (after WHERE, ORDER BY, projection, and DISTINCT) and does not short-circuit data loading.
+
+### Common Table Expressions (WITH)
+
+Use a `WITH` clause to define one or more named, reusable subqueries (CTEs) that you can then select from in the main query.
+
+```sql
+-- Single CTE
+WITH expensive AS (
+  SELECT * FROM products WHERE price > 100
+)
+SELECT name, price FROM expensive ORDER BY price DESC
+```
+
+```sql
+-- Multiple CTEs
+WITH electronics AS (
+  SELECT * FROM products WHERE category = 'Electronics'
+),
+in_stock AS (
+  SELECT * FROM electronics WHERE quantity > 0
+)
+SELECT name, price FROM in_stock
+```
+
+CTE results are materialized and can be referenced like any other table. When `--enable-cache` is active, CTE results are cached and invalidated based on their source files (see [Caching](#caching)).
+
 ## Advanced Usage
 
 ### Complex JSONPath Mappings
@@ -623,6 +682,33 @@ For deeply nested JSON structures:
 
 ```bash
 jsonsql --add-mapping products "$.document.data.entities.products"
+```
+
+### Mapping Rules
+
+A mapping associates a table name (alias) with a JSONPath expression and, optionally, a specific file or directory. The supported forms are:
+
+- **JSONPath only** — `alias "$.path.to.array"`: the JSONPath must start with `$`. The data is read from `<alias>.json` in the active data directory.
+- **File + JSONPath** — `alias "filename.json:$.path"`: read the path from a specific file (relative to `--data-dir`, or an absolute path).
+- **Directory + JSONPath** — `alias "subdir:$.path"`: load **all** `.json` files found under `subdir` **recursively** (including nested subdirectories) and combine their arrays into one table.
+- **Windows absolute paths** are supported, e.g. `alias "C:\data\products.json:$.items"`. The drive-letter colon is handled correctly and is not confused with the `file:path` separator.
+
+Validation:
+- The JSONPath portion **must** begin with `$`; mappings that don't are rejected when added.
+- Invalid mappings fail at `--add-mapping` time with a clear error, rather than silently failing later at query time.
+
+```bash
+# JSONPath only (reads products.json)
+jsonsql --add-mapping products "$.products"
+
+# Specific file
+jsonsql --add-mapping orders "ecommerce.json:$.store.orders"
+
+# Directory (recursive) — combines every .json file under products-multi/
+jsonsql --add-mapping all_products "products-multi:$.products" --data-dir example-data
+
+# Windows absolute path
+jsonsql --add-mapping items "C:\data\inventory.json:$.items"
 ```
 
 ### Working with Multiple Files
@@ -657,31 +743,29 @@ jsonsql --query "SELECT p.name, o.quantity FROM orders o JOIN products p ON o.pr
 
 #### Partitioned Data Across Multiple Files
 
-Query data split across multiple files or directories:
+Query data split across multiple files or directories. The shipped fixtures under `example-data/` use the `products-multi/` and `orders-multi/` directories:
 
 ```
-data/
-  ├── products/
+example-data/
+  ├── products-multi/
   │   ├── products_2023.json
   │   ├── products_2024.json
   │   └── products_2025.json
-  └── orders/
+  └── orders-multi/
       ├── orders_q1.json
-      ├── orders_q2.json
-      ├── orders_q3.json
-      └── orders_q4.json
+      └── orders_q2.json
 ```
 
 ```bash
-# Map to directory - loads ALL .json files in that directory (recursively, including subdirectories)
-jsonsql --add-mapping all_products "products:$.products" --data-dir data
-jsonsql --add-mapping all_orders "orders:$.orders" --data-dir data
+# Map to a directory - loads ALL .json files in that directory recursively (including subdirectories)
+jsonsql --add-mapping all_products "products-multi:$.products" --data-dir example-data
+jsonsql --add-mapping all_orders "orders-multi:$.orders" --data-dir example-data
 
 # Query combines data from all files automatically
-jsonsql --query "SELECT * FROM all_products" --data-dir data
+jsonsql --query "SELECT * FROM all_products" --data-dir example-data
 
 # JOIN works across partitioned files too!
-jsonsql --query "SELECT p.name, o.quantity FROM all_orders o JOIN all_products p ON o.productId = p.id" --data-dir data
+jsonsql --query "SELECT p.name, o.quantity FROM all_orders o JOIN all_products p ON o.productId = p.id" --data-dir example-data
 ```
 
 #### Relative Paths in Mappings
@@ -698,6 +782,8 @@ jsonsql --add-mapping products "archive/products:$.products"
 
 ### Piping and Scripting
 
+Only result JSON is written to stdout — all informational messages (e.g. "Running saved query…", "Output written to…", "Output copied to clipboard") go to stderr. This means stdout is always clean and safe to pipe into other tools without filtering.
+
 ```bash
 # Pipe to jq for further processing
 jsonsql --query "SELECT * FROM products" | jq '.[] | select(.price > 20)'
@@ -705,24 +791,43 @@ jsonsql --query "SELECT * FROM products" | jq '.[] | select(.price > 20)'
 # Save to file and process
 jsonsql --query "SELECT * FROM products WHERE price > 20" --output high-value.json
 
-# Use in scripts
+# Use in scripts: count rows with jq (COUNT(*) is not yet supported)
 #!/bin/bash
-RESULT=$(jsonsql --query "SELECT COUNT(*) FROM products")
-echo "Total products: $RESULT"
+COUNT=$(jsonsql --query "SELECT * FROM products" | jq 'length')
+echo "Total products: $COUNT"
 ```
+
+## Caching
+
+JsonSQL can optionally cache parsed JSON data on disk to speed up repeated queries against the same sources.
+
+```bash
+# Enable the disk cache for this run (and populate it)
+jsonsql --enable-cache --query "SELECT * FROM products" --data-dir example-data
+
+# Clear all cached data for the configured tables
+jsonsql --clear-cache
+```
+
+How it works:
+- When `--enable-cache` is set, parsed JSON is stored under a local `.jsonsql-cache/` directory.
+- The cache is **freshness-aware**: each entry's key includes the source file's last-modified time and size, so the cache is automatically invalidated and rebuilt whenever a source file changes. You never need to manually clear it after editing data.
+- CTE (`WITH`) results are also cached, keyed by the CTE's full definition (SELECT list, WHERE, ORDER BY, LIMIT/TOP) and the freshness fingerprint of its source files.
+- Caching trades disk space for speed on repeated reads; it does not reduce the per-query memory needed to run a query.
+- Use `--clear-cache` to remove all cached entries (for example, to reclaim disk space).
 
 ## Performance Considerations
 
-JsonSQL is designed for performance with large JSON documents:
+Understanding how JsonSQL processes data helps set expectations for large inputs:
 
-- **Streaming**: Uses efficient JSON parsing strategies
-- **Early Termination**: `TOP`/`LIMIT` stops processing once limit is reached
-- **Lazy Evaluation**: Only loads necessary data
+- **In-memory processing**: Each matched JSON file is read fully into memory (via `Files.readString`) and parsed before any query phases run. There is no streaming parser; peak memory scales with the total size of the loaded files.
+- **No early termination**: `TOP`/`LIMIT` does **not** short-circuit loading. Queries run in the order WHERE → ORDER BY → projection → DISTINCT → LIMIT, so the entire matched dataset is loaded and filtered before the limit is applied.
+- **Optional disk cache**: Use `--enable-cache` to persist parsed JSON between runs (see [Caching](#caching)). The cache speeds up repeated queries against unchanged sources but does not reduce per-query memory usage.
 
 For very large files (>100MB), consider:
-- Using `TOP`/`LIMIT` to reduce result set size
-- Adding specific `WHERE` clauses to filter early
-- Splitting large JSON files into smaller chunks
+- Adding specific `WHERE` clauses to reduce the result set (note this does not reduce memory used to load the source)
+- Splitting large JSON files into smaller files (directory mappings load matching files recursively)
+- Enabling the disk cache (`--enable-cache`) for repeated queries over the same data
 
 ## Troubleshooting
 
@@ -752,9 +857,27 @@ jsonsql --query "SELECT * FROM products WHERE name = 'Widget'"
 jsonsql --list-tables  # Check configured paths
 ```
 
+**"Data directory does not exist" / "is not a directory"**
+```bash
+# --data-dir must point to an existing directory
+jsonsql --data-dir ./example-data --query "SELECT * FROM products"
+```
+
+**"Only one action may be specified" (or similar)**
+```bash
+# Primary actions are mutually exclusive — run them one at a time
+jsonsql --list-tables          # don't combine with --query
+jsonsql --query "SELECT * FROM products"
+```
+
+### Exit Codes and Output Streams
+
+- Exit code `0` indicates success; exit code `1` indicates an error.
+- Result JSON is written to **stdout**; all informational and error messages go to **stderr**, so piping stdout never mixes in log text.
+
 ### Debug Mode
 
-Set the `DEBUG` environment variable for detailed error messages:
+Set the `DEBUG` environment variable to a truthy value for detailed error messages and full stack traces (written to stderr):
 
 ```bash
 export DEBUG=1
@@ -776,14 +899,12 @@ Planned features for future releases, organized by priority:
 ### High Priority (Core SQL Features)
 
 **WHERE Clause Operators:**
-- `BETWEEN` operator - Range checking (e.g., `WHERE price BETWEEN 100 AND 500`)
-- `ILIKE` - Case-insensitive pattern matching
+- `BETWEEN` operator - Range checking (e.g., `WHERE price BETWEEN 100 AND 500`). Currently raises a clear "unsupported expression" error rather than being silently ignored.
 
 **Aggregation & Grouping:**
 - `GROUP BY` clause with aggregation functions
 - `COUNT`, `SUM`, `AVG`, `MIN`, `MAX` functions
 - `HAVING` clause for filtering grouped results
-- `DISTINCT` keyword for unique results (parsed but not implemented)
 
 **Query Features:**
 - Subqueries (e.g., `WHERE price > (SELECT AVG(price) FROM products)`)
@@ -833,8 +954,6 @@ Planned features for future releases, organized by priority:
 - Schema introspection (`--describe <table>`)
 
 **Performance Optimizations:**
-- Early termination for TOP without ORDER BY
-- Query result caching
 - Index-like structures for frequently queried fields
 - Streaming mode for very large files
 
