@@ -5,9 +5,9 @@
 JsonSQL is a well-architected SQL-like query engine for JSON data. This document provides a thorough review of existing functionality and prioritized suggestions for new features.
 
 **Current Status:**
-- **Test Coverage**: 513 tests, all passing ✅
+- **Test Coverage**: 523 tests, all passing ✅
 - **Core Features**: Fully functional SQL-like query engine
-- **Recent Additions**: DISTINCT, ILIKE, Common Table Expressions (CTEs) with WITH syntax, CSV output (`--format csv`), schema introspection (`--describe`)
+- **Recent Additions**: DISTINCT, ILIKE, CTEs, CSV output, schema introspection (`--describe`), dry-run validation (`--dry-run`)
 - **Architecture**: Clean separation of concerns, well-structured, maintainable
 
 ---
@@ -177,7 +177,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Strengths
 - Clean separation of concerns
 - Well-structured packages
-- Comprehensive test coverage (513 tests, all passing)
+- Comprehensive test coverage (523 tests, all passing)
 - Good error handling
 - Flexible field accessor pattern
 - Efficient JSONPath integration
@@ -426,11 +426,15 @@ jsonsql --query "SELECT name, price FROM products" --format csv --output product
 
 **Proposed Features**:
 
-#### Query Validation / Dry-Run
+#### Query Validation / Dry-Run (IMPLEMENTED)
+
 ```bash
-jsonsql --query "SELECT * FROM products" --dry-run
-# Validates syntax and mappings without executing
+jsonsql --query "SELECT * FROM products" --data-dir example-data --dry-run
 ```
+
+Validates SQL syntax, table mappings, and backing file existence without loading data or returning query results. Supports CTEs, JOINs, `--run-query`, and parameterized queries.
+
+Backed by `QueryExecutor.dryRunValidate`, `DryRunReporter`, and `DryRunTest` / `JsonSqlCliTest`.
 
 #### Query Explain / Profile
 ```bash
@@ -528,7 +532,7 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
     - Medium value
 
 ### Phase 4: Quality of Life
-11. **Developer Tools** (--explain; `--describe` shipped) ⭐
+11. **Developer Tools** (--explain; `--describe` and `--dry-run` shipped) ⭐
     - Helpful for debugging
     - Medium complexity
     - Low-medium value
@@ -570,7 +574,7 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
 - DISTINCT implementation uses canonical JSON string representation
 
 ### 6.2 Testing Strategy
-- Maintain high test coverage (currently 513 tests, all passing)
+- Maintain high test coverage (currently 523 tests, all passing)
 - Add integration tests for new features
 - Test edge cases (nulls, empty arrays, etc.)
 - Test files organized by feature:
@@ -599,6 +603,7 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
 ✅ Parameterized queries (`${var}` / `${var:default}` with `--param`)
 ✅ CSV output (`--format csv`) with header row
 ✅ Schema introspection (`--describe <table>`)
+✅ Dry-run validation (`--dry-run`)
 ✅ Flexible JSONPath mappings
 ✅ Saved queries (39 pre-configured examples)
 ✅ Good test coverage (all passing)
@@ -625,6 +630,6 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
 
 JsonSQL is a solid foundation with excellent core functionality. Recent additions of DISTINCT, ILIKE, and CTEs demonstrate the system's extensibility. The suggested enhancements would transform it from a good tool into a comprehensive SQL-like query engine for JSON data. The prioritized roadmap focuses on high-impact features that provide the most value to users.
 
-**Current Test Status**: ✅ 513 tests passing
+**Current Test Status**: ✅ 523 tests passing
 **Code Quality**: ✅ High - Clean architecture, good separation of concerns
 **Documentation**: ✅ Comprehensive - README, examples, saved queries reference

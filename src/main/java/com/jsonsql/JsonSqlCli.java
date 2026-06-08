@@ -7,6 +7,7 @@ import com.jsonsql.config.QueryParameterReplacer;
 import com.jsonsql.introspection.TableDescriber;
 import com.jsonsql.output.OutputFormat;
 import com.jsonsql.output.OutputHandler;
+import com.jsonsql.query.DryRunReporter;
 import com.jsonsql.query.QueryExecutor;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -77,6 +78,9 @@ public class JsonSqlCli implements Callable<Integer> {
 
     @Option(names = {"--describe"}, description = "Show field names, types, and sample values for a mapped table")
     private String describeTable;
+
+    @Option(names = {"--dry-run"}, description = "Validate query syntax and table mappings without executing")
+    private boolean dryRun;
 
     public static void main(String[] args) {
         int exitCode = new CommandLine(new JsonSqlCli()).execute(args);
@@ -220,6 +224,9 @@ public class JsonSqlCli implements Callable<Integer> {
 
         // Handle query execution
         if (query != null) {
+            if (dryRun && (outputFile != null || clipboard)) {
+                System.err.println("Warning: --dry-run ignores --output and --clipboard.");
+            }
             String dataDirError = validateDataDirectory();
             if (dataDirError != null) {
                 System.err.println("Error: " + dataDirError);
@@ -240,6 +247,10 @@ public class JsonSqlCli implements Callable<Integer> {
                 // Create CacheManager if caching is enabled
                 CacheManager cacheManager = enableCache ? new CacheManager(dataDirectory) : null;
                 QueryExecutor executor = new QueryExecutor(mappingManager, dataDirectory, cacheManager);
+                if (dryRun) {
+                    System.out.println(DryRunReporter.format(executor.dryRunValidate(query), mappingManager));
+                    return 0;
+                }
                 result = executor.execute(query);
             } catch (IllegalArgumentException e) {
                 // Parameter / mapping / query argument errors

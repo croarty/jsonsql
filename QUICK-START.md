@@ -196,6 +196,7 @@ jsonsql --query "SELECT p.brand, o.status FROM orders o JOIN ecommerce_products 
    ```bash
    jsonsql --list-tables
    jsonsql --describe <table_name> --data-dir example-data
+   jsonsql --query "SELECT ... FROM <table_name>" --data-dir example-data --dry-run
    jsonsql --query "SELECT TOP 1 * FROM <table_name>" --data-dir example-data
    ```
 

@@ -18,6 +18,7 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
 - **Saved Queries**: Save and reuse frequently-used queries by name, including parameterized queries
 - **Flexible Output**: JSON (default) or CSV with header row; write to stdout, file, or clipboard (clean stdout/stderr separation for piping)
 - **Schema Introspection**: `--describe <table>` shows field paths, types, and sample values
+- **Dry-Run Validation**: `--dry-run` checks syntax, mappings, and data files without executing
 - **Optional Disk Caching**: Persist parsed JSON between runs with `--enable-cache`; auto-invalidated when sources change
 - **Recursive Directory Loading**: Map a directory to load and combine all `.json` files within it (including subdirectories)
 - **Table Aliases**: Use aliases for cleaner queries (e.g., `FROM orders o`)
@@ -131,6 +132,7 @@ Options:
       --format=<format>      Output format: json (default) or csv
       --list-tables          Show all configured JSONPath shortcuts
       --describe=<table>     Show field names, types, and sample values for a table
+      --dry-run              Validate query syntax and mappings without executing
       --add-mapping=<alias> <jsonpath>
                              Add a new JSONPath mapping
       --save-query=<name>    Save a query with a name (requires --query)
@@ -197,6 +199,23 @@ Rows: 6
 ```
 
 Use this before writing queries to discover field names and nesting. Schema is inferred from up to 200 rows; fields only seen as `null` are typed `null`, and fields with mixed null/non-null values are marked `(nullable)`.
+
+#### Dry-Run a Query
+```bash
+jsonsql --query "SELECT p.name, o.orderId FROM orders o JOIN products p ON o.productId = p.id" --data-dir example-data --dry-run
+```
+
+Validates SQL syntax, confirms every referenced table has a mapping (or is a CTE), and checks that backing JSON files exist — without loading data or returning results:
+
+```
+Dry run OK.
+  SQL parsed successfully.
+  Tables resolved: orders, products
+    orders -> complex-orders.json:$.orders[*]
+    products -> complex-products.json:$.products[*]
+```
+
+Works with `--run-query` and parameterized queries (`--param` is applied before validation). `--dry-run` ignores `--output`, `--clipboard`, and `--format`.
 
 ### Saved Queries
 
@@ -994,7 +1013,7 @@ Planned features for future releases, organized by priority:
 - Named parameters for reusability (✅ supported)
 
 **Developer Tools:**
-- Query validation / dry-run mode (`--dry-run`)
+- ✅ **Query validation / dry-run** (`--dry-run`) — parse + mapping + file checks without executing - **IMPLEMENTED**
 - Query profiling and performance analysis (`--explain`)
 - ✅ **Schema introspection** (`--describe <table>`) — field paths, types, sample values - **IMPLEMENTED**
 

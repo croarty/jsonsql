@@ -224,4 +224,28 @@ class JsonSqlCliTest {
         assertEquals(1, r.exitCode());
         assertTrue(r.err().toLowerCase().contains("multiple actions"));
     }
+
+    @Test
+    void testDryRunValidatesWithoutExecuting() {
+        CliResult r = runCli(withConfig("-q", "SELECT name FROM products", "--dry-run"));
+        assertEquals(0, r.exitCode());
+        assertTrue(r.out().contains("Dry run OK"));
+        assertTrue(r.out().contains("products"));
+        assertFalse(r.out().contains("Widget"));
+    }
+
+    @Test
+    void testDryRunReportsMissingMapping() {
+        CliResult r = runCli(withConfig("-q", "SELECT * FROM missing", "--dry-run"));
+        assertEquals(1, r.exitCode());
+        assertTrue(r.err().toLowerCase().contains("no mapping found"));
+    }
+
+    @Test
+    void testDryRunWithSavedQuery() throws Exception {
+        runCli(withConfig("--save-query", "names", "-q", "SELECT name FROM products"));
+        CliResult r = runCli(withConfig("--run-query", "names", "--dry-run"));
+        assertEquals(0, r.exitCode());
+        assertTrue(r.out().contains("Dry run OK"));
+    }
 }

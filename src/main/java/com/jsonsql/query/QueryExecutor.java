@@ -65,6 +65,57 @@ public class QueryExecutor implements FieldAccessor {
         // Execute main query with context
         return executeQuery(parsedQuery, context);
     }
+
+    /**
+     * Parse and validate a query without loading data or producing results.
+     * Checks SQL syntax, table mappings, and that backing JSON files exist.
+     */
+    public DryRunResult dryRunValidate(String sql) throws Exception {
+        ParsedQuery parsedQuery = queryParser.parse(sql);
+        Set<String> resolvedTables = new LinkedHashSet<>();
+        validateResolvedTables(parsedQuery, resolvedTables);
+        return new DryRunResult(parsedQuery, resolvedTables);
+    }
+
+    private void validateResolvedTables(ParsedQuery parsedQuery, Set<String> resolvedTables) throws IOException {
+        Set<String> availableCtes = new LinkedHashSet<>();
+        for (Map.Entry<String, ParsedQuery> cte : parsedQuery.getCommonTableExpressions().entrySet()) {
+            validateTableReferences(cte.getValue(), availableCtes, resolvedTables);
+            availableCtes.add(cte.getKey());
+        }
+        validateTableReferences(parsedQuery, availableCtes, resolvedTables);
+    }
+
+    private void validateTableReferences(ParsedQuery query, Set<String> availableCtes,
+                                         Set<String> resolvedTables) throws IOException {
+        if (query.getFromTable() != null) {
+            ensureTableAccessible(query.getFromTable().getTableName(), availableCtes, resolvedTables);
+        }
+        if (query.hasJoins()) {
+            for (JoinInfo join : query.getJoins()) {
+                if (join.getTable() != null) {
+                    ensureTableAccessible(join.getTable().getTableName(), availableCtes, resolvedTables);
+                }
+            }
+        }
+    }
+
+    private void ensureTableAccessible(String tableName, Set<String> availableCtes,
+                                       Set<String> resolvedTables) throws IOException {
+        if (availableCtes.contains(tableName)) {
+            return;
+        }
+        if (!mappingManager.hasMapping(tableName)) {
+            throw new IllegalArgumentException(
+                "No mapping found for table: " + tableName + ". Use --add-mapping to define it.");
+        }
+        for (File file : resolveJsonFiles(tableName)) {
+            if (!file.exists()) {
+                throw new IOException("JSON file not found: " + file.getAbsolutePath());
+            }
+        }
+        resolvedTables.add(tableName);
+    }
     
     /**
      * Execute a parsed query with execution context (supports recursive execution for CTEs).
