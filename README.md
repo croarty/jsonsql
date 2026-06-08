@@ -37,18 +37,18 @@ cd jsonsql
 mvn clean package
 ```
 
-This creates an executable JAR at `target/jsonsql-1.1.0.jar`.
+This creates an executable JAR at `target/jsonsql-1.2.0.jar`.
 
 ### Running
 
 ```bash
-java -jar target/jsonsql-1.1.0.jar [options]
+java -jar target/jsonsql-1.2.0.jar [options]
 ```
 
 Or create an alias for convenience:
 
 ```bash
-alias jsonsql='java -jar /path/to/jsonsql-1.1.0.jar'
+alias jsonsql='java -jar /path/to/jsonsql-1.2.0.jar'
 ```
 
 ## Quick Start

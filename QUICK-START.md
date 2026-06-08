@@ -11,7 +11,7 @@ mvn clean package
 
 Create an alias for easier usage:
 ```bash
-alias jsonsql='java -jar target/jsonsql-1.1.0.jar'
+alias jsonsql='java -jar target/jsonsql-1.2.0.jar'
 ```
 
 ## Scenario 1: Simple Auto-Detect (Default)
