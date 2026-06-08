@@ -5,9 +5,9 @@
 JsonSQL is a well-architected SQL-like query engine for JSON data. This document provides a thorough review of existing functionality and prioritized suggestions for new features.
 
 **Current Status:**
-- **Test Coverage**: 492 tests, all passing ✅
+- **Test Coverage**: 503 tests, all passing ✅
 - **Core Features**: Fully functional SQL-like query engine
-- **Recent Additions**: DISTINCT, ILIKE, Common Table Expressions (CTEs) with WITH syntax
+- **Recent Additions**: DISTINCT, ILIKE, Common Table Expressions (CTEs) with WITH syntax, CSV output (`--format csv`)
 - **Architecture**: Clean separation of concerns, well-structured, maintainable
 
 ---
@@ -161,15 +161,15 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 ### 1.3 Output Features ✅
 
 #### Output Options
-- **Status**: Fully Implemented
+- **Status**: Fully Implemented (JSON + CSV)
 - **Features**:
   - Stdout (default)
   - File output (`--output`)
   - Clipboard (`--clipboard`)
   - Pretty-print JSON (`--pretty`)
+  - CSV output (`--format csv`) with header row and RFC 4180 escaping
 - **Limitations**:
-  - Only JSON output format
-  - No CSV/TSV/Table formats
+  - No TSV/Table formats
   - No XML output
 
 ### 1.4 Architecture & Code Quality ✅
@@ -177,7 +177,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Strengths
 - Clean separation of concerns
 - Well-structured packages
-- Comprehensive test coverage (492 tests, all passing)
+- Comprehensive test coverage (503 tests, all passing)
 - Good error handling
 - Flexible field accessor pattern
 - Efficient JSONPath integration
@@ -403,27 +403,24 @@ jsonsql --run-query filtered_products \
 
 Backed by `QueryParameterReplacer` and covered by `QueryParameterReplacerTest` and `ParameterizedQueryIntegrationTest`.
 
-### 3.2 Output Format Options (MEDIUM PRIORITY)
+### 3.2 Output Format Options
 
-**Current Status**: JSON only
+**Current Status**: JSON (default) and CSV (`--format csv`) implemented
 
-**Proposed Features**:
-- CSV output: `--format csv`
+**CSV behavior** (shipped):
+- Header row from projected field names
+- RFC 4180 escaping for commas, quotes, and newlines
+- `NULL` → empty cell; nested values → compact JSON in the cell
+- Works with `--output` and `--clipboard` like JSON
+
+```bash
+jsonsql --query "SELECT name, price FROM products" --format csv --output products.csv
+```
+
+**Still proposed**:
 - TSV output: `--format tsv`
 - ASCII table: `--format table`
 - XML output: `--format xml`
-
-**Use Cases**:
-```bash
-# CSV for spreadsheet import
-jsonsql --query "SELECT * FROM products" --format csv --output products.csv
-
-# Table for human reading
-jsonsql --query "SELECT name, price FROM products" --format table
-```
-
-**Implementation Complexity**: Low-Medium
-**Business Value**: Medium-High
 
 ### 3.3 Developer Tools (MEDIUM PRIORITY)
 
@@ -503,8 +500,8 @@ jsonsql --describe products
    - Common SQL pattern
    - Low complexity
 
-6. **Output Formats (CSV/Table)** ⭐⭐
-   - Improves usability
+6. **Output Formats (TSV/Table)** ⭐⭐
+   - CSV shipped; TSV/table/XML remain
    - Low-medium complexity
    - Medium value
 
@@ -553,7 +550,7 @@ jsonsql --describe products
 ### 5.2 Medium-Term Goals
 1. **Aggregation functions** - Core SQL feature
 2. **String/Numeric functions** - Common use cases
-3. **CSV/Table output** - Better usability
+3. **TSV/Table output** - Better usability (CSV already shipped)
 
 ### 5.3 Long-Term Goals
 1. **Subqueries** - Complex but powerful
@@ -572,7 +569,7 @@ jsonsql --describe products
 - DISTINCT implementation uses canonical JSON string representation
 
 ### 6.2 Testing Strategy
-- Maintain high test coverage (currently 492 tests, all passing)
+- Maintain high test coverage (currently 503 tests, all passing)
 - Add integration tests for new features
 - Test edge cases (nulls, empty arrays, etc.)
 - Test files organized by feature:
@@ -599,6 +596,7 @@ jsonsql --describe products
 ✅ ILIKE for case-insensitive pattern matching
 ✅ Common Table Expressions (CTEs) with WITH syntax
 ✅ Parameterized queries (`${var}` / `${var:default}` with `--param`)
+✅ CSV output (`--format csv`) with header row
 ✅ Flexible JSONPath mappings
 ✅ Saved queries (39 pre-configured examples)
 ✅ Good test coverage (all passing)
@@ -607,7 +605,7 @@ jsonsql --describe products
 ### Key Gaps
 ❌ No aggregation (GROUP BY, COUNT, SUM, etc.)
 ❌ No calculated fields or functions
-❌ Limited output formats (JSON only)
+❌ Limited output formats (JSON and CSV only; no TSV/table/XML)
 ❌ No BETWEEN operator
 ❌ No subqueries
 ❌ No RIGHT JOIN or FULL OUTER JOIN
@@ -625,6 +623,6 @@ jsonsql --describe products
 
 JsonSQL is a solid foundation with excellent core functionality. Recent additions of DISTINCT, ILIKE, and CTEs demonstrate the system's extensibility. The suggested enhancements would transform it from a good tool into a comprehensive SQL-like query engine for JSON data. The prioritized roadmap focuses on high-impact features that provide the most value to users.
 
-**Current Test Status**: ✅ 492 tests passing
+**Current Test Status**: ✅ 503 tests passing
 **Code Quality**: ✅ High - Clean architecture, good separation of concerns
 **Documentation**: ✅ Comprehensive - README, examples, saved queries reference

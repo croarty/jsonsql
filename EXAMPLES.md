@@ -151,7 +151,10 @@ jsonsql --data-dir example-data --query "SELECT * FROM products" | jq 'length'
 # Extract specific fields
 jsonsql --data-dir example-data --query "SELECT name, price FROM products" | jq '.[].name'
 
-# Format for CSV (requires jq)
+# CSV with header row (built-in)
+jsonsql --data-dir example-data --query "SELECT name, price FROM products" --format csv
+
+# Or via jq if you need custom column selection from JSON
 jsonsql --data-dir example-data --query "SELECT name, price FROM products" | \
   jq -r '.[] | [.name, .price] | @csv'
 ```

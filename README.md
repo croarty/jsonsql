@@ -16,7 +16,7 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
 - **Schema-less Design**: Works with any JSON structure without predefined models
 - **JSONPath Mapping**: Define shortcuts for complex JSONPath expressions
 - **Saved Queries**: Save and reuse frequently-used queries by name, including parameterized queries
-- **Flexible Output**: Write to stdout, file, or clipboard (clean stdout/stderr separation for piping)
+- **Flexible Output**: JSON (default) or CSV with header row; write to stdout, file, or clipboard (clean stdout/stderr separation for piping)
 - **Optional Disk Caching**: Persist parsed JSON between runs with `--enable-cache`; auto-invalidated when sources change
 - **Recursive Directory Loading**: Map a directory to load and combine all `.json` files within it (including subdirectories)
 - **Table Aliases**: Use aliases for cleaner queries (e.g., `FROM orders o`)
@@ -108,6 +108,7 @@ jsonsql --query "SELECT p.name, o.quantity FROM orders o LEFT JOIN products p ON
 ```
 Usage: jsonsql [-hV] [--clear-cache] [--clipboard] [--enable-cache]
                [--list-queries] [--list-tables] [--pretty]
+               [--format=<format>]
                [-c=<configFile>] [-d=<dataDirectory>]
                [--delete-query=<name>] [-o=<outputFile>] [-q=<query>]
                [--queries-file=<queriesFile>] [--run-query=<name>]
@@ -126,6 +127,7 @@ Options:
   -o, --output=<outputFile>  Output file path (default: stdout)
       --clipboard            Copy output to clipboard
       --pretty               Pretty-print JSON output
+      --format=<format>      Output format: json (default) or csv
       --list-tables          Show all configured JSONPath shortcuts
       --add-mapping=<alias> <jsonpath>
                              Add a new JSONPath mapping
@@ -523,6 +525,25 @@ Output:
     "category": "Electronics"
   }
 ]
+```
+
+#### CSV Output
+```bash
+jsonsql --query "SELECT name, price FROM products" --format csv
+```
+
+Output (header row plus one row per result):
+```csv
+name,price
+Widget,19.99
+Gadget,29.99
+```
+
+`--format csv` writes RFC 4180–style CSV with a header row of field names. `NULL` values appear as empty cells; nested objects and arrays are serialized as compact JSON in the cell. `--pretty` applies only to JSON output.
+
+```bash
+# Spreadsheet-friendly export
+jsonsql --query "SELECT name, price, category FROM products" --format csv --output products.csv
 ```
 
 #### Combine Options
@@ -939,7 +960,7 @@ Planned features for future releases, organized by priority:
 - JSONPath expressions in SELECT
 
 **Output Formats:**
-- CSV output format (`--format csv`)
+- ✅ **CSV output** (`--format csv`) — header row plus RFC 4180–escaped values - **IMPLEMENTED**
 - TSV output format (`--format tsv`)
 - ASCII table format (`--format table`)
 - XML output format (`--format xml`)
