@@ -200,4 +200,28 @@ class JsonSqlCliTest {
         assertEquals(1, r.exitCode());
         assertTrue(r.err().toLowerCase().contains("unsupported output format"));
     }
+
+    @Test
+    void testDescribeShowsTableSchema() {
+        CliResult r = runCli(withConfig("--describe", "products"));
+        assertEquals(0, r.exitCode());
+        assertTrue(r.out().contains("Table: products"));
+        assertTrue(r.out().contains("Field"));
+        assertTrue(r.out().contains("name"));
+        assertTrue(r.out().contains("Sample"));
+    }
+
+    @Test
+    void testDescribeUnknownTableReportsError() {
+        CliResult r = runCli(withConfig("--describe", "missing"));
+        assertEquals(1, r.exitCode());
+        assertTrue(r.err().toLowerCase().contains("no mapping found"));
+    }
+
+    @Test
+    void testDescribeCannotCombineWithQuery() {
+        CliResult r = runCli(withConfig("--describe", "products", "-q", "SELECT * FROM products"));
+        assertEquals(1, r.exitCode());
+        assertTrue(r.err().toLowerCase().contains("multiple actions"));
+    }
 }

@@ -275,6 +275,26 @@ public class QueryExecutor implements FieldAccessor {
     }
 
     /**
+     * Load raw row objects for a mapped table (unwrapped, without the table-name envelope).
+     * Used for schema introspection and other tooling that needs source rows.
+     */
+    public List<JsonNode> loadMappedTableRows(String tableName) throws IOException {
+        TableInfo tableInfo = new TableInfo();
+        tableInfo.setTableName(tableName);
+        List<JsonNode> wrapped = loadTableData(tableInfo, new QueryExecutionContext());
+        String effectiveName = tableInfo.getEffectiveName();
+        List<JsonNode> rows = new ArrayList<>();
+        for (JsonNode row : wrapped) {
+            if (row.isObject() && row.has(effectiveName)) {
+                rows.add(row.get(effectiveName));
+            } else {
+                rows.add(row);
+            }
+        }
+        return rows;
+    }
+
+    /**
      * Load data for a table using its JSONPath mapping or CTE context.
      */
     private List<JsonNode> loadTableData(TableInfo tableInfo, QueryExecutionContext context) throws IOException {

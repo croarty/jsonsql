@@ -4,6 +4,7 @@ import com.jsonsql.config.CacheManager;
 import com.jsonsql.config.MappingManager;
 import com.jsonsql.config.QueryManager;
 import com.jsonsql.config.QueryParameterReplacer;
+import com.jsonsql.introspection.TableDescriber;
 import com.jsonsql.output.OutputFormat;
 import com.jsonsql.output.OutputHandler;
 import com.jsonsql.query.QueryExecutor;
@@ -73,6 +74,9 @@ public class JsonSqlCli implements Callable<Integer> {
     
     @Option(names = {"--clear-cache"}, description = "Clear all cached data for mapped tables")
     private boolean clearCache;
+
+    @Option(names = {"--describe"}, description = "Show field names, types, and sample values for a mapped table")
+    private String describeTable;
 
     public static void main(String[] args) {
         int exitCode = new CommandLine(new JsonSqlCli()).execute(args);
@@ -145,6 +149,30 @@ public class JsonSqlCli implements Callable<Integer> {
         if (listQueries) {
             listSavedQueries(queryManager);
             return 0;
+        }
+
+        // Handle describe command
+        if (describeTable != null) {
+            String dataDirError = validateDataDirectory();
+            if (dataDirError != null) {
+                System.err.println("Error: " + dataDirError);
+                return 1;
+            }
+            try {
+                CacheManager cacheManager = enableCache ? new CacheManager(dataDirectory) : null;
+                TableDescriber describer = new TableDescriber(mappingManager, dataDirectory, cacheManager);
+                System.out.println(describer.describe(describeTable));
+                return 0;
+            } catch (IllegalArgumentException e) {
+                System.err.println("Error: " + e.getMessage());
+                return 1;
+            } catch (Exception e) {
+                System.err.println("Error describing table: " + e.getMessage());
+                if (isDebugEnabled()) {
+                    e.printStackTrace();
+                }
+                return 1;
+            }
         }
         
         // Handle save-query command
@@ -248,6 +276,7 @@ public class JsonSqlCli implements Callable<Integer> {
         System.err.println("  --save-query <name> --query <sql>   Save a query");
         System.err.println("  --delete-query <name>   Delete a saved query");
         System.err.println("  --list-tables           List configured mappings");
+        System.err.println("  --describe <table>      Show table fields, types, and samples");
         System.err.println("  --list-queries          List saved queries");
         System.err.println("  --add-mapping <a> <p>   Add a JSONPath mapping");
         System.err.println("  --clear-cache           Clear cached data");
@@ -297,6 +326,7 @@ public class JsonSqlCli implements Callable<Integer> {
         if (addMapping != null) actions++;
         if (clearCache) actions++;
         if (listQueries) actions++;
+        if (describeTable != null) actions++;
         if (deleteQueryName != null) actions++;
         if (saveQueryName != null) actions++;
         if (runQueryName != null) actions++;
@@ -306,7 +336,8 @@ public class JsonSqlCli implements Callable<Integer> {
 
         if (actions > 1) {
             return "Multiple actions specified. Use only one of --query, --run-query, --save-query, "
-                + "--delete-query, --list-tables, --list-queries, --add-mapping, or --clear-cache at a time.";
+                + "--delete-query, --list-tables, --describe, --list-queries, --add-mapping, "
+                + "or --clear-cache at a time.";
         }
 
         if (runQueryName != null && query != null) {

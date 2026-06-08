@@ -17,6 +17,7 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
 - **JSONPath Mapping**: Define shortcuts for complex JSONPath expressions
 - **Saved Queries**: Save and reuse frequently-used queries by name, including parameterized queries
 - **Flexible Output**: JSON (default) or CSV with header row; write to stdout, file, or clipboard (clean stdout/stderr separation for piping)
+- **Schema Introspection**: `--describe <table>` shows field paths, types, and sample values
 - **Optional Disk Caching**: Persist parsed JSON between runs with `--enable-cache`; auto-invalidated when sources change
 - **Recursive Directory Loading**: Map a directory to load and combine all `.json` files within it (including subdirectories)
 - **Table Aliases**: Use aliases for cleaner queries (e.g., `FROM orders o`)
@@ -129,6 +130,7 @@ Options:
       --pretty               Pretty-print JSON output
       --format=<format>      Output format: json (default) or csv
       --list-tables          Show all configured JSONPath shortcuts
+      --describe=<table>     Show field names, types, and sample values for a table
       --add-mapping=<alias> <jsonpath>
                              Add a new JSONPath mapping
       --save-query=<name>    Save a query with a name (requires --query)
@@ -174,6 +176,27 @@ Configured JSONPath Mappings:
 ────────────────────────────────────────────────────────────────────────────────
 Total: 3 mapping(s)
 ```
+
+#### Describe a Table
+```bash
+jsonsql --describe products --data-dir example-data
+```
+
+Shows the mapping, row count, and a column listing of every queryable field path (nested objects use dot notation), inferred JSON type, and a sample value from the data:
+
+```
+Table: products
+Mapping: complex-products.json:$.products[*]
+Rows: 6
+
+  Field          Type              Sample
+  id             number            1
+  name           string            Wireless Mouses
+  tags           array             ["wireless","mouse","ergonomic","electronics"]
+  specifications.connectivity  string  Bluetooth 5.0
+```
+
+Use this before writing queries to discover field names and nesting. Schema is inferred from up to 200 rows; fields only seen as `null` are typed `null`, and fields with mixed null/non-null values are marked `(nullable)`.
 
 ### Saved Queries
 
@@ -973,7 +996,7 @@ Planned features for future releases, organized by priority:
 **Developer Tools:**
 - Query validation / dry-run mode (`--dry-run`)
 - Query profiling and performance analysis (`--explain`)
-- Schema introspection (`--describe <table>`)
+- ✅ **Schema introspection** (`--describe <table>`) — field paths, types, sample values - **IMPLEMENTED**
 
 **Performance Optimizations:**
 - Index-like structures for frequently queried fields

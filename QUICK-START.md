@@ -192,9 +192,10 @@ jsonsql --query "SELECT p.brand, o.status FROM orders o JOIN ecommerce_products 
    - `products_multi` for partitioned products
    - `ecommerce_products` for products from ecommerce.json
 
-3. **Test mappings before complex queries:**
+3. **Explore table structure before complex queries:**
    ```bash
    jsonsql --list-tables
+   jsonsql --describe <table_name> --data-dir example-data
    jsonsql --query "SELECT TOP 1 * FROM <table_name>" --data-dir example-data
    ```
 
