@@ -240,10 +240,12 @@ jsonsql --query "SELECT * FROM products WHERE price > 50 AND category = 'RareCat
 - `<=` - Less than or equal to
 
 ### Pattern Matching
-- `LIKE` - Pattern matching with wildcards
+- `LIKE` - Pattern matching with wildcards (case-sensitive)
   - `%` - Matches zero or more characters
   - `_` - Matches exactly one character
 - `NOT LIKE` - Negated pattern matching
+- `ILIKE` - Case-insensitive `LIKE` (same wildcards)
+- `NOT ILIKE` - Negated case-insensitive matching
 
 ### Null Checking
 - `IS NULL` - Check if field is null or missing
@@ -364,6 +366,26 @@ jsonsql --query "SELECT * FROM products WHERE name LIKE '%(%)%'"
 5. **Single vs multiple wildcards**:
    - `'_ext'` - exactly 4 characters ending in "ext"
    - `'%ext'` - any number of characters ending in "ext"
+
+## ILIKE / NOT ILIKE (Case-Insensitive Matching)
+
+`ILIKE` works exactly like `LIKE` but ignores case. Use it when the data's casing is inconsistent or unknown. The same `%` and `_` wildcards apply.
+
+```bash
+# Matches "Laptop", "laptop", "LAPTOP", ...
+jsonsql --query "SELECT * FROM products WHERE name ILIKE 'laptop%'"
+
+# Case-insensitive contains
+jsonsql --query "SELECT * FROM products WHERE name ILIKE '%desk%'"
+
+# Case-insensitive exclusion
+jsonsql --query "SELECT * FROM products WHERE name NOT ILIKE '%wireless%'"
+
+# Combine with other clauses
+jsonsql --query "SELECT name, category FROM products WHERE category ILIKE 'electronics' ORDER BY name"
+```
+
+Contrast: `LIKE 'laptop%'` will NOT match "Laptop", but `ILIKE 'laptop%'` will.
 
 ## IS NULL / IS NOT NULL Examples
 

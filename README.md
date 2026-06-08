@@ -280,10 +280,10 @@ jsonsql --delete-query old_query
 
 **Pre-configured Queries:**
 
-This repository ships 32 pre-configured example queries demonstrating all features (30 feature-numbered `01_`–`30_` queries plus the named `completed_orders` and `expensive_electronics` examples):
+This repository ships 39 pre-configured example queries demonstrating all features (36 feature-numbered `01_`–`36_` queries, the named `completed_orders` and `expensive_electronics` examples, and the parameterized `filtered_products`):
 - See [SAVED-QUERIES-REFERENCE.md](SAVED-QUERIES-REFERENCE.md) for complete documentation
-- The numbered queries (`01_`–`30_`) each showcase a specific feature
-- Covers: SELECT, WHERE (all operators), JOIN, LIKE, ILIKE, IN, IS NULL, DISTINCT, ORDER BY, TOP/LIMIT
+- The numbered queries (`01_`–`36_`) each showcase a specific feature
+- Covers: SELECT, DISTINCT, WHERE (all operators), JOIN, LEFT JOIN, LIKE, ILIKE, IN, IS NULL, UNNEST, WITH/CTE, multi-file tables, ORDER BY, TOP/LIMIT, and parameterized queries
 - Run any query: `jsonsql --run-query <name> --data-dir example-data --pretty`
 
 ### Query Examples
@@ -569,7 +569,8 @@ WHERE status != 'cancelled'
 ```
 
 **Comparison behavior:**
-- The relational operators `>`, `<`, `>=`, `<=` compare numbers numerically. When either operand is non-numeric text, they fall back to lexicographic (alphabetical) string comparison (e.g. `WHERE name >= 'M'`).
+- For `>`, `<`, `>=`, `<=`, the stored field's JSON type decides the comparison: if the field is a JSON number it is compared numerically against the literal; if the field is text it is compared lexicographically (alphabetically), e.g. `WHERE name >= 'M'`.
+- A number stored as a JSON string (e.g. `"10"`) is treated as text and therefore compares lexicographically, not numerically.
 - SQL `NULL` values never satisfy a comparison.
 
 **Unsupported expressions fail loudly:** Constructs that are not yet implemented — such as `BETWEEN`, subqueries (e.g. `IN (SELECT ...)`), or other unsupported WHERE syntax — now raise a clear error instead of silently returning zero rows. This prevents misleading empty results.
@@ -639,7 +640,7 @@ Use a `WITH` clause to define one or more named, reusable subqueries (CTEs) that
 ```sql
 -- Single CTE
 WITH expensive AS (
-  SELECT * FROM products WHERE price > 100
+  SELECT * FROM products WHERE price > 50
 )
 SELECT name, price FROM expensive ORDER BY price DESC
 ```
@@ -650,7 +651,7 @@ WITH electronics AS (
   SELECT * FROM products WHERE category = 'Electronics'
 ),
 in_stock AS (
-  SELECT * FROM electronics WHERE quantity > 0
+  SELECT * FROM electronics WHERE inStock = true
 )
 SELECT name, price FROM in_stock
 ```

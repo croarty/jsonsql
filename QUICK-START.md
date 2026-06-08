@@ -150,10 +150,10 @@ Total: 8 mapping(s)
 
 ## Real-World Examples
 
-### Example 1: Find Top Products by Orders
+### Example 1: List the Highest-Value Order Lines
 
 ```bash
-jsonsql --query "SELECT TOP 10 p.name, COUNT(*) as order_count FROM ecommerce_orders o JOIN ecommerce_products p ON o.productId = p.id ORDER BY order_count DESC" --data-dir example-data --pretty
+jsonsql --query "SELECT TOP 10 p.name, p.price, o.quantity, o.status FROM ecommerce_orders o JOIN ecommerce_products p ON o.productId = p.id ORDER BY p.price DESC" --data-dir example-data --pretty
 ```
 
 ### Example 2: Analyze Multi-Year Data

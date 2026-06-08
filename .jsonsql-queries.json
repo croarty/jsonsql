@@ -31,5 +31,11 @@
   "28_pending_deliveries" : "SELECT o.orderId, p.name, o.orderDate, o.status FROM ecommerce_orders o JOIN ecommerce_products p ON o.productId = p.id WHERE o.deliveryDate IS NULL AND o.status != 'cancelled' ORDER BY o.orderDate",
   "29_mid_price_range" : "SELECT name, category, price, brand FROM ecommerce_products WHERE price >= 50 AND price <= 150 ORDER BY category, price DESC",
   "30_showcase_all_operators" : "SELECT o.orderId, p.name, p.category, o.status FROM ecommerce_orders o JOIN ecommerce_products p ON o.productId = p.id WHERE o.status IN ('delivered', 'shipped') AND p.category NOT IN ('Stationery') AND p.price > 20 AND p.name LIKE '%e%' AND o.deliveryDate IS NOT NULL ORDER BY p.price DESC LIMIT 20",
-  "filtered_products" : "SELECT * FROM products WHERE price > ${min_price} AND category = '${category}'"
+  "31_distinct_categories" : "SELECT DISTINCT category FROM ecommerce_products ORDER BY category",
+  "32_case_insensitive_search" : "SELECT name, brand FROM ecommerce_products WHERE name ILIKE '%mouse%' ORDER BY name",
+  "33_orders_left_join" : "SELECT o.orderId, p.name FROM ecommerce_orders o LEFT JOIN ecommerce_products p ON o.productId = p.id ORDER BY o.orderId",
+  "34_expensive_products_cte" : "WITH expensive AS (SELECT name, price FROM ecommerce_products WHERE price > 100) SELECT name, price FROM expensive ORDER BY price DESC",
+  "35_product_tags" : "SELECT name, tag FROM complex_products, UNNEST(tags) AS t(tag) WHERE tag = 'wireless'",
+  "36_multiyear_products" : "SELECT year, name, price FROM products_multi WHERE price > 30 ORDER BY year DESC, price DESC",
+  "filtered_products" : "SELECT * FROM complex_products WHERE price > ${min_price} AND category = '${category}'"
 }

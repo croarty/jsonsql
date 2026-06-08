@@ -180,12 +180,14 @@ jsonsql --add-mapping products_2025 "2025/products:$.products" --data-dir sales-
 
 **Queries:**
 ```bash
-# Analyze 2024 sales
-jsonsql --query "SELECT p.name, SUM(o.quantity) as total_sold FROM orders_2024 o JOIN products_2024 p ON o.productId = p.id ORDER BY total_sold DESC" --data-dir sales-data
+# List 2024 order lines with their products
+jsonsql --query "SELECT p.name, o.quantity, o.totalPrice FROM orders_2024 o JOIN products_2024 p ON o.productId = p.id ORDER BY p.name" --data-dir sales-data
 
-# Get top products by revenue
+# Get top order lines by revenue
 jsonsql --query "SELECT TOP 20 p.name, o.quantity, o.totalPrice FROM orders_2024 o JOIN products_2024 p ON o.productId = p.id ORDER BY o.totalPrice DESC" --data-dir sales-data --pretty
 ```
+
+> Note: aggregation such as `SUM(o.quantity)` is not yet supported. To total a column, pipe the result JSON to a tool like `jq` (for example `... | jq '[.[].quantity] | add'`).
 
 ## Key Benefits
 
@@ -197,10 +199,10 @@ Split large datasets across multiple files for easier management and faster load
 - Mix and match different file organizations
 - No need to merge files manually
 
-### 3. **Performance**
-- Only loads files you need
+### 3. **Organization over one giant file**
+- Only the files in the mapped directory are loaded (each is read fully into memory)
 - Same JSONPath applied to all files in a directory (and its subdirectories)
-- Efficient combination of data from multiple sources
+- Combine data from multiple sources without merging files by hand
 
 ### 4. **Organization**
 - Keep data organized by time period (year, quarter, month)

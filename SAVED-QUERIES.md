@@ -2,7 +2,7 @@
 
 JsonSQL allows you to save frequently-used queries with descriptive names for easy reuse. This feature is perfect for complex queries, recurring reports, and sharing common queries across a team.
 
-**✨ This repository includes 32 pre-configured example queries!**  
+**✨ This repository includes 39 pre-configured example queries!**  
 See [SAVED-QUERIES-REFERENCE.md](SAVED-QUERIES-REFERENCE.md) for complete documentation of all included queries.
 
 ## Table of Contents
@@ -19,7 +19,7 @@ See [SAVED-QUERIES-REFERENCE.md](SAVED-QUERIES-REFERENCE.md) for complete docume
 ## Quick Start
 
 ```bash
-# 1. List pre-configured queries (32 included!)
+# 1. List pre-configured queries (39 included!)
 jsonsql --list-queries
 
 # 2. Run an example query
@@ -37,7 +37,7 @@ jsonsql --delete-query my_report
 
 ## Pre-configured Queries
 
-This repository includes **32 example queries** demonstrating all JsonSQL features:
+This repository includes **39 example queries** demonstrating all JsonSQL features:
 
 | Category | Queries | Features Demonstrated |
 |----------|---------|----------------------|
@@ -51,6 +51,13 @@ This repository includes **32 example queries** demonstrating all JsonSQL featur
 | **TOP/LIMIT** | 16-17 | TOP, LIMIT |
 | **Business Logic** | 21-22, 30 | Real-world scenarios |
 | **Ultimate Showcase** | 30 | ALL operators combined |
+| **DISTINCT** | 31 | SELECT DISTINCT |
+| **ILIKE** | 32 | Case-insensitive matching |
+| **LEFT JOIN** | 33 | Outer join keeping all left rows |
+| **CTE / WITH** | 34 | Common Table Expressions |
+| **UNNEST** | 35 | Array flattening |
+| **Multi-file** | 36 | Directory-backed tables |
+| **Parameterized** | filtered_products | `${var}` placeholders |
 
 **View complete reference:** [SAVED-QUERIES-REFERENCE.md](SAVED-QUERIES-REFERENCE.md)
 
@@ -99,7 +106,7 @@ jsonsql --save-query top_sellers --query "SELECT o.orderId, p.name, p.price, o.q
 jsonsql --save-query incomplete_products --query "SELECT * FROM products WHERE (description IS NULL OR category IS NULL) AND price IS NOT NULL AND name NOT LIKE '%Test%'"
 
 # Multi-table JOIN with complex filtering
-jsonsql --save-query premium_customers --query "SELECT c.name, COUNT(o.id) as order_count FROM customers c JOIN orders o ON c.id = o.customerId WHERE c.VIP.status IN ('Gold', 'Platinum') AND o.status != 'cancelled' GROUP BY c.id, c.name"
+jsonsql --save-query premium_customer_orders --query "SELECT c.name, o.orderId, o.status FROM customers c JOIN orders o ON c.id = o.customerId WHERE c.VIP.status IN ('Gold', 'Platinum') AND o.status != 'cancelled' ORDER BY c.name"
 ```
 
 ## Running Saved Queries
@@ -257,12 +264,14 @@ git commit -m "Add standard analytics queries"
 ### 1. Recurring Reports
 
 ```bash
-# Save daily reports
-jsonsql --save-query daily_sales --query "SELECT orderDate, SUM(total) FROM orders WHERE orderDate = TODAY() GROUP BY orderDate"
+# Save a daily order listing (filter by an explicit date; date strings compare correctly)
+jsonsql --save-query daily_orders --query "SELECT orderId, status, total FROM orders WHERE orderDate = '2024-01-15' ORDER BY total DESC"
 
 # Run every day
-jsonsql --run-query daily_sales --output daily-$(date +%Y%m%d).json
+jsonsql --run-query daily_orders --output daily-$(date +%Y%m%d).json
 ```
+
+> Note: aggregation (`SUM`) and date functions (`TODAY()`) are not yet supported. Totals can be computed by piping to `jq`.
 
 ### 2. Data Quality Checks
 
@@ -274,15 +283,17 @@ jsonsql --save-query incomplete_products --query "SELECT id, name FROM products 
 jsonsql --run-query incomplete_products --pretty
 ```
 
-### 3. Complex Analytics
+### 3. Detailed Listings
 
 ```bash
-# Customer lifetime value
-jsonsql --save-query customer_ltv --query "SELECT c.id, c.name, SUM(o.total) as lifetime_value FROM customers c JOIN orders o ON c.id = o.customerId WHERE o.status = 'completed' GROUP BY c.id, c.name ORDER BY lifetime_value DESC"
+# Completed orders per customer (one row per order)
+jsonsql --save-query customer_completed_orders --query "SELECT c.name, o.orderId, o.total FROM customers c JOIN orders o ON c.id = o.customerId WHERE o.status = 'completed' ORDER BY c.name, o.total DESC"
 
-# Top products by revenue
-jsonsql --save-query top_revenue_products --query "SELECT p.name, SUM(o.quantity * p.price) as revenue FROM orders o JOIN products p ON o.productId = p.id GROUP BY p.id, p.name ORDER BY revenue DESC LIMIT 10"
+# Highest-priced order lines
+jsonsql --save-query top_order_lines --query "SELECT TOP 10 p.name, o.quantity, p.price FROM orders o JOIN products p ON o.productId = p.id ORDER BY p.price DESC"
 ```
+
+> Note: revenue/lifetime-value style rollups need aggregation (`SUM`, `GROUP BY`), which is not yet supported. Produce the detailed rows above and aggregate downstream (e.g. with `jq`).
 
 ### 4. Development Shortcuts
 
@@ -291,8 +302,8 @@ jsonsql --save-query top_revenue_products --query "SELECT p.name, SUM(o.quantity
 jsonsql --save-query sample_products --query "SELECT TOP 5 * FROM products"
 jsonsql --save-query sample_orders --query "SELECT TOP 5 * FROM orders"
 
-# Debug queries
-jsonsql --save-query orphaned_orders --query "SELECT o.* FROM orders o LEFT JOIN products p ON o.productId = p.id WHERE p.id IS NULL"
+# Debug queries (anti-join: orders whose product no longer exists)
+jsonsql --save-query orphaned_orders --query "SELECT o.orderId, o.productId FROM orders o LEFT JOIN products p ON o.productId = p.id WHERE p.id IS NULL"
 ```
 
 ### 5. Team Collaboration
@@ -300,12 +311,14 @@ jsonsql --save-query orphaned_orders --query "SELECT o.* FROM orders o LEFT JOIN
 Share common queries across the team:
 
 ```bash
-# Everyone saves and uses the same queries
-jsonsql --save-query active_customers --query "SELECT * FROM customers WHERE lastOrderDate > DATE_SUB(NOW(), INTERVAL 30 DAY)"
+# Everyone saves and uses the same queries (use an explicit cutoff date)
+jsonsql --save-query recent_customers --query "SELECT * FROM customers WHERE lastOrderDate >= '2024-01-01'"
 
 # Team members can run the standard query
-jsonsql --run-query active_customers --data-dir /path/to/data --pretty
+jsonsql --run-query recent_customers --data-dir /path/to/data --pretty
 ```
+
+> Note: relative-date functions such as `DATE_SUB`/`NOW()` are not yet supported; use an explicit `'YYYY-MM-DD'` cutoff (date strings sort correctly).
 
 ## Storage and Sharing
 
@@ -453,25 +466,30 @@ cp ../other-project/.jsonsql-queries.json .
 ### Data Exploration
 ```bash
 jsonsql --save-query explore_schema --query "SELECT TOP 1 * FROM products"
-jsonsql --save-query count_records --query "SELECT COUNT(*) FROM products"
+jsonsql --save-query distinct_categories --query "SELECT DISTINCT category FROM products ORDER BY category"
 ```
 
 ### Data Quality
 ```bash
 jsonsql --save-query find_nulls --query "SELECT * FROM products WHERE description IS NULL OR category IS NULL"
-jsonsql --save-query find_duplicates --query "SELECT name, COUNT(*) FROM products GROUP BY name HAVING COUNT(*) > 1"
+jsonsql --save-query missing_brand --query "SELECT id, name FROM products WHERE brand IS NULL"
 ```
 
 ### Common Filters
 ```bash
 jsonsql --save-query active_items --query "SELECT * FROM products WHERE inStock = true"
-jsonsql --save-query recent_orders --query "SELECT * FROM orders WHERE orderDate > DATE_SUB(NOW(), INTERVAL 7 DAY)"
+jsonsql --save-query recent_orders --query "SELECT * FROM orders WHERE orderDate >= '2024-01-01' ORDER BY orderDate DESC"
 ```
 
-### Aggregations
+### Aggregations (not yet supported)
+
+Aggregation/grouping (`COUNT`, `AVG`, `SUM`, `GROUP BY`, `HAVING`) and date functions (`MONTH`, `DATE_SUB`, `NOW`) are on the roadmap but not implemented yet. Until then, save a query that returns the detailed rows and aggregate downstream, for example:
+
 ```bash
-jsonsql --save-query category_summary --query "SELECT category, COUNT(*) as count, AVG(price) as avg_price FROM products GROUP BY category"
-jsonsql --save-query sales_by_month --query "SELECT MONTH(orderDate) as month, SUM(total) as revenue FROM orders GROUP BY MONTH(orderDate)"
+# Save the rows...
+jsonsql --save-query category_rows --query "SELECT category, price FROM products ORDER BY category"
+# ...then summarize with jq
+jsonsql --run-query category_rows --data-dir example-data | jq 'group_by(.category) | map({category: .[0].category, count: length})'
 ```
 
 ## Summary

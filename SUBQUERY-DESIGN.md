@@ -4,9 +4,11 @@
 
 This document explores how to implement subqueries and temporary tables (CTEs) in JsonSQL, specifically focusing on the ability to define temporary result sets that can be used in JOINs.
 
+> **Status update:** Common Table Expressions (the `WITH` clause) described in this document have since been **implemented** and shipped. See the [Common Table Expressions](README.md#common-table-expressions-with) section of the README for current usage, and `CteTest` / `CTECacheTest` for coverage. The remaining ideas below — **subqueries in the `FROM` clause** and **correlated / `WHERE` subqueries** — are still forward-looking design and are not implemented. The "Current Architecture Analysis" section reflects the pre-CTE codebase and is kept for historical context.
+
 ## Use Cases
 
-### 1. Common Table Expressions (CTEs) - WITH Clause
+### 1. Common Table Expressions (CTEs) - WITH Clause (IMPLEMENTED)
 
 ```sql
 WITH expensive_products AS (
@@ -17,7 +19,7 @@ FROM orders o
 JOIN expensive_products ep ON o.productId = ep.id
 ```
 
-### 2. Subqueries in FROM Clause
+### 2. Subqueries in FROM Clause (NOT YET IMPLEMENTED — design only)
 
 ```sql
 SELECT o.orderId, ep.name
@@ -27,7 +29,7 @@ JOIN (
 ) AS ep ON o.productId = ep.id
 ```
 
-### 3. Multiple CTEs
+### 3. Multiple CTEs (IMPLEMENTED)
 
 ```sql
 WITH 

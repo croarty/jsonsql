@@ -1,6 +1,6 @@
 # Saved Queries Reference
 
-This document describes all 32 saved queries included with JsonSQL, organized by the features they demonstrate.
+This document describes all 39 saved queries included with JsonSQL, organized by the features they demonstrate.
 
 ## Quick Test
 
@@ -275,6 +275,61 @@ Returns low-stock items needing reorder.
 
 ---
 
+### Advanced Feature Queries
+
+These queries demonstrate features beyond the core operators. Queries `35`, `36`, and `filtered_products` use tables other than `ecommerce_*` (see the table note below).
+
+#### 31_distinct_categories
+**Demonstrates:** `SELECT DISTINCT`
+```sql
+SELECT DISTINCT category FROM ecommerce_products ORDER BY category
+```
+Returns each product category exactly once.
+
+#### 32_case_insensitive_search
+**Demonstrates:** `ILIKE` (case-insensitive pattern matching)
+```sql
+SELECT name, brand FROM ecommerce_products WHERE name ILIKE '%mouse%' ORDER BY name
+```
+Returns products whose name contains "mouse" in any casing.
+
+#### 33_orders_left_join
+**Demonstrates:** `LEFT JOIN`
+```sql
+SELECT o.orderId, p.name FROM ecommerce_orders o LEFT JOIN ecommerce_products p ON o.productId = p.id ORDER BY o.orderId
+```
+Returns every order with its product name, keeping orders even when no product matches.
+
+#### 34_expensive_products_cte
+**Demonstrates:** Common Table Expression (`WITH`)
+```sql
+WITH expensive AS (SELECT name, price FROM ecommerce_products WHERE price > 100) SELECT name, price FROM expensive ORDER BY price DESC
+```
+Defines a temporary `expensive` result set and selects from it.
+
+#### 35_product_tags
+**Demonstrates:** `UNNEST` of a string array (uses the `complex_products` table → `complex-products.json`)
+```sql
+SELECT name, tag FROM complex_products, UNNEST(tags) AS t(tag) WHERE tag = 'wireless'
+```
+Flattens each product's `tags` array into one row per tag.
+
+#### 36_multiyear_products
+**Demonstrates:** Multi-file directory table (uses the `products_multi` table → `products-multi/`)
+```sql
+SELECT year, name, price FROM products_multi WHERE price > 30 ORDER BY year DESC, price DESC
+```
+Combines all yearly product files into a single result.
+
+#### filtered_products
+**Demonstrates:** Parameterized query (uses the `complex_products` table → `complex-products.json`)
+```sql
+SELECT * FROM complex_products WHERE price > ${min_price} AND category = '${category}'
+```
+Run with values, e.g. `--param min_price=20 --param category=Electronics`.
+
+---
+
 ## Feature Coverage Matrix
 
 | Query | SELECT | WHERE | JOIN | LIKE | IN | IS NULL | AND/OR/NOT | ORDER BY | TOP/LIMIT | AS |
@@ -498,12 +553,12 @@ For learning JsonSQL, run queries in this order:
 
 ## Summary
 
-These 32 queries provide:
-- ✅ Complete feature coverage
+These 39 queries provide:
+- ✅ Broad feature coverage (SELECT/DISTINCT, all WHERE operators, INNER/LEFT JOIN, UNNEST, WITH/CTE, ORDER BY, TOP/LIMIT, parameterized queries)
 - ✅ Beginner to advanced examples
 - ✅ Real-world business scenarios
 - ✅ Educational progression
 - ✅ Ready-to-use templates
 
-All queries are production-ready and work with the example data in `example-data/ecommerce.json`.
+Queries `01`–`34`, `completed_orders`, and `expensive_electronics` use `example-data/ecommerce.json` (the `ecommerce_products` / `ecommerce_orders` tables). Queries `35_product_tags` and `filtered_products` use the `complex_products` table (`complex-products.json`), and `36_multiyear_products` uses the `products_multi` directory table (`products-multi/`). All run against the shipped `example-data/` directory with the default `.jsonsql-mappings.json`.
 

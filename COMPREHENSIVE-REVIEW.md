@@ -5,7 +5,7 @@
 JsonSQL is a well-architected SQL-like query engine for JSON data. This document provides a thorough review of existing functionality and prioritized suggestions for new features.
 
 **Current Status:**
-- **Test Coverage**: 345 tests, all passing ✅
+- **Test Coverage**: 492 tests, all passing ✅
 - **Core Features**: Fully functional SQL-like query engine
 - **Recent Additions**: DISTINCT, ILIKE, Common Table Expressions (CTEs) with WITH syntax
 - **Architecture**: Clean separation of concerns, well-structured, maintainable
@@ -153,10 +153,9 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - Run saved queries
   - Delete saved queries
   - Persistent storage in `.jsonsql-queries.json`
-  - 32 pre-configured example queries included
+  - 39 pre-configured example queries included
+  - Parameterized queries with `${var}` and `${var:default}` syntax (substituted via `--param key=value`)
 - **Limitations**:
-  - No parameterized queries (mentioned in memory)
-  - No query templates
   - No query versioning
 
 ### 1.3 Output Features ✅
@@ -178,7 +177,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Strengths
 - Clean separation of concerns
 - Well-structured packages
-- Comprehensive test coverage (345 tests, all passing)
+- Comprehensive test coverage (492 tests, all passing)
 - Good error handling
 - Flexible field accessor pattern
 - Efficient JSONPath integration
@@ -377,12 +376,11 @@ SELECT * FROM products ORDER BY price LIMIT 10 OFFSET 20
 
 ## Part 3: Enhanced Features & Quality of Life
 
-### 3.1 Parameterized Queries (HIGH PRIORITY - User Requested)
+### 3.1 Parameterized Queries (IMPLEMENTED)
 
-**Current Status**: Not Implemented (mentioned in memory)
+**Current Status**: Implemented
 
-**Proposed Feature**:
-Allow saved queries to have placeholders that can be filled at runtime.
+Saved (and inline) queries can have placeholders that are filled at runtime.
 
 **Syntax**:
 ```bash
@@ -396,14 +394,14 @@ jsonsql --run-query filtered_products \
   --param category=Electronics
 ```
 
-**Implementation Approach**:
-1. Parse `${variable}` placeholders in saved queries
-2. Add `--param key=value` CLI option
-3. Replace placeholders before query execution
-4. Support default values: `${min_price:0}`
+**Behavior**:
+1. `${variable}` placeholders are parsed in saved/inline queries
+2. `--param key=value` supplies values (repeatable)
+3. Placeholders are substituted before query execution
+4. Default values are supported: `${min_price:0}`; a placeholder without a default or a supplied value raises an error
+5. Values are spliced in literally (no SQL escaping) — treat parameter input as trusted
 
-**Implementation Complexity**: Low-Medium
-**Business Value**: Very High (makes saved queries reusable)
+Backed by `QueryParameterReplacer` and covered by `QueryParameterReplacerTest` and `ParameterizedQueryIntegrationTest`.
 
 ### 3.2 Output Format Options (MEDIUM PRIORITY)
 
@@ -466,9 +464,10 @@ jsonsql --describe products
 
 ### 3.5 Performance Optimizations (MEDIUM PRIORITY)
 
+**Current state**: Optional disk caching of parsed JSON is implemented (`--enable-cache`, auto-invalidated on source change). Queries otherwise load matched files fully into memory.
+
 **Proposed Features**:
-- Query result caching (for repeated queries)
-- Early termination optimization (already partially done with TOP/LIMIT)
+- Early termination optimization (currently `TOP`/`LIMIT` is applied last and does not short-circuit loading)
 - Streaming mode for very large files
 - Index-like structures for frequently queried fields
 
@@ -485,10 +484,8 @@ jsonsql --describe products
    - High user demand
    - Medium-high complexity
 
-2. **Parameterized Queries** ⭐⭐⭐
-   - User requested
-   - Makes saved queries useful
-   - Low-medium complexity
+2. **Parameterized Queries** ✅ DONE
+   - Implemented via `${var}`/`${var:default}` + `--param`
 
 3. **Calculated Fields** ⭐⭐
    - Very common in real queries
@@ -550,7 +547,8 @@ jsonsql --describe products
 ### 5.1 Quick Wins (Low Effort, High Value)
 1. **OFFSET support** - Simple addition to LIMIT
 2. **BETWEEN operator** - Easy WHERE clause enhancement
-3. **Parameterized queries** - String replacement in saved queries
+
+(Parameterized queries — previously listed here — are now implemented.)
 
 ### 5.2 Medium-Term Goals
 1. **Aggregation functions** - Core SQL feature
@@ -574,7 +572,7 @@ jsonsql --describe products
 - DISTINCT implementation uses canonical JSON string representation
 
 ### 6.2 Testing Strategy
-- Maintain high test coverage (currently 345 tests, all passing)
+- Maintain high test coverage (currently 492 tests, all passing)
 - Add integration tests for new features
 - Test edge cases (nulls, empty arrays, etc.)
 - Test files organized by feature:
@@ -600,15 +598,15 @@ jsonsql --describe products
 ✅ DISTINCT keyword (fully implemented)
 ✅ ILIKE for case-insensitive pattern matching
 ✅ Common Table Expressions (CTEs) with WITH syntax
+✅ Parameterized queries (`${var}` / `${var:default}` with `--param`)
 ✅ Flexible JSONPath mappings
-✅ Saved queries (32 pre-configured examples)
-✅ Good test coverage (345 tests, all passing)
+✅ Saved queries (39 pre-configured examples)
+✅ Good test coverage (all passing)
 ✅ Clean, maintainable architecture
 
 ### Key Gaps
 ❌ No aggregation (GROUP BY, COUNT, SUM, etc.)
 ❌ No calculated fields or functions
-❌ No parameterized queries
 ❌ Limited output formats (JSON only)
 ❌ No BETWEEN operator
 ❌ No subqueries
@@ -617,10 +615,9 @@ jsonsql --describe products
 ❌ No OFFSET for pagination
 
 ### Recommended Next Steps
-1. **Immediate**: Parameterized queries (user requested)
-2. **Short-term**: Aggregation & GROUP BY (high value)
-3. **Medium-term**: Calculated fields & functions
-4. **Long-term**: Advanced features (subqueries, UNION)
+1. **Short-term**: Aggregation & GROUP BY (high value)
+2. **Medium-term**: Calculated fields & functions
+3. **Long-term**: Advanced features (subqueries, UNION)
 
 ---
 
@@ -628,6 +625,6 @@ jsonsql --describe products
 
 JsonSQL is a solid foundation with excellent core functionality. Recent additions of DISTINCT, ILIKE, and CTEs demonstrate the system's extensibility. The suggested enhancements would transform it from a good tool into a comprehensive SQL-like query engine for JSON data. The prioritized roadmap focuses on high-impact features that provide the most value to users.
 
-**Current Test Status**: ✅ 345 tests passing
+**Current Test Status**: ✅ 492 tests passing
 **Code Quality**: ✅ High - Clean architecture, good separation of concerns
 **Documentation**: ✅ Comprehensive - README, examples, saved queries reference

@@ -2,37 +2,25 @@
 
 This document demonstrates advanced JsonSQL capabilities using complex customer, order, and product data with nested structures and relationships.
 
+Every query below uses only features JsonSQL actually supports today (nested-field access, `UNNEST`, JOINs, `WHERE`, `ORDER BY`, `DISTINCT`, `TOP`/`LIMIT`) and has been run against the shipped `example-data/` fixtures. For analytics features that are **not** yet implemented (aggregation, `GROUP BY`, `CASE`, SQL functions), see [Planned / Not Yet Supported](#planned--not-yet-supported) at the end.
+
 ## Data Setup
 
-First, set up the mappings for the complex data:
+First, set up the mappings for the complex data (these are stored in `.jsonsql-mappings.json`):
 
 ```bash
-# Add mappings for complex data
-jsonsql --add-mapping customers "complex-customers.json:$.customers[*]"
-jsonsql --add-mapping orders "complex-orders.json:$.orders[*]" 
-jsonsql --add-mapping products "complex-products.json:$.products[*]"
+jsonsql --add-mapping customers "complex-customers.json:$.customers[*]" --data-dir example-data
+jsonsql --add-mapping orders "complex-orders.json:$.orders[*]" --data-dir example-data
+jsonsql --add-mapping products "complex-products.json:$.products[*]" --data-dir example-data
 ```
+
+All examples below assume `--data-dir example-data`.
 
 ## Customer Queries
 
-### Find All Customers with Multiple Addresses
-
-```sql
-SELECT name, COUNT(*) as addressCount
-FROM customers, UNNEST(addresses) AS a(address)
-GROUP BY name
-HAVING COUNT(*) > 1
-```
-
-### Get All Customers in New York State
-
-```sql
-SELECT name, email, phone
-FROM customers, UNNEST(addresses) AS a(address)
-WHERE address.state = 'NY' AND address.isDefault = true
-```
-
 ### Find Gold VIP Customers
+
+Nested-object field access (`vipStatus.level`, `vipStatus.points`) with `ORDER BY` on a nested numeric field:
 
 ```sql
 SELECT name, vipStatus.level, vipStatus.points
@@ -41,36 +29,54 @@ WHERE vipStatus.level = 'Gold'
 ORDER BY vipStatus.points DESC
 ```
 
-### Get Customer Preferences
+### Get Customers Who Opted into the Newsletter
 
 ```sql
-SELECT name, 
-       preferences.newsletter,
-       preferences.smsUpdates,
-       preferences.language,
-       preferences.currency
+SELECT name, preferences.newsletter, preferences.language, preferences.currency
 FROM customers
 WHERE preferences.newsletter = true
+```
+
+### List Every Customer Address (UNNEST)
+
+Flatten the `addresses` array so each address becomes its own row:
+
+```sql
+SELECT name, address.type, address.city, address.state
+FROM customers, UNNEST(addresses) AS a(address)
+ORDER BY name, address.state
+```
+
+### Customers with a New York Address
+
+Filter on a field of the unnested element:
+
+```sql
+SELECT name, address.street, address.city
+FROM customers, UNNEST(addresses) AS a(address)
+WHERE address.state = 'NY'
+```
+
+### VIP Benefits per Customer (UNNEST a string array)
+
+```sql
+SELECT name, vipStatus.level, benefit
+FROM customers, UNNEST(vipStatus.benefits) AS b(benefit)
+WHERE vipStatus.level = 'Gold'
+ORDER BY name, benefit
 ```
 
 ## Order Queries
 
 ### Orders Shipped to New York
 
+JOIN plus nested-field filtering:
+
 ```sql
 SELECT o.orderId, c.name, o.orderDate, o.status
 FROM orders o
 JOIN customers c ON o.customerId = c.id
 WHERE o.shippingAddress.state = 'NY'
-```
-
-### Orders with Free Shipping (VIP Benefit)
-
-```sql
-SELECT o.orderId, c.name, c.vipStatus.level, o.totals.shipping
-FROM orders o
-JOIN customers c ON o.customerId = c.id
-WHERE c.vipStatus.benefits LIKE '%free-shipping%'
 ```
 
 ### High-Value Orders (Over $100)
@@ -83,45 +89,38 @@ WHERE o.totals.total > 100
 ORDER BY o.totals.total DESC
 ```
 
-### Orders with Tracking Information
+### Orders That Have Tracking Information
+
+`IS NOT NULL` on a nested field (order 1004 has a null tracking number and is excluded):
 
 ```sql
-SELECT o.orderId, 
-       o.tracking.trackingNumber,
-       o.tracking.carrier,
-       o.tracking.estimatedDelivery
-FROM orders
+SELECT o.orderId, o.tracking.trackingNumber, o.tracking.carrier, o.tracking.estimatedDelivery
+FROM orders o
 WHERE o.tracking.trackingNumber IS NOT NULL
+ORDER BY o.orderId
+```
+
+### Orders Still Awaiting a Tracking Number
+
+```sql
+SELECT orderId, status, orderDate
+FROM orders
+WHERE tracking.trackingNumber IS NULL
 ```
 
 ## Product Queries
 
-### Electronics with High Ratings
+### Electronics with a 5-Star Review
+
+Alias the source table and `UNNEST` one of its array fields:
 
 ```sql
-SELECT p.name, p.price, p.category, review.rating
+SELECT p.name, p.price, review.rating, review.user
 FROM products p, UNNEST(p.reviews) AS r(review)
 WHERE p.category = 'Electronics' AND review.rating = 5
 ```
 
-### Out of Stock Products
-
-```sql
-SELECT name, price, stock, category
-FROM products
-WHERE inStock = false OR stock = 0
-```
-
-### Products by Brand
-
-```sql
-SELECT brand, COUNT(*) as productCount, AVG(price) as avgPrice
-FROM products
-GROUP BY brand
-ORDER BY productCount DESC
-```
-
-### Products with Specific Tags
+### Products Matching Specific Tags
 
 ```sql
 SELECT name, price, tag
@@ -129,219 +128,110 @@ FROM products, UNNEST(tags) AS t(tag)
 WHERE tag IN ('wireless', 'gaming', 'rgb')
 ```
 
+### Out-of-Stock Products
+
+```sql
+SELECT name, price, stock, category
+FROM products
+WHERE inStock = false OR stock = 0
+```
+
+### Distinct Product Categories and Brands
+
+```sql
+SELECT DISTINCT category FROM products
+```
+
+```sql
+SELECT DISTINCT category, brand FROM products ORDER BY category, brand
+```
+
 ## Complex Join Queries
 
 ### Complete Order Details
 
+JOIN with several nested projections and aliases:
+
 ```sql
 SELECT o.orderId,
-       c.name as customerName,
-       c.email as customerEmail,
-       o.shippingAddress.city as shipCity,
-       o.shippingAddress.state as shipState,
-       o.totals.total as orderTotal,
+       c.name AS customerName,
+       c.email AS customerEmail,
+       o.shippingAddress.city AS shipCity,
+       o.shippingAddress.state AS shipState,
+       o.totals.total AS orderTotal,
        o.status
 FROM orders o
 JOIN customers c ON o.customerId = c.id
 ORDER BY o.totals.total DESC
 ```
 
-### Customer Order History with VIP Benefits
+### Line-Item Detail Across Three Sources
+
+Combine an order, its `UNNEST`-ed line items, and the product catalog. `UNNEST` runs before the JOIN, so the unnested `item.productId` can be used as a join key:
 
 ```sql
-SELECT c.name,
-       c.vipStatus.level,
-       COUNT(o.orderId) as orderCount,
-       SUM(o.totals.total) as totalSpent,
-       c.vipStatus.benefits
-FROM customers c
-LEFT JOIN orders o ON c.id = o.customerId
-GROUP BY c.id, c.name, c.vipStatus.level, c.vipStatus.benefits
-ORDER BY totalSpent DESC
-```
-
-### Product Performance by Category
-
-```sql
-SELECT p.category,
-       p.name,
-       COUNT(o.orderId) as orderCount,
-       SUM(oi.quantity) as totalQuantity,
-       SUM(oi.totalPrice) as totalRevenue
-FROM products p
-LEFT JOIN orders o ON JSON_CONTAINS(o.items, JSON_OBJECT('productId', p.id))
-LEFT JOIN UNNEST(o.items) AS oi(item) ON item.productId = p.id
-GROUP BY p.category, p.name
-ORDER BY totalRevenue DESC
-```
-
-## Address-Based Queries
-
-### Orders by Geographic Region
-
-```sql
-SELECT o.shippingAddress.state,
-       COUNT(*) as orderCount,
-       AVG(o.totals.total) as avgOrderValue
+SELECT o.orderId,
+       p.name AS productName,
+       p.category,
+       item.quantity,
+       item.totalPrice
 FROM orders o
-GROUP BY o.shippingAddress.state
-ORDER BY orderCount DESC
+JOIN UNNEST(o.items) AS oi(item)
+JOIN products p ON item.productId = p.id
+WHERE p.category = 'Electronics' AND item.totalPrice > 50
+ORDER BY item.totalPrice DESC
 ```
 
-### Customers with Work Addresses
+### Every Customer and Their Orders (LEFT JOIN)
+
+A `LEFT JOIN` keeps customers even if a future dataset has none matching:
 
 ```sql
-SELECT c.name, 
-       workAddress.street,
-       workAddress.city,
-       workAddress.state
-FROM customers c, UNNEST(c.addresses) AS a(address)
-WHERE address.type = 'work'
-```
-
-### Shipping Address Analysis
-
-```sql
-SELECT shippingAddress.city,
-       shippingAddress.state,
-       COUNT(*) as orderCount,
-       SUM(totals.total) as totalValue
-FROM orders
-WHERE status = 'delivered'
-GROUP BY shippingAddress.city, shippingAddress.state
-ORDER BY totalValue DESC
-```
-
-## VIP Customer Analysis
-
-### VIP Customer Spending Patterns
-
-```sql
-SELECT c.vipStatus.level,
-       COUNT(DISTINCT c.id) as customerCount,
-       AVG(c.vipStatus.points) as avgPoints,
-       COUNT(o.orderId) as totalOrders,
-       AVG(o.totals.total) as avgOrderValue
+SELECT c.name, c.vipStatus.level, o.orderId, o.status
 FROM customers c
 LEFT JOIN orders o ON c.id = o.customerId
-GROUP BY c.vipStatus.level
-ORDER BY avgPoints DESC
-```
-
-### VIP Benefits Usage
-
-```sql
-SELECT c.name,
-       c.vipStatus.level,
-       benefit
-FROM customers c, UNNEST(c.vipStatus.benefits) AS b(benefit)
-WHERE c.vipStatus.level = 'Gold'
-ORDER BY c.name, benefit
-```
-
-## Product Review Analysis
-
-### Average Ratings by Category
-
-```sql
-SELECT p.category,
-       AVG(review.rating) as avgRating,
-       COUNT(review.rating) as reviewCount
-FROM products p, UNNEST(p.reviews) AS r(review)
-GROUP BY p.category
-ORDER BY avgRating DESC
-```
-
-### Products with No Reviews
-
-```sql
-SELECT name, price, category
-FROM products
-WHERE reviews IS NULL OR JSON_LENGTH(reviews) = 0
+ORDER BY c.name
 ```
 
 ## Advanced Filtering Examples
 
 ### Recent Orders from VIP Customers
 
+Date strings compare lexicographically, which sorts correctly for `YYYY-MM-DD`:
+
 ```sql
-SELECT o.orderId,
-       c.name,
-       c.vipStatus.level,
-       o.orderDate,
-       o.totals.total
+SELECT o.orderId, c.name, c.vipStatus.level, o.orderDate, o.totals.total
 FROM orders o
 JOIN customers c ON o.customerId = c.id
-WHERE o.orderDate >= '2024-01-01' 
+WHERE o.orderDate >= '2024-01-17'
   AND c.vipStatus.level IN ('Gold', 'Silver')
 ORDER BY o.orderDate DESC
 ```
 
-### High-Value Electronics Orders
+### Top 3 Orders by Value
 
 ```sql
-SELECT o.orderId,
-       c.name,
-       p.name as productName,
-       p.category,
-       oi.quantity,
-       oi.totalPrice
+SELECT TOP 3 o.orderId, c.name, o.totals.total
 FROM orders o
 JOIN customers c ON o.customerId = c.id
-JOIN UNNEST(o.items) AS oi(item)
-JOIN products p ON item.productId = p.id
-WHERE p.category = 'Electronics' 
-  AND item.totalPrice > 50
-ORDER BY item.totalPrice DESC
+ORDER BY o.totals.total DESC
 ```
 
-### Customers with Multiple Order Types
+## What These Examples Demonstrate
 
-```sql
-SELECT c.name,
-       COUNT(DISTINCT o.status) as statusTypes,
-       GROUP_CONCAT(DISTINCT o.status) as orderStatuses
-FROM customers c
-JOIN orders o ON c.id = o.customerId
-GROUP BY c.id, c.name
-HAVING COUNT(DISTINCT o.status) > 1
-```
+- Nested-object navigation (`vipStatus.level`, `o.totals.total`, `o.shippingAddress.state`)
+- Array flattening with `UNNEST` (string arrays like `tags`/`benefits` and object arrays like `reviews`/`items`)
+- `INNER` and `LEFT` JOINs, including JOINs whose key comes from an unnested element
+- Filtering, sorting, de-duplication, and limiting of richly nested data
 
-## Summary Queries
+## Planned / Not Yet Supported
 
-### Monthly Sales Summary
+The following analytics features are **not implemented yet** and will raise an error if used. They are listed here as a roadmap, not as runnable examples:
 
-```sql
-SELECT DATE_FORMAT(orderDate, '%Y-%m') as month,
-       COUNT(*) as orderCount,
-       SUM(totals.total) as totalRevenue,
-       AVG(totals.total) as avgOrderValue
-FROM orders
-GROUP BY DATE_FORMAT(orderDate, '%Y-%m')
-ORDER BY month DESC
-```
+- Aggregation and grouping: `GROUP BY`, `HAVING`, `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `COUNT(DISTINCT ...)`
+- Conditional expressions: `CASE WHEN ... THEN ... END`
+- SQL functions: string (`UPPER`, `LOWER`, `CONCAT`, ...), date (`DATE_FORMAT`, `MONTH`, `NOW`, ...), and JSON (`JSON_CONTAINS`, `JSON_OBJECT`, `JSON_LENGTH`) functions
+- Result-set composition: `UNION` / `UNION ALL`, `OFFSET`, and subqueries (in `WHERE`, `FROM`, or `SELECT`)
+- Additional joins: `RIGHT JOIN`, `FULL OUTER JOIN`
 
-### Customer Segmentation
-
-```sql
-SELECT CASE 
-         WHEN vipStatus.level = 'Gold' THEN 'High Value'
-         WHEN vipStatus.level = 'Silver' THEN 'Medium Value'
-         WHEN vipStatus.level = 'Bronze' THEN 'Low Value'
-         ELSE 'New Customer'
-       END as segment,
-       COUNT(*) as customerCount,
-       AVG(vipStatus.points) as avgPoints
-FROM customers
-GROUP BY segment
-ORDER BY avgPoints DESC
-```
-
-These examples demonstrate the power of JsonSQL for complex data analysis, including:
-
-- Nested object navigation
-- Array flattening with UNNEST
-- Complex JOINs across multiple data sources
-- Geographic and demographic analysis
-- Business intelligence queries
-- Customer segmentation and behavior analysis
+For the authoritative list of supported syntax, see the [SQL Syntax Support](README.md#sql-syntax-support) section of the README. Until aggregation lands, you can pipe JsonSQL output to a tool like `jq` for counts and sums, e.g. `jsonsql --query "SELECT category FROM products" | jq 'length'`.
