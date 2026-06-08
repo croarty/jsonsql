@@ -182,4 +182,22 @@ class JsonSqlCliTest {
         assertEquals(1, r.exitCode());
         assertTrue(r.err().toLowerCase().contains("error"));
     }
+
+    @Test
+    void testCsvFormatOutputsHeaderAndRows() {
+        CliResult r = runCli(withConfig("-q", "SELECT name, id FROM products", "--format", "csv"));
+        assertEquals(0, r.exitCode());
+        assertEquals("""
+            name,id
+            Widget,1
+            Gadget,2
+            """, r.out());
+    }
+
+    @Test
+    void testUnsupportedOutputFormatRejected() {
+        CliResult r = runCli(withConfig("-q", "SELECT * FROM products", "--format", "xml"));
+        assertEquals(1, r.exitCode());
+        assertTrue(r.err().toLowerCase().contains("unsupported output format"));
+    }
 }

@@ -17,10 +17,18 @@ import java.nio.file.Files;
 public class OutputHandler {
     private final ObjectMapper objectMapper;
     private final boolean prettyPrint;
+    private final OutputFormat format;
+    private final CsvFormatter csvFormatter;
 
     public OutputHandler(boolean prettyPrint) {
+        this(prettyPrint, OutputFormat.JSON);
+    }
+
+    public OutputHandler(boolean prettyPrint, OutputFormat format) {
         this.objectMapper = new ObjectMapper();
         this.prettyPrint = prettyPrint;
+        this.format = format != null ? format : OutputFormat.JSON;
+        this.csvFormatter = new CsvFormatter(objectMapper);
     }
 
     /**
@@ -49,7 +57,10 @@ public class OutputHandler {
 
         // Output to stdout if no file specified
         if (outputFile == null && !clipboard) {
-            System.out.println(output);
+            System.out.print(output);
+            if (!output.endsWith("\n")) {
+                System.out.println();
+            }
         }
     }
 
@@ -57,6 +68,9 @@ public class OutputHandler {
      * Format the JSON output based on pretty-print setting.
      */
     private String formatOutput(String jsonResult) throws IOException {
+        if (format == OutputFormat.CSV) {
+            return csvFormatter.format(jsonResult);
+        }
         if (!prettyPrint) {
             return jsonResult;
         }

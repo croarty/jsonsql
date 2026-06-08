@@ -80,5 +80,19 @@ class OutputHandlerTest {
         assertTrue(outputFile.exists());
         assertEquals(testJson, Files.readString(outputFile.toPath()));
     }
+
+    @Test
+    void testCsvOutputIncludesHeaderRow() throws Exception {
+        OutputHandler csvHandler = new OutputHandler(false, OutputFormat.CSV);
+        File outputFile = tempDir.resolve("output.csv").toFile();
+
+        csvHandler.handleOutput(testJson, outputFile, false);
+
+        assertEquals("""
+            name,price
+            Widget,19.99
+            Gadget,29.99
+            """, Files.readString(outputFile.toPath()));
+    }
 }
 

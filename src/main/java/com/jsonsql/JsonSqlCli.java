@@ -4,6 +4,7 @@ import com.jsonsql.config.CacheManager;
 import com.jsonsql.config.MappingManager;
 import com.jsonsql.config.QueryManager;
 import com.jsonsql.config.QueryParameterReplacer;
+import com.jsonsql.output.OutputFormat;
 import com.jsonsql.output.OutputHandler;
 import com.jsonsql.query.QueryExecutor;
 import picocli.CommandLine;
@@ -42,6 +43,9 @@ public class JsonSqlCli implements Callable<Integer> {
 
     @Option(names = {"--pretty"}, description = "Pretty-print JSON output")
     private boolean prettyPrint;
+
+    @Option(names = {"--format"}, description = "Output format: json (default) or csv", defaultValue = "json")
+    private String outputFormat;
 
     @Option(names = {"--list-tables"}, description = "Show all configured JSONPath shortcuts")
     private boolean listTables;
@@ -223,7 +227,8 @@ public class JsonSqlCli implements Callable<Integer> {
 
             // Output handling has its own error reporting, distinct from query execution
             try {
-                OutputHandler outputHandler = new OutputHandler(prettyPrint);
+                OutputFormat format = parseOutputFormat(outputFormat);
+                OutputHandler outputHandler = new OutputHandler(prettyPrint, format);
                 outputHandler.handleOutput(result, outputFile, clipboard);
             } catch (Exception e) {
                 System.err.println("Error writing output: " + e.getMessage());
@@ -337,6 +342,18 @@ public class JsonSqlCli implements Callable<Integer> {
         System.out.println("Total: " + queries.size() + " saved quer" + (queries.size() == 1 ? "y" : "ies"));
     }
     
+    private OutputFormat parseOutputFormat(String value) {
+        if (value == null || value.isBlank()) {
+            return OutputFormat.JSON;
+        }
+        return switch (value.trim().toLowerCase()) {
+            case "json" -> OutputFormat.JSON;
+            case "csv" -> OutputFormat.CSV;
+            default -> throw new IllegalArgumentException(
+                "Unsupported output format: '" + value + "'. Supported values: json, csv");
+        };
+    }
+
     /**
      * Parse parameter list from CLI arguments.
      * Expected format: key=value
