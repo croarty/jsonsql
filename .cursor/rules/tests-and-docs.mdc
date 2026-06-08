@@ -1,0 +1,52 @@
+---
+description: Require thorough unit tests and documentation updates for every code change
+alwaysApply: true
+---
+
+# Tests and documentation are mandatory
+
+Whenever you implement, fix, or change behavior in this project, you must complete **all three** before considering the task done:
+
+1. **Code change** — minimal, focused diff
+2. **Thorough unit tests** — not just happy-path smoke tests
+3. **Documentation updates** — keep docs accurate against actual behavior
+
+Do not treat tests or docs as optional follow-ups. Do not wait for the user to ask.
+
+## Unit tests
+
+- Add or update tests in `src/test/java/` for every behavior change.
+- Cover happy path, edge cases, and error paths relevant to the change.
+- Name tests clearly; match existing JUnit 5 style in the repo.
+- Run `mvn test` (or a targeted `-Dtest=...` subset while iterating, then full suite before finishing).
+- A task is not complete if tests fail or meaningful coverage is missing.
+
+**For new features**, test at the right layers:
+- Pure logic → unit tests on the class (e.g. `CsvFormatterTest`)
+- CLI wiring → `JsonSqlCliTest`
+- Query engine behavior → `QueryExecutor` / parser / evaluator tests as appropriate
+
+## Documentation
+
+Update every doc that would otherwise lie after the change. At minimum check:
+
+- `README.md` — features, CLI options, examples, Future Enhancements
+- `EXAMPLES.md` / `QUICK-START.md` — if runnable examples are affected
+- `COMPREHENSIVE-REVIEW.md` — capability status, gaps, test counts
+- Any other `*.md` that mentions the changed behavior
+
+Rules for docs:
+- Never show unsupported syntax as if it works.
+- Move removed "future" items to "implemented" (or vice versa) the same turn as the code ships.
+- Runnable examples must match real CLI flags, field names, and fixtures.
+- Do not edit plan files unless the user asks.
+
+## Definition of done
+
+Before reporting completion, confirm:
+
+- [ ] Tests added/updated and passing
+- [ ] Relevant markdown updated (not deferred)
+- [ ] No stale "planned" or "not implemented" claims for shipped behavior
+
+If the user only asked a question with no code change, tests and doc updates are not required.
