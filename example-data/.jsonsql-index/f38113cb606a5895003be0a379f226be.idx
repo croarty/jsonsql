@@ -1,0 +1,48 @@
+{
+  "table" : "sales",
+  "field" : "quarter",
+  "kind" : "scalar",
+  "jsonPath" : "$",
+  "root" : "C:\\Users\\CiaranRoarty\\cursor\\jsonsql\\example-data\\sales",
+  "files" : [ {
+    "relPath" : "north/q1.json",
+    "canonicalPath" : "C:\\Users\\CiaranRoarty\\cursor\\jsonsql\\example-data\\sales\\north\\q1.json",
+    "mtime" : 1781205885330,
+    "size" : 549,
+    "valueType" : "string",
+    "valuesOmitted" : false,
+    "distinctValues" : [ "Q1" ],
+    "min" : "Q1",
+    "max" : "Q1"
+  }, {
+    "relPath" : "north/q2.json",
+    "canonicalPath" : "C:\\Users\\CiaranRoarty\\cursor\\jsonsql\\example-data\\sales\\north\\q2.json",
+    "mtime" : 1781205889764,
+    "size" : 391,
+    "valueType" : "string",
+    "valuesOmitted" : false,
+    "distinctValues" : [ "Q2" ],
+    "min" : "Q2",
+    "max" : "Q2"
+  }, {
+    "relPath" : "south/q1.json",
+    "canonicalPath" : "C:\\Users\\CiaranRoarty\\cursor\\jsonsql\\example-data\\sales\\south\\q1.json",
+    "mtime" : 1781205895176,
+    "size" : 389,
+    "valueType" : "string",
+    "valuesOmitted" : false,
+    "distinctValues" : [ "Q1" ],
+    "min" : "Q1",
+    "max" : "Q1"
+  }, {
+    "relPath" : "south/q2.json",
+    "canonicalPath" : "C:\\Users\\CiaranRoarty\\cursor\\jsonsql\\example-data\\sales\\south\\q2.json",
+    "mtime" : 1781205901760,
+    "size" : 551,
+    "valueType" : "string",
+    "valuesOmitted" : false,
+    "distinctValues" : [ "Q2" ],
+    "min" : "Q2",
+    "max" : "Q2"
+  } ]
+}
