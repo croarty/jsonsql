@@ -1,0 +1,39 @@
+{
+  "category": "Furniture",
+  "year": 2024,
+  "products": [
+    {
+      "id": 202,
+      "name": "Fjord Standing Desk",
+      "brand": "Nord",
+      "category": "Furniture",
+      "price": 599.00,
+      "currency": "USD",
+      "inStock": true,
+      "year": 2024,
+      "region": "South",
+      "tags": ["desk", "adjustable", "office"],
+      "specifications": { "material": "steel", "weightKg": 32.0, "color": "white" },
+      "reviews": [
+        { "user": "mia", "rating": 5, "verified": true, "comment": "Smooth height adjust" },
+        { "user": "noah", "rating": 4, "verified": true, "comment": "Sturdy at full height" }
+      ]
+    },
+    {
+      "id": 203,
+      "name": "Birch Bookshelf",
+      "brand": "Timbr",
+      "category": "Furniture",
+      "price": 159.00,
+      "currency": "USD",
+      "inStock": false,
+      "year": 2024,
+      "region": "South",
+      "tags": ["storage", "wood"],
+      "specifications": { "material": "birch", "weightKg": 18.0, "color": "natural" },
+      "reviews": [
+        { "user": "ola", "rating": 2, "verified": true, "comment": "Shelves bow a little" }
+      ]
+    }
+  ]
+}

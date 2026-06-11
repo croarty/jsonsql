@@ -1,0 +1,55 @@
+{
+  "category": "Electronics",
+  "year": 2024,
+  "products": [
+    {
+      "id": 103,
+      "name": "Aurora Pro ANC Headphones",
+      "brand": "Sonex",
+      "category": "Electronics",
+      "price": 199.99,
+      "currency": "USD",
+      "inStock": true,
+      "year": 2024,
+      "region": "South",
+      "tags": ["wireless", "audio", "anc", "gaming"],
+      "specifications": { "material": "aluminum", "weightKg": 0.30, "color": "silver" },
+      "reviews": [
+        { "user": "finn", "rating": 5, "verified": true, "comment": "Best ANC in class" },
+        { "user": "gwen", "rating": 5, "verified": true, "comment": "Worth every cent" }
+      ]
+    },
+    {
+      "id": 104,
+      "name": "Nimbus Mechanical Keyboard",
+      "brand": "Keytron",
+      "category": "Electronics",
+      "price": 149.99,
+      "currency": "USD",
+      "inStock": true,
+      "year": 2024,
+      "region": "South",
+      "tags": ["gaming", "usb", "rgb"],
+      "specifications": { "material": "aluminum", "weightKg": 1.1, "color": "black" },
+      "reviews": [
+        { "user": "hana", "rating": 4, "verified": true, "comment": "Crisp switches" }
+      ]
+    },
+    {
+      "id": 105,
+      "name": "Vio 4K Webcam",
+      "brand": "Lumio",
+      "category": "Electronics",
+      "price": 119.99,
+      "currency": "USD",
+      "inStock": true,
+      "year": 2024,
+      "region": "South",
+      "tags": ["video", "usb", "4k"],
+      "specifications": { "material": "plastic", "weightKg": 0.15, "color": "black" },
+      "reviews": [
+        { "user": "ivan", "rating": 4, "verified": false, "comment": "Sharp image" }
+      ]
+    }
+  ]
+}

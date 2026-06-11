@@ -1,0 +1,8 @@
+{
+  "region": "North",
+  "quarter": "Q2",
+  "orders": [
+    { "orderId": "N-2001", "productId": 101, "quantity": 1, "unitPrice": 79.99, "status": "returned", "channel": "web", "region": "North", "quarter": "Q2" },
+    { "orderId": "N-2002", "productId": 201, "quantity": 2, "unitPrice": 219.00, "status": "delivered", "channel": "partner", "region": "North", "quarter": "Q2" }
+  ]
+}

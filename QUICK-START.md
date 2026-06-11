@@ -11,7 +11,7 @@ mvn clean package
 
 Create an alias for easier usage:
 ```bash
-alias jsonsql='java -jar target/jsonsql-1.2.0.jar'
+alias jsonsql='java -jar target/jsonsql-1.3.0.jar'
 ```
 
 ## Scenario 1: Simple Auto-Detect (Default)
@@ -117,6 +117,20 @@ jsonsql --query "SELECT p.name, p.year, o.quantity, o.quarter FROM orders_multi 
 jsonsql --query "SELECT TOP 5 p.name, p.price, o.quantity FROM orders_multi o JOIN products_multi p ON o.productId = p.id WHERE p.year >= 2024 ORDER BY p.price DESC" --data-dir example-data --pretty
 ```
 
+**Speed up selective queries with an index (optional):**
+```bash
+# Build a per-file index so queries skip files that can't match
+jsonsql --add-index products_multi year --data-dir example-data
+jsonsql --list-indexes --data-dir example-data
+
+# Now this only reads the file(s) actually containing year = 2025
+jsonsql --query "SELECT * FROM products_multi WHERE year = 2025" --data-dir example-data --pretty
+
+# Rebuild after the underlying files change; or bypass with --no-index
+jsonsql --rebuild-indexes --data-dir example-data
+```
+Indexes prune at the file level, so they help most with many partitioned files. See [INDEXING.md](INDEXING.md) for details.
+
 ## View All Configured Mappings
 
 ```bash
@@ -214,4 +228,5 @@ For more details, see:
 - `README.md` - Complete documentation
 - `EXAMPLES.md` - Basic usage examples
 - `MULTI-FILE-EXAMPLES.md` - Advanced multi-file scenarios
+- `INDEXING.md` - Declared indexes and file-level pruning
 

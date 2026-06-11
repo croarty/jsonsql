@@ -5,9 +5,9 @@
 JsonSQL is a well-architected SQL-like query engine for JSON data. This document provides a thorough review of existing functionality and prioritized suggestions for new features.
 
 **Current Status:**
-- **Test Coverage**: 523 tests, all passing ✅
+- **Test Coverage**: 570 tests, all passing ✅
 - **Core Features**: Fully functional SQL-like query engine
-- **Recent Additions**: DISTINCT, ILIKE, CTEs, CSV output, schema introspection (`--describe`), dry-run validation (`--dry-run`)
+- **Recent Additions**: DISTINCT, ILIKE, CTEs, CSV output, schema introspection (`--describe`), dry-run validation (`--dry-run`), declared indexes / file-level pruning (`--add-index`)
 - **Architecture**: Clean separation of concerns, well-structured, maintainable
 
 ---
@@ -177,7 +177,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Strengths
 - Clean separation of concerns
 - Well-structured packages
-- Comprehensive test coverage (523 tests, all passing)
+- Comprehensive test coverage (570 tests, all passing)
 - Good error handling
 - Flexible field accessor pattern
 - Efficient JSONPath integration
@@ -466,12 +466,12 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
 
 ### 3.5 Performance Optimizations (MEDIUM PRIORITY)
 
-**Current state**: Optional disk caching of parsed JSON is implemented (`--enable-cache`, auto-invalidated on source change). Queries otherwise load matched files fully into memory.
+**Current state**: Optional disk caching of parsed JSON is implemented (`--enable-cache`, auto-invalidated on source change). **Declared indexes are implemented** (`--add-index`): per-file value summaries enable file-level pruning of multi-file tables (`=`, `IN`, range predicates, and `UNNEST`ed arrays), with a safe full-scan fallback. Queries otherwise load matched files fully into memory.
 
 **Proposed Features**:
 - Early termination optimization (currently `TOP`/`LIMIT` is applied last and does not short-circuit loading)
 - Streaming mode for very large files
-- Index-like structures for frequently queried fields
+- ✅ File-level pruning via declared indexes — **IMPLEMENTED** (see `INDEXING.md`); row-level / NDJSON byte-offset indexing for single large documents remains future work
 
 **Implementation Complexity**: High
 **Business Value**: High (for large datasets)
@@ -574,7 +574,7 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
 - DISTINCT implementation uses canonical JSON string representation
 
 ### 6.2 Testing Strategy
-- Maintain high test coverage (currently 523 tests, all passing)
+- Maintain high test coverage (currently 570 tests, all passing)
 - Add integration tests for new features
 - Test edge cases (nulls, empty arrays, etc.)
 - Test files organized by feature:
@@ -582,6 +582,8 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
   - `CteTest.java` - CTE functionality
   - `IlikeOperatorTest.java` - ILIKE functionality
   - `UnnestJoinTest.java` - UNNEST + JOIN combinations
+  - `IndexManagerTest.java` / `IndexBuilderTest.java` / `IndexPlannerTest.java` / `IndexPathResolutionTest.java` - declared indexes & file pruning
+  - `QueryExecutorIndexPruningTest.java` - indexed vs. full-scan result parity
   - Plus many more comprehensive test suites
 
 ### 6.3 Backward Compatibility
@@ -604,6 +606,7 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
 ✅ CSV output (`--format csv`) with header row
 ✅ Schema introspection (`--describe <table>`)
 ✅ Dry-run validation (`--dry-run`)
+✅ Declared indexes / file-level pruning (`--add-index`, `--list-indexes`, `--rebuild-indexes`, `--no-index`)
 ✅ Flexible JSONPath mappings
 ✅ Saved queries (39 pre-configured examples)
 ✅ Good test coverage (all passing)
@@ -630,6 +633,6 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
 
 JsonSQL is a solid foundation with excellent core functionality. Recent additions of DISTINCT, ILIKE, and CTEs demonstrate the system's extensibility. The suggested enhancements would transform it from a good tool into a comprehensive SQL-like query engine for JSON data. The prioritized roadmap focuses on high-impact features that provide the most value to users.
 
-**Current Test Status**: ✅ 523 tests passing
+**Current Test Status**: ✅ 570 tests passing
 **Code Quality**: ✅ High - Clean architecture, good separation of concerns
 **Documentation**: ✅ Comprehensive - README, examples, saved queries reference

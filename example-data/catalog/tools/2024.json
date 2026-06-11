@@ -1,0 +1,39 @@
+{
+  "category": "Tools",
+  "year": 2024,
+  "products": [
+    {
+      "id": 302,
+      "name": "IronGrip Drill X",
+      "brand": "Forge",
+      "category": "Tools",
+      "price": 119.99,
+      "currency": "USD",
+      "inStock": true,
+      "year": 2024,
+      "region": "South",
+      "tags": ["power", "cordless", "brushless"],
+      "specifications": { "material": "composite", "weightKg": 1.3, "color": "black" },
+      "reviews": [
+        { "user": "sam", "rating": 5, "verified": true, "comment": "Brushless is a leap" },
+        { "user": "tia", "rating": 5, "verified": true, "comment": "Long battery life" }
+      ]
+    },
+    {
+      "id": 303,
+      "name": "ClampMaster Vise",
+      "brand": "Stedi",
+      "category": "Tools",
+      "price": 59.99,
+      "currency": "USD",
+      "inStock": true,
+      "year": 2024,
+      "region": "South",
+      "tags": ["manual", "clamp"],
+      "specifications": { "material": "castiron", "weightKg": 4.0, "color": "grey" },
+      "reviews": [
+        { "user": "uma", "rating": 4, "verified": true, "comment": "Rock solid grip" }
+      ]
+    }
+  ]
+}

@@ -4,11 +4,18 @@ import com.jsonsql.config.CacheManager;
 import com.jsonsql.config.MappingManager;
 import com.jsonsql.config.QueryManager;
 import com.jsonsql.config.QueryParameterReplacer;
+import com.jsonsql.index.FileSummary;
+import com.jsonsql.index.IndexBuilder;
+import com.jsonsql.index.IndexDefinition;
+import com.jsonsql.index.IndexManager;
+import com.jsonsql.index.IndexStore;
+import com.jsonsql.index.TableIndex;
 import com.jsonsql.introspection.TableDescriber;
 import com.jsonsql.output.OutputFormat;
 import com.jsonsql.output.OutputHandler;
 import com.jsonsql.query.DryRunReporter;
 import com.jsonsql.query.QueryExecutor;
+import com.jsonsql.query.TableFileResolver;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -20,7 +27,7 @@ import java.util.concurrent.Callable;
 @Command(
     name = "jsonsql",
     mixinStandardHelpOptions = true,
-    version = "JsonSQL 1.2.0",
+    version = "JsonSQL 1.3.0",
     description = "Query JSON files using SQL-like syntax"
 )
 public class JsonSqlCli implements Callable<Integer> {
@@ -81,6 +88,27 @@ public class JsonSqlCli implements Callable<Integer> {
 
     @Option(names = {"--dry-run"}, description = "Validate query syntax and table mappings without executing")
     private boolean dryRun;
+
+    @Option(names = {"--indexes-file"}, description = "Path to declared-index definitions file", defaultValue = ".jsonsql-indexes.json")
+    private File indexesFile;
+
+    @Option(names = {"--add-index"}, description = "Declare and build an index on a table field (args: <table> <field>)", arity = "2")
+    private String[] addIndex;
+
+    @Option(names = {"--drop-index"}, description = "Remove a declared index (args: <table> <field>)", arity = "2")
+    private String[] dropIndex;
+
+    @Option(names = {"--list-indexes"}, description = "List declared indexes with fresh/stale status")
+    private boolean listIndexes;
+
+    @Option(names = {"--rebuild-index"}, description = "Rebuild one index (args: <table> <field>)", arity = "2")
+    private String[] rebuildIndex;
+
+    @Option(names = {"--rebuild-indexes"}, description = "Rebuild all declared indexes")
+    private boolean rebuildIndexes;
+
+    @Option(names = {"--no-index"}, description = "Bypass declared indexes for this query (force full scan)")
+    private boolean noIndex;
 
     public static void main(String[] args) {
         int exitCode = new CommandLine(new JsonSqlCli()).execute(args);
@@ -179,6 +207,12 @@ public class JsonSqlCli implements Callable<Integer> {
             }
         }
         
+        // Handle index management commands
+        if (addIndex != null || dropIndex != null || listIndexes
+            || rebuildIndex != null || rebuildIndexes) {
+            return handleIndexCommands(mappingManager);
+        }
+
         // Handle save-query command
         if (saveQueryName != null) {
             if (query == null) {
@@ -246,7 +280,9 @@ public class JsonSqlCli implements Callable<Integer> {
                 
                 // Create CacheManager if caching is enabled
                 CacheManager cacheManager = enableCache ? new CacheManager(dataDirectory) : null;
-                QueryExecutor executor = new QueryExecutor(mappingManager, dataDirectory, cacheManager);
+                // Load declared indexes for file pruning unless explicitly bypassed.
+                IndexManager indexManager = noIndex ? null : loadIndexManagerQuietly();
+                QueryExecutor executor = new QueryExecutor(mappingManager, dataDirectory, cacheManager, indexManager);
                 if (dryRun) {
                     System.out.println(DryRunReporter.format(executor.dryRunValidate(query), mappingManager));
                     return 0;
@@ -341,6 +377,11 @@ public class JsonSqlCli implements Callable<Integer> {
         if (deleteQueryName != null) actions++;
         if (saveQueryName != null) actions++;
         if (runQueryName != null) actions++;
+        if (addIndex != null) actions++;
+        if (dropIndex != null) actions++;
+        if (listIndexes) actions++;
+        if (rebuildIndex != null) actions++;
+        if (rebuildIndexes) actions++;
         // Inline query execution counts as an action only when not used as a save payload
         // and not combined with run-query (handled separately below).
         if (query != null && saveQueryName == null && runQueryName == null) actions++;
@@ -348,7 +389,8 @@ public class JsonSqlCli implements Callable<Integer> {
         if (actions > 1) {
             return "Multiple actions specified. Use only one of --query, --run-query, --save-query, "
                 + "--delete-query, --list-tables, --describe, --list-queries, --add-mapping, "
-                + "or --clear-cache at a time.";
+                + "--clear-cache, --add-index, --drop-index, --list-indexes, --rebuild-index, "
+                + "or --rebuild-indexes at a time.";
         }
 
         if (runQueryName != null && query != null) {
@@ -384,6 +426,198 @@ public class JsonSqlCli implements Callable<Integer> {
         System.out.println("Total: " + queries.size() + " saved quer" + (queries.size() == 1 ? "y" : "ies"));
     }
     
+    /**
+     * Handle the declared-index management commands (add/drop/list/rebuild).
+     */
+    private Integer handleIndexCommands(MappingManager mappingManager) {
+        String dataDirError = validateDataDirectory();
+        if (dataDirError != null) {
+            System.err.println("Error: " + dataDirError);
+            return 1;
+        }
+        IndexManager indexManager;
+        try {
+            indexManager = new IndexManager(indexesFile);
+        } catch (RuntimeException e) {
+            System.err.println("Error loading index definitions: " + e.getMessage());
+            return 1;
+        }
+        IndexStore indexStore = new IndexStore(dataDirectory);
+        IndexBuilder builder = new IndexBuilder(mappingManager, dataDirectory, indexStore);
+
+        if (addIndex != null) {
+            String table = addIndex[0];
+            String field = addIndex[1];
+            if (!mappingManager.hasMapping(table)) {
+                System.err.println("Error: No mapping found for table: " + table
+                    + ". Use --add-mapping to define it.");
+                return 1;
+            }
+            try {
+                boolean added = indexManager.addIndex(table, field);
+                TableIndex idx = builder.build(table, field);
+                System.out.println((added ? "Index added: " : "Index already declared, rebuilt: ")
+                    + table + "." + field);
+                System.out.println(summarize(idx));
+                return 0;
+            } catch (Exception e) {
+                System.err.println("Error building index: " + e.getMessage());
+                if (isDebugEnabled()) {
+                    e.printStackTrace();
+                }
+                return 1;
+            }
+        }
+
+        if (dropIndex != null) {
+            String table = dropIndex[0];
+            String field = dropIndex[1];
+            boolean removed = indexManager.dropIndex(table, field);
+            indexStore.delete(table, field);
+            System.out.println(removed
+                ? "Index dropped: " + table + "." + field
+                : "No such index: " + table + "." + field);
+            return 0;
+        }
+
+        if (listIndexes) {
+            listDeclaredIndexes(indexManager, indexStore, mappingManager);
+            return 0;
+        }
+
+        if (rebuildIndex != null) {
+            String table = rebuildIndex[0];
+            String field = rebuildIndex[1];
+            if (!indexManager.hasIndex(table, field)) {
+                System.err.println("Error: No declared index: " + table + "." + field);
+                return 1;
+            }
+            try {
+                TableIndex idx = builder.build(table, field);
+                System.out.println("Rebuilt index: " + table + "." + field);
+                System.out.println(summarize(idx));
+                return 0;
+            } catch (Exception e) {
+                System.err.println("Error rebuilding index: " + e.getMessage());
+                if (isDebugEnabled()) {
+                    e.printStackTrace();
+                }
+                return 1;
+            }
+        }
+
+        if (rebuildIndexes) {
+            List<IndexDefinition> defs = indexManager.getAllIndexes();
+            if (defs.isEmpty()) {
+                System.out.println("No declared indexes to rebuild.");
+                return 0;
+            }
+            int ok = 0;
+            int failed = 0;
+            for (IndexDefinition def : defs) {
+                try {
+                    builder.build(def.getTable(), def.getField());
+                    System.out.println("Rebuilt: " + def);
+                    ok++;
+                } catch (Exception e) {
+                    System.err.println("Failed: " + def + " - " + e.getMessage());
+                    failed++;
+                }
+            }
+            System.out.println("Rebuilt " + ok + " index(es)"
+                + (failed > 0 ? ", " + failed + " failed" : "") + ".");
+            return failed > 0 ? 1 : 0;
+        }
+
+        return 0;
+    }
+
+    private String summarize(TableIndex idx) {
+        return "  kind=" + idx.getKind() + ", files=" + idx.getFiles().size();
+    }
+
+    private void listDeclaredIndexes(IndexManager indexManager, IndexStore indexStore,
+                                     MappingManager mappingManager) {
+        List<IndexDefinition> defs = indexManager.getAllIndexes();
+        if (defs.isEmpty()) {
+            System.out.println("No declared indexes.");
+            System.out.println("Add one with: jsonsql --add-index <table> <field>");
+            return;
+        }
+        System.out.println("Declared indexes:");
+        System.out.println("─".repeat(72));
+        for (IndexDefinition def : defs) {
+            TableIndex idx = indexStore.load(def.getTable(), def.getField());
+            String status = indexFreshness(def, idx, mappingManager);
+            String detail = idx == null
+                ? "(not built)"
+                : idx.getKind() + ", " + idx.getFiles().size() + " file(s)";
+            System.out.printf("  %-32s -> %-26s [%s]%n", def.toString(), detail, status);
+        }
+        System.out.println("─".repeat(72));
+        System.out.println("Total: " + defs.size() + " index(es)");
+    }
+
+    /**
+     * Determine whether a built index still matches the current backing files.
+     */
+    private String indexFreshness(IndexDefinition def, TableIndex idx, MappingManager mappingManager) {
+        if (idx == null || !mappingManager.hasMapping(def.getTable())) {
+            return "STALE";
+        }
+        String jsonPath = mappingManager.getJsonPathOnly(def.getTable());
+        if (idx.getJsonPath() != null && jsonPath != null && !idx.getJsonPath().equals(jsonPath)) {
+            return "STALE";
+        }
+        try {
+            TableFileResolver resolver = new TableFileResolver(mappingManager, dataDirectory);
+            File base = resolver.resolveBase(def.getTable());
+            List<File> files = resolver.resolveFiles(def.getTable());
+            if (files.size() != idx.getFiles().size()) {
+                return "STALE";
+            }
+            for (File f : files) {
+                FileSummary match = null;
+                String canon = TableFileResolver.canonicalPath(f);
+                for (FileSummary s : idx.getFiles()) {
+                    if (canon.equals(s.getCanonicalPath())) {
+                        match = s;
+                        break;
+                    }
+                }
+                if (match == null) {
+                    String rel = TableFileResolver.relativePath(base, f);
+                    for (FileSummary s : idx.getFiles()) {
+                        if (rel.equals(s.getRelPath())) {
+                            match = s;
+                            break;
+                        }
+                    }
+                }
+                if (match == null || match.getMtime() != f.lastModified() || match.getSize() != f.length()) {
+                    return "STALE";
+                }
+            }
+            return "FRESH";
+        } catch (Exception e) {
+            return "STALE";
+        }
+    }
+
+    /**
+     * Load declared indexes for query-time pruning. Returns null when none are declared
+     * or the definitions file is unreadable (queries should still run via full scan).
+     */
+    private IndexManager loadIndexManagerQuietly() {
+        try {
+            IndexManager indexManager = new IndexManager(indexesFile);
+            return indexManager.size() > 0 ? indexManager : null;
+        } catch (RuntimeException e) {
+            System.err.println("Warning: ignoring index definitions (" + e.getMessage() + ")");
+            return null;
+        }
+    }
+
     private OutputFormat parseOutputFormat(String value) {
         if (value == null || value.isBlank()) {
             return OutputFormat.JSON;

@@ -1,0 +1,9 @@
+{
+  "region": "South",
+  "quarter": "Q2",
+  "orders": [
+    { "orderId": "S-2001", "productId": 202, "quantity": 1, "unitPrice": 599.00, "status": "delivered", "channel": "web", "region": "South", "quarter": "Q2" },
+    { "orderId": "S-2002", "productId": 105, "quantity": 2, "unitPrice": 119.99, "status": "shipped", "channel": "web", "region": "South", "quarter": "Q2" },
+    { "orderId": "S-2003", "productId": 303, "quantity": 4, "unitPrice": 59.99, "status": "delivered", "channel": "partner", "region": "South", "quarter": "Q2" }
+  ]
+}

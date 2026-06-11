@@ -9,6 +9,9 @@ import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.Option;
 import com.jsonsql.config.CacheManager;
 import com.jsonsql.config.MappingManager;
+import com.jsonsql.index.IndexManager;
+import com.jsonsql.index.IndexPlanner;
+import com.jsonsql.index.IndexStore;
 import net.sf.jsqlparser.expression.Expression;
 
 import java.io.File;
@@ -21,25 +24,34 @@ import java.util.*;
  */
 public class QueryExecutor implements FieldAccessor {
     private final MappingManager mappingManager;
-    private final File dataDirectory;
     private final ObjectMapper objectMapper;
     private final QueryParser queryParser;
     private final Configuration jsonPathConfig;
     private final CacheManager cacheManager;
+    private final TableFileResolver fileResolver;
+    private final IndexPlanner indexPlanner;
 
     public QueryExecutor(MappingManager mappingManager, File dataDirectory) {
-        this(mappingManager, dataDirectory, null);
+        this(mappingManager, dataDirectory, null, null);
     }
     
     public QueryExecutor(MappingManager mappingManager, File dataDirectory, CacheManager cacheManager) {
+        this(mappingManager, dataDirectory, cacheManager, null);
+    }
+
+    public QueryExecutor(MappingManager mappingManager, File dataDirectory,
+                         CacheManager cacheManager, IndexManager indexManager) {
         this.mappingManager = mappingManager;
-        this.dataDirectory = dataDirectory;
         this.cacheManager = cacheManager;
         this.objectMapper = new ObjectMapper();
         this.queryParser = new QueryParser();
         this.jsonPathConfig = Configuration.builder()
             .options(Option.DEFAULT_PATH_LEAF_TO_NULL, Option.SUPPRESS_EXCEPTIONS)
             .build();
+        this.fileResolver = new TableFileResolver(mappingManager, dataDirectory);
+        this.indexPlanner = indexManager != null
+            ? new IndexPlanner(indexManager, new IndexStore(dataDirectory), mappingManager, this.fileResolver)
+            : null;
     }
 
     /**
@@ -121,8 +133,9 @@ public class QueryExecutor implements FieldAccessor {
      * Execute a parsed query with execution context (supports recursive execution for CTEs).
      */
     private String executeQuery(ParsedQuery parsedQuery, QueryExecutionContext context) throws Exception {
-        // Load data from FROM table (checks CTE context first)
-        List<JsonNode> fromData = loadTableData(parsedQuery.getFromTable(), context);
+        // Load data from FROM table (checks CTE context first). The query is passed so the
+        // index planner can prune backing files for the FROM table before loading.
+        List<JsonNode> fromData = loadTableData(parsedQuery.getFromTable(), context, parsedQuery);
 
         // Apply UNNEST operations if any (must happen before JOINs so UNNEST columns can be used in JOIN conditions)
         List<JsonNode> unnestedData = fromData;
@@ -345,10 +358,19 @@ public class QueryExecutor implements FieldAccessor {
         return rows;
     }
 
+    private List<JsonNode> loadTableData(TableInfo tableInfo, QueryExecutionContext context) throws IOException {
+        return loadTableData(tableInfo, context, null);
+    }
+
     /**
      * Load data for a table using its JSONPath mapping or CTE context.
+     *
+     * @param pruningQuery the query whose WHERE/UNNEST clauses apply to this table, or null.
+     *                     When provided (and an index manager is configured), the index
+     *                     planner may skip backing files that cannot contain a match.
      */
-    private List<JsonNode> loadTableData(TableInfo tableInfo, QueryExecutionContext context) throws IOException {
+    private List<JsonNode> loadTableData(TableInfo tableInfo, QueryExecutionContext context,
+                                         ParsedQuery pruningQuery) throws IOException {
         String tableName = tableInfo.getTableName();
         
         // Check if this is a CTE first
@@ -371,6 +393,11 @@ public class QueryExecutor implements FieldAccessor {
         
         // Resolve the JSON file(s) backing this table
         List<File> jsonFiles = resolveJsonFiles(tableName);
+
+        // Index-based file pruning (correctness-preserving: only provably-empty files are skipped).
+        if (indexPlanner != null && pruningQuery != null) {
+            jsonFiles = indexPlanner.prune(tableInfo, pruningQuery, jsonFiles);
+        }
         
         // Load and combine data from all files
         List<JsonNode> dataList = new ArrayList<>();
@@ -422,45 +449,11 @@ public class QueryExecutor implements FieldAccessor {
 
     /**
      * Resolve the JSON file(s) backing a mapped table. Handles single files,
-     * relative/absolute paths, and directories (recursively).
+     * relative/absolute paths, and directories (recursively). Delegates to the shared
+     * {@link TableFileResolver} so the index subsystem resolves files identically.
      */
     private List<File> resolveJsonFiles(String tableName) throws IOException {
-        String fileName = mappingManager.getFileName(tableName);
-        List<File> jsonFiles = new ArrayList<>();
-
-        if (fileName != null) {
-            // Use filename/path from mapping - could be file, directory, or relative path
-            File fileOrDir = new File(dataDirectory, fileName);
-
-            // Handle absolute paths
-            if (!fileOrDir.isAbsolute() && new File(fileName).isAbsolute()) {
-                fileOrDir = new File(fileName);
-            }
-
-            if (fileOrDir.isDirectory()) {
-                // Recursively load all .json files from the directory tree
-                try (java.util.stream.Stream<java.nio.file.Path> stream = Files.walk(fileOrDir.toPath())) {
-                    List<File> found = stream
-                        .filter(Files::isRegularFile)
-                        .filter(p -> p.getFileName().toString().toLowerCase().endsWith(".json"))
-                        .sorted()
-                        .map(java.nio.file.Path::toFile)
-                        .collect(java.util.stream.Collectors.toList());
-                    if (found.isEmpty()) {
-                        throw new IOException("No JSON files found in directory tree: " + fileOrDir.getAbsolutePath());
-                    }
-                    jsonFiles.addAll(found);
-                }
-            } else {
-                // Single file
-                jsonFiles.add(fileOrDir);
-            }
-        } else {
-            // Fall back to using table name as filename
-            jsonFiles.add(findJsonFile(tableName));
-        }
-
-        return jsonFiles;
+        return fileResolver.resolveFiles(tableName);
     }
 
     /**
@@ -536,29 +529,6 @@ public class QueryExecutor implements FieldAccessor {
         }
         
         return wrappedData;
-    }
-
-    /**
-     * Find JSON file for a table name.
-     */
-    private File findJsonFile(String tableName) {
-        // Try exact match first
-        File exactMatch = new File(dataDirectory, tableName + ".json");
-        if (exactMatch.exists()) {
-            return exactMatch;
-        }
-
-        // Try case-insensitive search
-        File[] files = dataDirectory.listFiles((dir, name) -> 
-            name.toLowerCase().equals(tableName.toLowerCase() + ".json")
-        );
-
-        if (files != null && files.length > 0) {
-            return files[0];
-        }
-
-        // If not found, return the exact match path anyway (will fail with clear error)
-        return exactMatch;
     }
 
     /**

@@ -20,6 +20,7 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
 - **Schema Introspection**: `--describe <table>` shows field paths, types, and sample values
 - **Dry-Run Validation**: `--dry-run` checks syntax, mappings, and data files without executing
 - **Optional Disk Caching**: Persist parsed JSON between runs with `--enable-cache`; auto-invalidated when sources change
+- **Declared Indexes**: Build per-file value summaries with `--add-index <table> <field>` so selective queries skip backing files that cannot match (file-level pruning; see [Indexing](INDEXING.md))
 - **Recursive Directory Loading**: Map a directory to load and combine all `.json` files within it (including subdirectories)
 - **Table Aliases**: Use aliases for cleaner queries (e.g., `FROM orders o`)
 
@@ -38,18 +39,18 @@ cd jsonsql
 mvn clean package
 ```
 
-This creates an executable JAR at `target/jsonsql-1.2.0.jar`.
+This creates an executable JAR at `target/jsonsql-1.3.0.jar`.
 
 ### Running
 
 ```bash
-java -jar target/jsonsql-1.2.0.jar [options]
+java -jar target/jsonsql-1.3.0.jar [options]
 ```
 
 Or create an alias for convenience:
 
 ```bash
-alias jsonsql='java -jar /path/to/jsonsql-1.2.0.jar'
+alias jsonsql='java -jar /path/to/jsonsql-1.3.0.jar'
 ```
 
 ## Quick Start
@@ -144,6 +145,17 @@ Options:
       --enable-cache         Enable disk-based caching of parsed JSON data for
                              faster subsequent queries
       --clear-cache          Clear all cached data for mapped tables
+      --indexes-file=<file>  Path to declared-index definitions
+                             (default: .jsonsql-indexes.json)
+      --add-index <table> <field>
+                             Declare and build an index on a table field
+      --drop-index <table> <field>
+                             Remove a declared index
+      --list-indexes         List declared indexes with fresh/stale status
+      --rebuild-index <table> <field>
+                             Rebuild one declared index
+      --rebuild-indexes      Rebuild all declared indexes
+      --no-index             Bypass declared indexes for this query (full scan)
   -h, --help                 Show this help message and exit
   -V, --version              Print version information and exit
 ```
@@ -880,6 +892,33 @@ How it works:
 - Caching trades disk space for speed on repeated reads; it does not reduce the per-query memory needed to run a query.
 - Use `--clear-cache` to remove all cached entries (for example, to reclaim disk space).
 
+## Indexing
+
+For tables backed by **many files** (e.g. a partitioned directory tree), JsonSQL can build small per-file value summaries so selective queries skip files that cannot contain a matching row. This is **file-level pruning** — the unit that is skipped is a whole file.
+
+```bash
+# Declare and build an index on a field (scalar or dotted path)
+jsonsql --add-index products category --data-dir example-data
+jsonsql --add-index products price    --data-dir example-data
+
+# Array fields are indexed as a union of element values (used with UNNEST)
+jsonsql --add-index products tags           --data-dir example-data
+jsonsql --add-index products reviews.rating --data-dir example-data
+
+# Inspect, rebuild, or drop
+jsonsql --list-indexes --data-dir example-data
+jsonsql --rebuild-indexes --data-dir example-data
+jsonsql --drop-index products category --data-dir example-data
+```
+
+How it works:
+- Index **definitions** live in `.jsonsql-indexes.json`; the per-file **summaries** live under `.jsonsql-index/` in the data directory.
+- Each summary records, per file, the distinct values (up to a cardinality cap), `min`/`max`, value type, and a freshness fingerprint (last-modified time + size).
+- Pruning is **correctness-preserving**: a file is skipped only when a fresh summary proves no row can satisfy a mandatory `AND` predicate (`=`, `IN`, or a range `>`,`>=`,`<`,`<=`). Anything uncertain (no index, an `OR`, a stale/missing summary, mixed types, a changed mapping) falls back to a full scan, so results are always identical to running without an index.
+- Indexes are used automatically when present; pass `--no-index` to force a full scan.
+
+See [INDEXING.md](INDEXING.md) for the full design, supported predicates, and limitations.
+
 ## Performance Considerations
 
 Understanding how JsonSQL processes data helps set expectations for large inputs:
@@ -954,6 +993,7 @@ jsonsql --query "SELECT * FROM products"
 - **[Basic Examples](EXAMPLES.md)** - Common query patterns
 - **[Complex Query Examples](COMPLEX-QUERY-EXAMPLES.md)** - Advanced customer/order/product analysis
 - **[Multi-File Examples](MULTI-FILE-EXAMPLES.md)** - Working with multiple JSON files
+- **[Indexing Guide](INDEXING.md)** - Declared indexes and file-level pruning
 - **[Saved Queries Reference](SAVED-QUERIES-REFERENCE.md)** - Query management features
 
 ## Future Enhancements
@@ -1018,7 +1058,7 @@ Planned features for future releases, organized by priority:
 - ✅ **Schema introspection** (`--describe <table>`) — field paths, types, sample values - **IMPLEMENTED**
 
 **Performance Optimizations:**
-- Index-like structures for frequently queried fields
+- ✅ **Declared indexes** (`--add-index`) — per-file value summaries for file-level pruning of multi-file tables - **IMPLEMENTED** (see [Indexing](INDEXING.md)); row-level/NDJSON offset indexing still planned
 - Streaming mode for very large files
 
 **SQL Compatibility:**

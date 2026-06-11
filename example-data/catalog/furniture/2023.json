@@ -1,0 +1,39 @@
+{
+  "category": "Furniture",
+  "year": 2023,
+  "products": [
+    {
+      "id": 200,
+      "name": "Oslo Oak Desk",
+      "brand": "Nord",
+      "category": "Furniture",
+      "price": 349.00,
+      "currency": "USD",
+      "inStock": true,
+      "year": 2023,
+      "region": "North",
+      "tags": ["desk", "wood", "office"],
+      "specifications": { "material": "oak", "weightKg": 24.0, "color": "natural" },
+      "reviews": [
+        { "user": "jo", "rating": 5, "verified": true, "comment": "Solid and beautiful" },
+        { "user": "kim", "rating": 3, "verified": false, "comment": "Heavy to assemble" }
+      ]
+    },
+    {
+      "id": 201,
+      "name": "Lagan Ergonomic Chair",
+      "brand": "Nord",
+      "category": "Furniture",
+      "price": 219.00,
+      "currency": "USD",
+      "inStock": true,
+      "year": 2023,
+      "region": "North",
+      "tags": ["chair", "ergonomic", "office"],
+      "specifications": { "material": "mesh", "weightKg": 12.5, "color": "grey" },
+      "reviews": [
+        { "user": "liam", "rating": 4, "verified": true, "comment": "Great lumbar support" }
+      ]
+    }
+  ]
+}

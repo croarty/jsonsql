@@ -60,7 +60,7 @@ public class QueryManager {
      * Write bytes to a target file atomically where supported: write to a temp file in the
      * same directory, then move it into place (falling back to a plain replace move).
      */
-    static void writeAtomically(File target, byte[] content) throws IOException {
+    public static void writeAtomically(File target, byte[] content) throws IOException {
         File parent = target.getAbsoluteFile().getParentFile();
         if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) {
             throw new IOException("Failed to create directory: " + parent);

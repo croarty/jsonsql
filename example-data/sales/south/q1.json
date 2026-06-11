@@ -1,0 +1,8 @@
+{
+  "region": "South",
+  "quarter": "Q1",
+  "orders": [
+    { "orderId": "S-1001", "productId": 103, "quantity": 1, "unitPrice": 199.99, "status": "delivered", "channel": "web", "region": "South", "quarter": "Q1" },
+    { "orderId": "S-1002", "productId": 302, "quantity": 5, "unitPrice": 119.99, "status": "pending", "channel": "store", "region": "South", "quarter": "Q1" }
+  ]
+}

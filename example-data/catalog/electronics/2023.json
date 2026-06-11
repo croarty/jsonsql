@@ -1,0 +1,56 @@
+{
+  "category": "Electronics",
+  "year": 2023,
+  "products": [
+    {
+      "id": 100,
+      "name": "Aurora Wireless Headphones",
+      "brand": "Sonex",
+      "category": "Electronics",
+      "price": 129.99,
+      "currency": "USD",
+      "inStock": true,
+      "year": 2023,
+      "region": "North",
+      "tags": ["wireless", "audio", "portable"],
+      "specifications": { "material": "aluminum", "weightKg": 0.28, "color": "black" },
+      "reviews": [
+        { "user": "alice", "rating": 5, "verified": true, "comment": "Superb sound" },
+        { "user": "bob", "rating": 4, "verified": false, "comment": "Comfy but pricey" }
+      ]
+    },
+    {
+      "id": 101,
+      "name": "Pulse Bluetooth Speaker",
+      "brand": "Sonex",
+      "category": "Electronics",
+      "price": 79.99,
+      "currency": "USD",
+      "inStock": true,
+      "year": 2023,
+      "region": "North",
+      "tags": ["wireless", "audio", "outdoor"],
+      "specifications": { "material": "plastic", "weightKg": 0.55, "color": "blue" },
+      "reviews": [
+        { "user": "carol", "rating": 4, "verified": true, "comment": "Loud and clear" }
+      ]
+    },
+    {
+      "id": 102,
+      "name": "Vio 1080p Webcam",
+      "brand": "Lumio",
+      "category": "Electronics",
+      "price": 49.99,
+      "currency": "USD",
+      "inStock": false,
+      "year": 2023,
+      "region": "North",
+      "tags": ["video", "usb"],
+      "specifications": { "material": "plastic", "weightKg": 0.12, "color": "black" },
+      "reviews": [
+        { "user": "dan", "rating": 3, "verified": true, "comment": "Average in low light" },
+        { "user": "erin", "rating": 5, "verified": true, "comment": "Great for the price" }
+      ]
+    }
+  ]
+}

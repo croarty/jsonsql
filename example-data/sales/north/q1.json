@@ -1,0 +1,9 @@
+{
+  "region": "North",
+  "quarter": "Q1",
+  "orders": [
+    { "orderId": "N-1001", "productId": 100, "quantity": 2, "unitPrice": 129.99, "status": "delivered", "channel": "web", "region": "North", "quarter": "Q1" },
+    { "orderId": "N-1002", "productId": 200, "quantity": 1, "unitPrice": 349.00, "status": "shipped", "channel": "store", "region": "North", "quarter": "Q1" },
+    { "orderId": "N-1003", "productId": 300, "quantity": 3, "unitPrice": 89.99, "status": "delivered", "channel": "web", "region": "North", "quarter": "Q1" }
+  ]
+}

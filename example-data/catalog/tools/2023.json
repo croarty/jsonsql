@@ -1,0 +1,39 @@
+{
+  "category": "Tools",
+  "year": 2023,
+  "products": [
+    {
+      "id": 300,
+      "name": "IronGrip Drill",
+      "brand": "Forge",
+      "category": "Tools",
+      "price": 89.99,
+      "currency": "USD",
+      "inStock": true,
+      "year": 2023,
+      "region": "North",
+      "tags": ["power", "cordless"],
+      "specifications": { "material": "composite", "weightKg": 1.4, "color": "red" },
+      "reviews": [
+        { "user": "pat", "rating": 4, "verified": true, "comment": "Plenty of torque" },
+        { "user": "quinn", "rating": 2, "verified": false, "comment": "Battery fades fast" }
+      ]
+    },
+    {
+      "id": 301,
+      "name": "EdgePro Saw",
+      "brand": "Forge",
+      "category": "Tools",
+      "price": 129.99,
+      "currency": "USD",
+      "inStock": true,
+      "year": 2023,
+      "region": "North",
+      "tags": ["power", "corded"],
+      "specifications": { "material": "steel", "weightKg": 3.2, "color": "red" },
+      "reviews": [
+        { "user": "rex", "rating": 3, "verified": true, "comment": "Decent for the price" }
+      ]
+    }
+  ]
+}
