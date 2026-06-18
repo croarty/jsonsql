@@ -75,7 +75,7 @@ class DryRunTest {
     void dryRunRejectsMissingMapping() {
         Exception ex = assertThrows(IllegalArgumentException.class,
             () -> executor.dryRunValidate("SELECT * FROM missing"));
-        assertTrue(ex.getMessage().contains("No mapping found"));
+        assertTrue(ex.getMessage().toLowerCase().contains("no mapping or materialized view"));
     }
 
     @Test
@@ -98,5 +98,21 @@ class DryRunTest {
         assertTrue(output.contains("SQL parsed successfully"));
         assertTrue(output.contains("products -> products.json:$.products[*]"));
         assertTrue(output.contains("orders -> orders.json:$.orders[*]"));
+    }
+
+    @Test
+    void dryRunResolvesMaterializedView() throws Exception {
+        com.jsonsql.view.MaterializedViewManager viewManager =
+            new com.jsonsql.view.MaterializedViewManager(new File(tempDir, ".jsonsql-views.json"));
+        com.jsonsql.view.MaterializedViewStore viewStore =
+            new com.jsonsql.view.MaterializedViewStore(tempDir);
+        com.jsonsql.view.MaterializedViewBuilder builder = new com.jsonsql.view.MaterializedViewBuilder(
+            mappingManager, tempDir, viewManager, viewStore);
+        builder.materialize("expensive",
+            "WITH expensive AS (SELECT * FROM products WHERE price > 10) SELECT * FROM expensive", null);
+
+        QueryExecutor mvExecutor = new QueryExecutor(mappingManager, tempDir, null, null, viewManager);
+        DryRunResult result = mvExecutor.dryRunValidate("SELECT name FROM expensive");
+        assertTrue(result.getResolvedTables().contains("expensive"));
     }
 }

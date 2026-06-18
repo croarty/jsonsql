@@ -23,6 +23,7 @@ import java.util.stream.Stream;
 public class TableFileResolver {
     private static final String CACHE_DIR = ".jsonsql-cache";
     private static final String INDEX_DIR = ".jsonsql-index";
+    private static final String VIEWS_DIR = ".jsonsql-views";
 
     private final MappingManager mappingManager;
     private final File dataDirectory;
@@ -30,6 +31,10 @@ public class TableFileResolver {
     public TableFileResolver(MappingManager mappingManager, File dataDirectory) {
         this.mappingManager = mappingManager;
         this.dataDirectory = dataDirectory;
+    }
+
+    public File getDataDirectory() {
+        return dataDirectory;
     }
 
     /**
@@ -113,7 +118,7 @@ public class TableFileResolver {
     private boolean isMetadataPath(Path path) {
         for (Path part : path) {
             String name = part.toString();
-            if (CACHE_DIR.equals(name) || INDEX_DIR.equals(name)) {
+            if (CACHE_DIR.equals(name) || INDEX_DIR.equals(name) || VIEWS_DIR.equals(name)) {
                 return true;
             }
         }

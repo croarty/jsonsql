@@ -1,0 +1,8 @@
+[ {
+  "name" : "premium",
+  "cteSql" : "SELECT id, category, price FROM catalog_large WHERE price >= 200",
+  "sourceFingerprint" : "catalog-large/electronics/2021.json@1781812013644:2584;catalog-large/electronics/2022.json@1781810045403:2583;catalog-large/electronics/2023.json@1781810045408:2588;catalog-large/electronics/2024.json@1781810045412:2580;catalog-large/furniture/2021.json@1781810045422:2554;catalog-large/furniture/2022.json@1781810045429:2558;catalog-large/furniture/2023.json@1781810045466:2554;catalog-large/furniture/2024.json@1781810045474:2554;catalog-large/office/2021.json@1781810045499:2497;catalog-large/office/2022.json@1781810045503:2499;catalog-large/office/2023.json@1781810045507:2503;catalog-large/office/2024.json@1781810045510:2496;catalog-large/tools/2021.json@1781810045480:2490;catalog-large/tools/2022.json@1781810045485:2487;catalog-large/tools/2023.json@1781810045489:2485;catalog-large/tools/2024.json@1781810045494:2491;",
+  "dataDirectory" : "C:\\Users\\CiaranRoarty\\cursor\\jsonsql\\example-data",
+  "builtAt" : "2026-06-18T21:31:32.790567800Z",
+  "rowCount" : 76
+} ]

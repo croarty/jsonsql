@@ -7,6 +7,9 @@ import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.Option;
 import com.jsonsql.config.MappingManager;
 import com.jsonsql.query.TableFileResolver;
+import com.jsonsql.view.MaterializedViewBuilder;
+import com.jsonsql.view.MaterializedViewManager;
+import com.jsonsql.view.MaterializedViewStore;
 
 import java.io.File;
 import java.io.IOException;
@@ -30,13 +33,22 @@ public class IndexBuilder {
     private final MappingManager mappingManager;
     private final TableFileResolver resolver;
     private final IndexStore store;
+    private final MaterializedViewManager viewManager;
+    private final MaterializedViewStore viewStore;
     private final ObjectMapper objectMapper;
     private final Configuration jsonPathConfig;
 
     public IndexBuilder(MappingManager mappingManager, File dataDirectory, IndexStore store) {
+        this(mappingManager, dataDirectory, store, null, null);
+    }
+
+    public IndexBuilder(MappingManager mappingManager, File dataDirectory, IndexStore store,
+                        MaterializedViewManager viewManager, MaterializedViewStore viewStore) {
         this.mappingManager = mappingManager;
         this.resolver = new TableFileResolver(mappingManager, dataDirectory);
         this.store = store;
+        this.viewManager = viewManager;
+        this.viewStore = viewStore;
         this.objectMapper = new ObjectMapper();
         this.jsonPathConfig = Configuration.builder()
             .options(Option.DEFAULT_PATH_LEAF_TO_NULL, Option.SUPPRESS_EXCEPTIONS)
@@ -47,6 +59,9 @@ public class IndexBuilder {
      * Build the index for a (table, field), persist it, and return it.
      */
     public TableIndex build(String table, String field) throws IOException {
+        if (viewManager != null && viewManager.hasView(table) && !mappingManager.hasMapping(table)) {
+            return buildForMaterializedView(table, field);
+        }
         if (!mappingManager.hasMapping(table)) {
             throw new IllegalArgumentException(
                 "No mapping found for table: " + table + ". Use --add-mapping to define it.");
@@ -74,20 +89,44 @@ public class IndexBuilder {
         return index;
     }
 
-    private FileSummary summarizeFile(File file, File base, String[] parts,
-                                      String jsonPath, boolean[] crossedArray) throws IOException {
+    private TableIndex buildForMaterializedView(String table, String field) throws IOException {
+        File storeFile = viewStore.storeFile(table);
+        List<JsonNode> rows = viewStore.load(table);
+        if (rows == null) {
+            rows = new ArrayList<>();
+        }
+        String[] parts = field.split("\\.");
+        boolean[] crossedArray = {false};
+        FileSummary summary = summarizeRows(storeFile, table, rows, parts, crossedArray);
+
+        TableIndex index = new TableIndex();
+        index.setTable(table);
+        index.setField(field);
+        index.setJsonPath(MaterializedViewBuilder.INDEX_JSON_PATH_MARKER);
+        index.setRoot(table);
+        index.setKind(crossedArray[0] ? TableIndex.KIND_MULTIVALUED : TableIndex.KIND_SCALAR);
+        index.setFiles(List.of(summary));
+        store.save(index);
+        return index;
+    }
+
+    private FileSummary summarizeRows(File file, String relPath, List<JsonNode> rows,
+                                      String[] parts, boolean[] crossedArray) {
         FileSummary summary = new FileSummary();
-        summary.setRelPath(TableFileResolver.relativePath(base, file));
+        summary.setRelPath(relPath);
         summary.setCanonicalPath(TableFileResolver.canonicalPath(file));
         summary.setMtime(file.lastModified());
         summary.setSize(file.length());
 
-        List<JsonNode> rows = loadRows(file, jsonPath);
         List<JsonNode> values = new ArrayList<>();
         for (JsonNode row : rows) {
             collectValues(row, parts, 0, values, crossedArray);
         }
+        applyValueStats(summary, values);
+        return summary;
+    }
 
+    private void applyValueStats(FileSummary summary, List<JsonNode> values) {
         boolean sawNumber = false, sawString = false, sawBoolean = false, sawOther = false;
         Map<String, JsonNode> distinct = new LinkedHashMap<>();
         for (JsonNode v : values) {
@@ -118,6 +157,22 @@ public class IndexBuilder {
             summary.setValuesOmitted(false);
             summary.setDistinctValues(new ArrayList<>(distinct.values()));
         }
+    }
+
+    private FileSummary summarizeFile(File file, File base, String[] parts,
+                                      String jsonPath, boolean[] crossedArray) throws IOException {
+        FileSummary summary = new FileSummary();
+        summary.setRelPath(TableFileResolver.relativePath(base, file));
+        summary.setCanonicalPath(TableFileResolver.canonicalPath(file));
+        summary.setMtime(file.lastModified());
+        summary.setSize(file.length());
+
+        List<JsonNode> rows = loadRows(file, jsonPath);
+        List<JsonNode> values = new ArrayList<>();
+        for (JsonNode row : rows) {
+            collectValues(row, parts, 0, values, crossedArray);
+        }
+        applyValueStats(summary, values);
         return summary;
     }
 

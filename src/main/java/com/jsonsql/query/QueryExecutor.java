@@ -12,6 +12,10 @@ import com.jsonsql.config.MappingManager;
 import com.jsonsql.index.IndexManager;
 import com.jsonsql.index.IndexPlanner;
 import com.jsonsql.index.IndexStore;
+import com.jsonsql.view.MaterializedViewDefinition;
+import com.jsonsql.view.MaterializedViewManager;
+import com.jsonsql.view.MaterializedViewStore;
+import com.jsonsql.view.SourceFingerprint;
 import net.sf.jsqlparser.expression.Expression;
 
 import java.io.File;
@@ -24,25 +28,45 @@ import java.util.*;
  */
 public class QueryExecutor implements FieldAccessor {
     private final MappingManager mappingManager;
+    private final File dataDirectory;
     private final ObjectMapper objectMapper;
     private final QueryParser queryParser;
     private final Configuration jsonPathConfig;
     private final CacheManager cacheManager;
     private final TableFileResolver fileResolver;
     private final IndexPlanner indexPlanner;
+    private final MaterializedViewManager viewManager;
+    private final MaterializedViewStore viewStore;
+    private final boolean resolveMaterializedViews;
 
     public QueryExecutor(MappingManager mappingManager, File dataDirectory) {
-        this(mappingManager, dataDirectory, null, null);
+        this(mappingManager, dataDirectory, null, null, null);
     }
     
     public QueryExecutor(MappingManager mappingManager, File dataDirectory, CacheManager cacheManager) {
-        this(mappingManager, dataDirectory, cacheManager, null);
+        this(mappingManager, dataDirectory, cacheManager, null, null);
     }
 
     public QueryExecutor(MappingManager mappingManager, File dataDirectory,
                          CacheManager cacheManager, IndexManager indexManager) {
+        this(mappingManager, dataDirectory, cacheManager, indexManager, null);
+    }
+
+    public QueryExecutor(MappingManager mappingManager, File dataDirectory,
+                         CacheManager cacheManager, IndexManager indexManager,
+                         MaterializedViewManager viewManager) {
+        this(mappingManager, dataDirectory, cacheManager, indexManager, viewManager, true);
+    }
+
+    private QueryExecutor(MappingManager mappingManager, File dataDirectory,
+                          CacheManager cacheManager, IndexManager indexManager,
+                          MaterializedViewManager viewManager, boolean resolveMaterializedViews) {
         this.mappingManager = mappingManager;
+        this.dataDirectory = dataDirectory;
         this.cacheManager = cacheManager;
+        this.viewManager = viewManager;
+        this.resolveMaterializedViews = resolveMaterializedViews;
+        this.viewStore = viewManager != null ? new MaterializedViewStore(dataDirectory) : null;
         this.objectMapper = new ObjectMapper();
         this.queryParser = new QueryParser();
         this.jsonPathConfig = Configuration.builder()
@@ -50,8 +74,25 @@ public class QueryExecutor implements FieldAccessor {
             .build();
         this.fileResolver = new TableFileResolver(mappingManager, dataDirectory);
         this.indexPlanner = indexManager != null
-            ? new IndexPlanner(indexManager, new IndexStore(dataDirectory), mappingManager, this.fileResolver)
+            ? new IndexPlanner(indexManager, new IndexStore(dataDirectory), mappingManager,
+                fileResolver, viewManager)
             : null;
+    }
+
+    /** Executor that resolves mapped tables only (used when building a materialized view). */
+    public static QueryExecutor forMaterialization(MappingManager mappingManager, File dataDirectory,
+                                                   CacheManager cacheManager, IndexManager indexManager,
+                                                   MaterializedViewManager viewManager) {
+        return new QueryExecutor(mappingManager, dataDirectory, cacheManager, indexManager,
+            viewManager, false);
+    }
+
+    public MaterializedViewManager getViewManager() {
+        return viewManager;
+    }
+
+    public File getDataDirectory() {
+        return dataDirectory;
     }
 
     /**
@@ -117,9 +158,19 @@ public class QueryExecutor implements FieldAccessor {
         if (availableCtes.contains(tableName)) {
             return;
         }
+        if (isMaterializedView(tableName)) {
+            if (viewStore.storeFile(tableName).exists()) {
+                resolvedTables.add(tableName);
+            } else {
+                throw new IOException("Materialized view data not found: " + tableName
+                    + ". Run --rebuild-view " + tableName);
+            }
+            return;
+        }
         if (!mappingManager.hasMapping(tableName)) {
             throw new IllegalArgumentException(
-                "No mapping found for table: " + tableName + ". Use --add-mapping to define it.");
+                "No mapping or materialized view found for table: " + tableName
+                    + ". Use --add-mapping or --materialize-view to define it.");
         }
         for (File file : resolveJsonFiles(tableName)) {
             if (!file.exists()) {
@@ -127,6 +178,25 @@ public class QueryExecutor implements FieldAccessor {
             }
         }
         resolvedTables.add(tableName);
+    }
+
+    private boolean isMaterializedView(String tableName) {
+        return resolveMaterializedViews && viewManager != null && viewManager.hasView(tableName)
+            && !mappingManager.hasMapping(tableName);
+    }
+
+    /**
+     * Execute a parsed query and return the result rows as a list (for materialization).
+     */
+    public List<JsonNode> executeToRowList(ParsedQuery parsedQuery) throws Exception {
+        QueryExecutionContext context = new QueryExecutionContext();
+        String json = executeQuery(parsedQuery, context);
+        JsonNode array = objectMapper.readTree(json);
+        List<JsonNode> rows = new ArrayList<>();
+        if (array.isArray()) {
+            array.forEach(rows::add);
+        }
+        return rows;
     }
     
     /**
@@ -343,6 +413,11 @@ public class QueryExecutor implements FieldAccessor {
      * Used for schema introspection and other tooling that needs source rows.
      */
     public List<JsonNode> loadMappedTableRows(String tableName) throws IOException {
+        if (isMaterializedView(tableName)) {
+            warnIfStaleView(tableName);
+            List<JsonNode> rows = viewStore.load(tableName);
+            return rows != null ? rows : List.of();
+        }
         TableInfo tableInfo = new TableInfo();
         tableInfo.setTableName(tableName);
         List<JsonNode> wrapped = loadTableData(tableInfo, new QueryExecutionContext());
@@ -380,11 +455,17 @@ public class QueryExecutor implements FieldAccessor {
             // Wrap in table structure for consistency
             return wrapTableData(cteData, tableInfo);
         }
+
+        // Materialized view (persisted CTE)
+        if (isMaterializedView(tableName)) {
+            return loadMaterializedViewData(tableInfo, pruningQuery);
+        }
         
         // Otherwise, load from JSON file
         if (!mappingManager.hasMapping(tableName)) {
             throw new IllegalArgumentException(
-                "No mapping found for table: " + tableName + ". Use --add-mapping to define it."
+                "No mapping or materialized view found for table: " + tableName
+                    + ". Use --add-mapping or --materialize-view to define it."
             );
         }
 
@@ -447,6 +528,47 @@ public class QueryExecutor implements FieldAccessor {
         return dataList;
     }
 
+    private List<JsonNode> loadMaterializedViewData(TableInfo tableInfo, ParsedQuery pruningQuery)
+            throws IOException {
+        String tableName = tableInfo.getTableName();
+        warnIfStaleView(tableName);
+
+        File storeFile = viewStore.storeFile(tableName);
+        if (!storeFile.exists()) {
+            throw new IOException("Materialized view data not found: " + tableName
+                + ". Run --rebuild-view " + tableName);
+        }
+
+        if (indexPlanner != null && pruningQuery != null) {
+            List<File> files = List.of(storeFile);
+            List<File> kept = indexPlanner.prune(tableInfo, pruningQuery, files);
+            if (kept.isEmpty()) {
+                return new ArrayList<>();
+            }
+        }
+
+        List<JsonNode> rows = viewStore.load(tableName);
+        if (rows == null) {
+            rows = new ArrayList<>();
+        }
+        return wrapTableData(rows, tableInfo);
+    }
+
+    private void warnIfStaleView(String tableName) {
+        if (viewManager == null) {
+            return;
+        }
+        MaterializedViewDefinition def = viewManager.getView(tableName);
+        if (def == null) {
+            return;
+        }
+        if (!SourceFingerprint.isFresh(def, mappingManager, dataDirectory)) {
+            System.err.println("Warning: materialized view '" + tableName
+                + "' is STALE (source data changed since last build). "
+                + "Serving stored data. Run --rebuild-view " + tableName + " to refresh.");
+        }
+    }
+
     /**
      * Resolve the JSON file(s) backing a mapped table. Handles single files,
      * relative/absolute paths, and directories (recursively). Delegates to the shared
@@ -462,21 +584,14 @@ public class QueryExecutor implements FieldAccessor {
      * have no source file. Used to make CTE cache keys sensitive to source changes.
      */
     private String sourceFingerprint(TableInfo tableInfo) {
-        if (tableInfo == null) {
-            return "";
-        }
-        String tableName = tableInfo.getTableName();
-        if (tableName == null || !mappingManager.hasMapping(tableName)) {
+        if (tableInfo == null || tableInfo.getTableName() == null) {
             return "";
         }
         try {
-            StringBuilder sb = new StringBuilder();
-            for (File f : resolveJsonFiles(tableName)) {
-                sb.append(f.getAbsolutePath()).append('@')
-                  .append(f.lastModified()).append(':').append(f.length()).append(';');
-            }
-            return sb.toString();
-        } catch (IOException e) {
+            ParsedQuery probe = new ParsedQuery();
+            probe.setFromTable(tableInfo);
+            return SourceFingerprint.forParsedQuery(probe, mappingManager, fileResolver);
+        } catch (Exception e) {
             return "";
         }
     }

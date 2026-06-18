@@ -90,7 +90,7 @@ class ErrorHandlingTest {
         Exception exception = assertThrows(Exception.class, () -> 
             queryExecutor.execute("SELECT * FROM unmapped_table")
         );
-        assertTrue(exception.getMessage().contains("No mapping found"));
+        assertTrue(exception.getMessage().toLowerCase().contains("no mapping or materialized view"));
     }
 
     @Test

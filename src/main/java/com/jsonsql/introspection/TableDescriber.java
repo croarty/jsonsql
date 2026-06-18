@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jsonsql.config.CacheManager;
 import com.jsonsql.config.MappingManager;
 import com.jsonsql.query.QueryExecutor;
+import com.jsonsql.view.MaterializedViewManager;
 
 import java.io.File;
 import java.io.IOException;
@@ -33,8 +34,13 @@ public class TableDescriber {
     }
 
     public TableDescriber(MappingManager mappingManager, File dataDirectory, CacheManager cacheManager) {
+        this(mappingManager, dataDirectory, cacheManager, null);
+    }
+
+    public TableDescriber(MappingManager mappingManager, File dataDirectory, CacheManager cacheManager,
+                          MaterializedViewManager viewManager) {
         this.mappingManager = mappingManager;
-        this.queryExecutor = new QueryExecutor(mappingManager, dataDirectory, cacheManager);
+        this.queryExecutor = new QueryExecutor(mappingManager, dataDirectory, cacheManager, null, viewManager);
         this.objectMapper = new ObjectMapper();
     }
 
@@ -42,9 +48,12 @@ public class TableDescriber {
      * Build a human-readable description of a mapped table's structure.
      */
     public String describe(String tableName) throws IOException {
-        if (!mappingManager.hasMapping(tableName)) {
+        MaterializedViewManager viewManager = queryExecutor.getViewManager();
+        boolean isView = viewManager != null && viewManager.hasView(tableName)
+            && !mappingManager.hasMapping(tableName);
+        if (!mappingManager.hasMapping(tableName) && !isView) {
             throw new IllegalArgumentException(
-                "No mapping found for table: " + tableName + ". Use --add-mapping to define it.");
+                "No mapping or materialized view found for table: " + tableName);
         }
 
         List<JsonNode> rows = queryExecutor.loadMappedTableRows(tableName);
@@ -55,7 +64,10 @@ public class TableDescriber {
             collectFields(rows.get(i), "", fields);
         }
 
-        return formatDescription(tableName, rows.size(), sampledRows, fields);
+        String mappingLabel = isView
+            ? "materialized view: " + viewManager.getView(tableName).getCteSql()
+            : mappingManager.getJsonPath(tableName);
+        return formatDescription(tableName, mappingLabel, rows.size(), sampledRows, fields);
     }
 
     private void collectFields(JsonNode node, String prefix, Map<String, FieldInfo> fields) {
@@ -76,9 +88,8 @@ public class TableDescriber {
         }
     }
 
-    private String formatDescription(String tableName, int totalRows, int sampledRows,
+    private String formatDescription(String tableName, String mapping, int totalRows, int sampledRows,
                                      Map<String, FieldInfo> fields) {
-        String mapping = mappingManager.getJsonPath(tableName);
         StringBuilder sb = new StringBuilder();
 
         sb.append("Table: ").append(tableName).append('\n');

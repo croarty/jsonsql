@@ -227,7 +227,7 @@ class QueryExecutorTest {
         Exception exception = assertThrows(Exception.class, () -> 
             queryExecutor.execute("SELECT * FROM nonexistent")
         );
-        assertTrue(exception.getMessage().contains("No mapping found"));
+        assertTrue(exception.getMessage().toLowerCase().contains("no mapping or materialized view"));
     }
 
     @Test

@@ -335,5 +335,34 @@ public class QueryParser {
         
         return null;
     }
+
+    /**
+     * Extract the inner SELECT SQL for a named CTE from a full query that includes WITH.
+     */
+    public String extractCteSql(String fullSql, String cteName) throws QueryParseException {
+        try {
+            Statement statement = CCJSqlParserUtil.parse(fullSql);
+            if (!(statement instanceof Select)) {
+                throw new QueryParseException("Only SELECT statements are supported");
+            }
+            Select select = (Select) statement;
+            if (select.getWithItemsList() == null) {
+                throw new QueryParseException("Query has no WITH clause");
+            }
+            for (net.sf.jsqlparser.statement.select.WithItem withItem : select.getWithItemsList()) {
+                String name = withItem.getAlias() != null ? withItem.getAlias().getName() : null;
+                if (name != null && name.equalsIgnoreCase(cteName)) {
+                    PlainSelect plain = extractPlainSelect(withItem.getSelect());
+                    if (plain == null) {
+                        throw new QueryParseException("CTE must be a simple SELECT query: " + cteName);
+                    }
+                    return plain.toString();
+                }
+            }
+            throw new QueryParseException("CTE not found in query: " + cteName);
+        } catch (JSQLParserException e) {
+            throw new QueryParseException("Failed to parse SQL: " + e.getMessage(), e);
+        }
+    }
 }
 

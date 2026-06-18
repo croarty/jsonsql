@@ -1,0 +1,126 @@
+{
+  "year": 2024,
+  "category": "Tools",
+  "products": [
+    {
+      "id": 1089,
+      "name": "Tools item 1 (2024)",
+      "brand": "Globex",
+      "category": "Tools",
+      "price": 159.7,
+      "inStock": true,
+      "year": 2024,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1090,
+      "name": "Tools item 2 (2024)",
+      "brand": "Globex",
+      "category": "Tools",
+      "price": 447.04,
+      "inStock": true,
+      "year": 2024,
+      "region": "East",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1091,
+      "name": "Tools item 3 (2024)",
+      "brand": "Initech",
+      "category": "Tools",
+      "price": 332.93,
+      "inStock": false,
+      "year": 2024,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1092,
+      "name": "Tools item 4 (2024)",
+      "brand": "Initech",
+      "category": "Tools",
+      "price": 471.18,
+      "inStock": true,
+      "year": 2024,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1093,
+      "name": "Tools item 5 (2024)",
+      "brand": "Globex",
+      "category": "Tools",
+      "price": 180.29,
+      "inStock": true,
+      "year": 2024,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1094,
+      "name": "Tools item 6 (2024)",
+      "brand": "Globex",
+      "category": "Tools",
+      "price": 347.37,
+      "inStock": false,
+      "year": 2024,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1095,
+      "name": "Tools item 7 (2024)",
+      "brand": "Acme",
+      "category": "Tools",
+      "price": 181.78,
+      "inStock": true,
+      "year": 2024,
+      "region": "East",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1096,
+      "name": "Tools item 8 (2024)",
+      "brand": "Globex",
+      "category": "Tools",
+      "price": 327.18,
+      "inStock": true,
+      "year": 2024,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    }
+  ]
+}

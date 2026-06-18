@@ -1,0 +1,126 @@
+{
+  "year": 2022,
+  "category": "Tools",
+  "products": [
+    {
+      "id": 1073,
+      "name": "Tools item 1 (2022)",
+      "brand": "Globex",
+      "category": "Tools",
+      "price": 90.75,
+      "inStock": true,
+      "year": 2022,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1074,
+      "name": "Tools item 2 (2022)",
+      "brand": "Globex",
+      "category": "Tools",
+      "price": 322.62,
+      "inStock": true,
+      "year": 2022,
+      "region": "East",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1075,
+      "name": "Tools item 3 (2022)",
+      "brand": "Initech",
+      "category": "Tools",
+      "price": 68.85,
+      "inStock": false,
+      "year": 2022,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1076,
+      "name": "Tools item 4 (2022)",
+      "brand": "Initech",
+      "category": "Tools",
+      "price": 267.79,
+      "inStock": true,
+      "year": 2022,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1077,
+      "name": "Tools item 5 (2022)",
+      "brand": "Initech",
+      "category": "Tools",
+      "price": 271.97,
+      "inStock": true,
+      "year": 2022,
+      "region": "East",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1078,
+      "name": "Tools item 6 (2022)",
+      "brand": "Initech",
+      "category": "Tools",
+      "price": 111.3,
+      "inStock": false,
+      "year": 2022,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1079,
+      "name": "Tools item 7 (2022)",
+      "brand": "Acme",
+      "category": "Tools",
+      "price": 42.01,
+      "inStock": true,
+      "year": 2022,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1080,
+      "name": "Tools item 8 (2022)",
+      "brand": "Acme",
+      "category": "Tools",
+      "price": 98.19,
+      "inStock": true,
+      "year": 2022,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    }
+  ]
+}

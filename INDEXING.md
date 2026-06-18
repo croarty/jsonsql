@@ -146,7 +146,7 @@ a catalog `id`), `quantity`, `unitPrice`, `status`, `channel`, `region`, and `qu
 > `--indexes-file` at scratch files. Adjust paths as you like.
 
 ```bash
-JAR=target/jsonsql-1.3.0.jar
+JAR=target/jsonsql-1.4.0.jar
 CFG=/tmp/jsonsql-mappings.json
 IDX=/tmp/jsonsql-indexes.json
 
@@ -219,6 +219,21 @@ Any deviation keeps the file:
 `--list-indexes` reports `FRESH` only when the current file set and every fingerprint
 match the built summary; otherwise it reports `STALE`, and you should
 `--rebuild-index`/`--rebuild-indexes`.
+
+## Indexes on materialized views
+
+You can declare indexes on a **materialized view** the same way as on a mapped table:
+
+```bash
+jsonsql --add-index premium category --data-dir example-data
+```
+
+The view's stored rows live in a single file under `.jsonsql-views/`. The index summary
+covers that file as a whole: pruning skips loading the entire view when the predicate
+cannot match any row. Rebuild the view (`--rebuild-view`) after source data changes, then
+`--rebuild-index` if needed.
+
+See [Materialized Views](MATERIALIZED-VIEWS.md) for the full workflow.
 
 ## Limitations (current scope)
 

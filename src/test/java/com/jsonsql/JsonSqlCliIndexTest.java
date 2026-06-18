@@ -96,7 +96,7 @@ class JsonSqlCliIndexTest {
     void addIndexForUnmappedTableFails() {
         CliResult r = runCli(withConfig("--add-index", "nope", "category"));
         assertEquals(1, r.exitCode());
-        assertTrue(r.err().contains("No mapping found"));
+        assertTrue(r.err().toLowerCase().contains("no mapping or materialized view"));
     }
 
     @Test

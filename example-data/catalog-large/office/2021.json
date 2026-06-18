@@ -1,0 +1,126 @@
+{
+  "year": 2021,
+  "category": "Office",
+  "products": [
+    {
+      "id": 1097,
+      "name": "Office item 1 (2021)",
+      "brand": "Acme",
+      "category": "Office",
+      "price": 337.62,
+      "inStock": true,
+      "year": 2021,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1098,
+      "name": "Office item 2 (2021)",
+      "brand": "Acme",
+      "category": "Office",
+      "price": 423.64,
+      "inStock": true,
+      "year": 2021,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1099,
+      "name": "Office item 3 (2021)",
+      "brand": "Acme",
+      "category": "Office",
+      "price": 185.39,
+      "inStock": false,
+      "year": 2021,
+      "region": "East",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1100,
+      "name": "Office item 4 (2021)",
+      "brand": "Acme",
+      "category": "Office",
+      "price": 185.23,
+      "inStock": true,
+      "year": 2021,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1101,
+      "name": "Office item 5 (2021)",
+      "brand": "Acme",
+      "category": "Office",
+      "price": 327.31,
+      "inStock": true,
+      "year": 2021,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1102,
+      "name": "Office item 6 (2021)",
+      "brand": "Globex",
+      "category": "Office",
+      "price": 102.41,
+      "inStock": false,
+      "year": 2021,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1103,
+      "name": "Office item 7 (2021)",
+      "brand": "Globex",
+      "category": "Office",
+      "price": 326.31,
+      "inStock": true,
+      "year": 2021,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1104,
+      "name": "Office item 8 (2021)",
+      "brand": "Globex",
+      "category": "Office",
+      "price": 187.77,
+      "inStock": true,
+      "year": 2021,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    }
+  ]
+}

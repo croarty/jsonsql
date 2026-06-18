@@ -1,0 +1,126 @@
+{
+  "year": 2023,
+  "category": "Furniture",
+  "products": [
+    {
+      "id": 1049,
+      "name": "Furniture item 1 (2023)",
+      "brand": "Globex",
+      "category": "Furniture",
+      "price": 150.53,
+      "inStock": true,
+      "year": 2023,
+      "region": "East",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1050,
+      "name": "Furniture item 2 (2023)",
+      "brand": "Acme",
+      "category": "Furniture",
+      "price": 318.28,
+      "inStock": true,
+      "year": 2023,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1051,
+      "name": "Furniture item 3 (2023)",
+      "brand": "Acme",
+      "category": "Furniture",
+      "price": 103.78,
+      "inStock": false,
+      "year": 2023,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1052,
+      "name": "Furniture item 4 (2023)",
+      "brand": "Initech",
+      "category": "Furniture",
+      "price": 467.73,
+      "inStock": true,
+      "year": 2023,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1053,
+      "name": "Furniture item 5 (2023)",
+      "brand": "Initech",
+      "category": "Furniture",
+      "price": 80.58,
+      "inStock": true,
+      "year": 2023,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1054,
+      "name": "Furniture item 6 (2023)",
+      "brand": "Globex",
+      "category": "Furniture",
+      "price": 157.96,
+      "inStock": false,
+      "year": 2023,
+      "region": "East",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1055,
+      "name": "Furniture item 7 (2023)",
+      "brand": "Acme",
+      "category": "Furniture",
+      "price": 360.55,
+      "inStock": true,
+      "year": 2023,
+      "region": "East",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1056,
+      "name": "Furniture item 8 (2023)",
+      "brand": "Initech",
+      "category": "Furniture",
+      "price": 204.85,
+      "inStock": true,
+      "year": 2023,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    }
+  ]
+}

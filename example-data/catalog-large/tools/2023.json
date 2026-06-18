@@ -1,0 +1,126 @@
+{
+  "year": 2023,
+  "category": "Tools",
+  "products": [
+    {
+      "id": 1081,
+      "name": "Tools item 1 (2023)",
+      "brand": "Globex",
+      "category": "Tools",
+      "price": 442.8,
+      "inStock": true,
+      "year": 2023,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1082,
+      "name": "Tools item 2 (2023)",
+      "brand": "Initech",
+      "category": "Tools",
+      "price": 235.09,
+      "inStock": true,
+      "year": 2023,
+      "region": "East",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1083,
+      "name": "Tools item 3 (2023)",
+      "brand": "Globex",
+      "category": "Tools",
+      "price": 499.68,
+      "inStock": false,
+      "year": 2023,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1084,
+      "name": "Tools item 4 (2023)",
+      "brand": "Acme",
+      "category": "Tools",
+      "price": 165.99,
+      "inStock": true,
+      "year": 2023,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1085,
+      "name": "Tools item 5 (2023)",
+      "brand": "Globex",
+      "category": "Tools",
+      "price": 302.63,
+      "inStock": true,
+      "year": 2023,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1086,
+      "name": "Tools item 6 (2023)",
+      "brand": "Acme",
+      "category": "Tools",
+      "price": 478.72,
+      "inStock": false,
+      "year": 2023,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1087,
+      "name": "Tools item 7 (2023)",
+      "brand": "Acme",
+      "category": "Tools",
+      "price": 442.11,
+      "inStock": true,
+      "year": 2023,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1088,
+      "name": "Tools item 8 (2023)",
+      "brand": "Initech",
+      "category": "Tools",
+      "price": 442.48,
+      "inStock": true,
+      "year": 2023,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    }
+  ]
+}

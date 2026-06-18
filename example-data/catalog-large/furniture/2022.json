@@ -1,0 +1,126 @@
+{
+  "year": 2022,
+  "category": "Furniture",
+  "products": [
+    {
+      "id": 1041,
+      "name": "Furniture item 1 (2022)",
+      "brand": "Initech",
+      "category": "Furniture",
+      "price": 182.52,
+      "inStock": true,
+      "year": 2022,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1042,
+      "name": "Furniture item 2 (2022)",
+      "brand": "Acme",
+      "category": "Furniture",
+      "price": 121.58,
+      "inStock": true,
+      "year": 2022,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1043,
+      "name": "Furniture item 3 (2022)",
+      "brand": "Globex",
+      "category": "Furniture",
+      "price": 119.82,
+      "inStock": false,
+      "year": 2022,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1044,
+      "name": "Furniture item 4 (2022)",
+      "brand": "Initech",
+      "category": "Furniture",
+      "price": 60.46,
+      "inStock": true,
+      "year": 2022,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1045,
+      "name": "Furniture item 5 (2022)",
+      "brand": "Acme",
+      "category": "Furniture",
+      "price": 66.46,
+      "inStock": true,
+      "year": 2022,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1046,
+      "name": "Furniture item 6 (2022)",
+      "brand": "Initech",
+      "category": "Furniture",
+      "price": 379.31,
+      "inStock": false,
+      "year": 2022,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1047,
+      "name": "Furniture item 7 (2022)",
+      "brand": "Initech",
+      "category": "Furniture",
+      "price": 35.41,
+      "inStock": true,
+      "year": 2022,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1048,
+      "name": "Furniture item 8 (2022)",
+      "brand": "Initech",
+      "category": "Furniture",
+      "price": 130.47,
+      "inStock": true,
+      "year": 2022,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    }
+  ]
+}

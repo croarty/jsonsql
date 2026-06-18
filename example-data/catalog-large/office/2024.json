@@ -1,0 +1,126 @@
+{
+  "year": 2024,
+  "category": "Office",
+  "products": [
+    {
+      "id": 1121,
+      "name": "Office item 1 (2024)",
+      "brand": "Acme",
+      "category": "Office",
+      "price": 259.95,
+      "inStock": true,
+      "year": 2024,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1122,
+      "name": "Office item 2 (2024)",
+      "brand": "Initech",
+      "category": "Office",
+      "price": 67.89,
+      "inStock": true,
+      "year": 2024,
+      "region": "East",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1123,
+      "name": "Office item 3 (2024)",
+      "brand": "Globex",
+      "category": "Office",
+      "price": 460.95,
+      "inStock": false,
+      "year": 2024,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1124,
+      "name": "Office item 4 (2024)",
+      "brand": "Acme",
+      "category": "Office",
+      "price": 197.94,
+      "inStock": true,
+      "year": 2024,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1125,
+      "name": "Office item 5 (2024)",
+      "brand": "Acme",
+      "category": "Office",
+      "price": 68.09,
+      "inStock": true,
+      "year": 2024,
+      "region": "East",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1126,
+      "name": "Office item 6 (2024)",
+      "brand": "Acme",
+      "category": "Office",
+      "price": 25.53,
+      "inStock": false,
+      "year": 2024,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1127,
+      "name": "Office item 7 (2024)",
+      "brand": "Initech",
+      "category": "Office",
+      "price": 416.16,
+      "inStock": true,
+      "year": 2024,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1128,
+      "name": "Office item 8 (2024)",
+      "brand": "Acme",
+      "category": "Office",
+      "price": 305.16,
+      "inStock": true,
+      "year": 2024,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    }
+  ]
+}

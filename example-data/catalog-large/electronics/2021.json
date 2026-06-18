@@ -1,0 +1,126 @@
+{
+  "year": 2021,
+  "category": "Electronics",
+  "products": [
+    {
+      "id": 1001,
+      "name": "Electronics item 1 (2021)",
+      "brand": "Acme",
+      "category": "Electronics",
+      "price": 339.04,
+      "inStock": true,
+      "year": 2021,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1002,
+      "name": "Electronics item 2 (2021)",
+      "brand": "Acme",
+      "category": "Electronics",
+      "price": 268.54,
+      "inStock": true,
+      "year": 2021,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1003,
+      "name": "Electronics item 3 (2021)",
+      "brand": "Globex",
+      "category": "Electronics",
+      "price": 366.34,
+      "inStock": false,
+      "year": 2021,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1004,
+      "name": "Electronics item 4 (2021)",
+      "brand": "Acme",
+      "category": "Electronics",
+      "price": 384.21,
+      "inStock": true,
+      "year": 2021,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1005,
+      "name": "Electronics item 5 (2021)",
+      "brand": "Acme",
+      "category": "Electronics",
+      "price": 260.22,
+      "inStock": true,
+      "year": 2021,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1006,
+      "name": "Electronics item 6 (2021)",
+      "brand": "Globex",
+      "category": "Electronics",
+      "price": 141.22,
+      "inStock": false,
+      "year": 2021,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1007,
+      "name": "Electronics item 7 (2021)",
+      "brand": "Globex",
+      "category": "Electronics",
+      "price": 409.86,
+      "inStock": true,
+      "year": 2021,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1008,
+      "name": "Electronics item 8 (2021)",
+      "brand": "Acme",
+      "category": "Electronics",
+      "price": 88.81,
+      "inStock": true,
+      "year": 2021,
+      "region": "East",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    }
+  ]
+}

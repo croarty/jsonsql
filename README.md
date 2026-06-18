@@ -71,6 +71,7 @@ jsonsql --list-tables
 ```
 
 **Example JSON file** (`products.json`):
+
 ```json
 {
   "data": {
@@ -169,6 +170,7 @@ stderr (set `DEBUG` to a truthy value for full stack traces).
 ### Configuration Management
 
 #### Add a Mapping
+
 ```bash
 jsonsql --add-mapping products "$.data.products"
 jsonsql --add-mapping orders "$.orders"
@@ -176,11 +178,13 @@ jsonsql --add-mapping customers "$.users.customers"
 ```
 
 #### List All Mappings
+
 ```bash
 jsonsql --list-tables
 ```
 
 Output:
+
 ```
 Configured JSONPath Mappings:
 ────────────────────────────────────────────────────────────────────────────────
@@ -192,6 +196,7 @@ Total: 3 mapping(s)
 ```
 
 #### Describe a Table
+
 ```bash
 jsonsql --describe products --data-dir example-data
 ```
@@ -213,6 +218,7 @@ Rows: 6
 Use this before writing queries to discover field names and nesting. Schema is inferred from up to 200 rows; fields only seen as `null` are typed `null`, and fields with mixed null/non-null values are marked `(nullable)`.
 
 #### Dry-Run a Query
+
 ```bash
 jsonsql --query "SELECT p.name, o.orderId FROM orders o JOIN products p ON o.productId = p.id" --data-dir example-data --dry-run
 ```
@@ -234,6 +240,7 @@ Works with `--run-query` and parameterized queries (`--param` is applied before 
 JsonSQL allows you to save frequently-used queries for easy reuse.
 
 #### Save a Query
+
 ```bash
 # Save a simple query
 jsonsql --save-query all_electronics --query "SELECT * FROM products WHERE category = 'Electronics'"
@@ -243,11 +250,13 @@ jsonsql --save-query top_orders --query "SELECT o.orderId, p.name, p.price FROM 
 ```
 
 #### List Saved Queries
+
 ```bash
 jsonsql --list-queries
 ```
 
 Output:
+
 ```
 Saved Queries:
 ────────────────────────────────────────────────────────────────────────────────
@@ -258,6 +267,7 @@ Total: 2 saved queries
 ```
 
 #### Run a Saved Query
+
 ```bash
 # Run a saved query
 jsonsql --run-query all_electronics --data-dir example-data --pretty
@@ -274,6 +284,7 @@ jsonsql --run-query all_electronics --data-dir example-data --clipboard
 JsonSQL supports parameterized queries, allowing you to save queries with placeholders that can be filled at runtime.
 
 **Syntax:**
+
 - Placeholders: `${variable}` or `${variable:default_value}`
 - Provide values: `--param key=value` (can be used multiple times)
 
@@ -318,17 +329,20 @@ jsonsql --query "SELECT * FROM products WHERE price > ${min_price}" \
 ```
 
 **Parameter Rules:**
+
 - Required parameters (no default): Must be provided with `--param` or an error is thrown
 - Optional parameters (with default): Use default value if not provided
 - Parameter names: Can contain letters, numbers, and underscores
 - Parameter values: Inserted literally into the SQL text before parsing (no SQL escaping is performed). Treat saved queries and parameter values as trusted input — untrusted values can alter the query (SQL-injection style).
 
 #### Delete a Saved Query
+
 ```bash
 jsonsql --delete-query old_query
 ```
 
 **Saved Query Storage:**
+
 - Queries are stored in `.jsonsql-queries.json` (configurable with `--queries-file`)
 - Stored in JSON format with query names as keys
 - Persists across sessions
@@ -337,6 +351,7 @@ jsonsql --delete-query old_query
 **Pre-configured Queries:**
 
 This repository ships 39 pre-configured example queries demonstrating all features (36 feature-numbered `01_`–`36_` queries, the named `completed_orders` and `expensive_electronics` examples, and the parameterized `filtered_products`):
+
 - See [SAVED-QUERIES-REFERENCE.md](SAVED-QUERIES-REFERENCE.md) for complete documentation
 - The numbered queries (`01_`–`36_`) each showcase a specific feature
 - Covers: SELECT, DISTINCT, WHERE (all operators), JOIN, LEFT JOIN, LIKE, ILIKE, IN, IS NULL, UNNEST, WITH/CTE, multi-file tables, ORDER BY, TOP/LIMIT, and parameterized queries
@@ -406,6 +421,7 @@ jsonsql --query "SELECT * FROM products WHERE ((category = 'Electronics' AND pri
 ```
 
 **Supported Operators:**
+
 - **Logical:** `AND`, `OR`, `NOT`
 - **Comparison:** `=`, `!=`, `>`, `<`, `>=`, `<=`
 - **List Matching:** `IN`, `NOT IN` - check if value matches any in a list
@@ -415,11 +431,13 @@ jsonsql --query "SELECT * FROM products WHERE ((category = 'Electronics' AND pri
 - **Grouping:** Parentheses `()`
 
 **Boolean Logic:**
+
 - Short-circuit evaluation for `AND` and `OR`
 - Full support for nested conditions with any level of complexity
 - Operator precedence follows standard SQL rules
 
 **Pattern Matching with LIKE:**
+
 ```bash
 # Starts with pattern
 jsonsql --query "SELECT * FROM products WHERE name LIKE 'Laptop%'"
@@ -465,6 +483,7 @@ jsonsql --query "SELECT * FROM products WHERE name ILIKE '%e%' AND category ILIK
 ```
 
 **Difference between LIKE and ILIKE:**
+
 - `LIKE` is case-sensitive: `'laptop%'` only matches strings starting with lowercase "laptop"
 - `ILIKE` is case-insensitive: `'laptop%'` matches "Laptop", "laptop", "LAPTOP", etc.
 
@@ -514,6 +533,7 @@ jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics', 'Tools
 ```
 
 **Note on NULL behavior with IN:**
+
 - `NULL IN (...)` returns FALSE (excludes row)
 - `NULL NOT IN (...)` returns FALSE (excludes row)
 - Use `OR category IS NULL` if you want to include null values
@@ -549,21 +569,25 @@ jsonsql --query "SELECT name, tag FROM products, UNNEST(tags) AS t(tag) WHERE ta
 ### Output Options
 
 #### Write to File
+
 ```bash
 jsonsql --query "SELECT * FROM products" --output results.json
 ```
 
 #### Copy to Clipboard
+
 ```bash
 jsonsql --query "SELECT * FROM products" --clipboard
 ```
 
 #### Pretty Print
+
 ```bash
 jsonsql --query "SELECT * FROM products" --pretty
 ```
 
 Output:
+
 ```json
 [
   {
@@ -582,11 +606,13 @@ Output:
 ```
 
 #### CSV Output
+
 ```bash
 jsonsql --query "SELECT name, price FROM products" --format csv
 ```
 
 Output (header row plus one row per result):
+
 ```csv
 name,price
 Widget,19.99
@@ -601,6 +627,7 @@ jsonsql --query "SELECT name, price, category FROM products" --format csv --outp
 ```
 
 #### Combine Options
+
 ```bash
 jsonsql --query "SELECT * FROM products" --output results.json --pretty
 ```
@@ -610,20 +637,24 @@ jsonsql --query "SELECT * FROM products" --output results.json --pretty
 > **Query phase order:** clauses are applied in the order **WHERE → ORDER BY → projection (SELECT list) → DISTINCT → LIMIT/TOP**. This means sorting happens against the full source rows (you can `ORDER BY` a column you do not select), `DISTINCT` is applied to the projected columns, and `LIMIT`/`TOP` is applied last (after de-duplication).
 
 ### SELECT Clause
-- `SELECT *` - All fields
+
+- `SELECT `* - All fields
 - `SELECT field1, field2` - Specific fields
 - `SELECT table.field` - Qualified field names
 - `SELECT DISTINCT field` - Unique values only
 - `SELECT DISTINCT field1, field2` - Unique combinations
 
-**Projection and missing values:** When you list explicit columns, every selected column is always present in each output row. If a row has no value for a selected field (the field is absent or JSON `null`), it is emitted as JSON `null` rather than omitted, so all rows share the same keys. `SELECT *` behaves differently — it returns each row's fields as-is and does **not** add keys for absent fields.
+**Projection and missing values:** When you list explicit columns, every selected column is always present in each output row. If a row has no value for a selected field (the field is absent or JSON `null`), it is emitted as JSON `null` rather than omitted, so all rows share the same keys. `SELECT `* behaves differently — it returns each row's fields as-is and does **not** add keys for absent fields.
 
 ### FROM Clause
+
 - `FROM table` - Table name (mapped to JSONPath)
 - `FROM table alias` - Table with alias
 
 ### WHERE Clause
+
 Supported operators:
+
 - `=` - Equality
 - `!=` - Inequality
 - `>` - Greater than
@@ -636,6 +667,7 @@ Supported operators:
 - `AND` / `OR` / `NOT` - Boolean combinations
 
 Examples:
+
 ```sql
 WHERE price > 20
 WHERE category = 'Tools'
@@ -644,6 +676,7 @@ WHERE status != 'cancelled'
 ```
 
 **Comparison behavior:**
+
 - For `>`, `<`, `>=`, `<=`, the stored field's JSON type decides the comparison: if the field is a JSON number it is compared numerically against the literal; if the field is text it is compared lexicographically (alphabetically), e.g. `WHERE name >= 'M'`.
 - A number stored as a JSON string (e.g. `"10"`) is treated as text and therefore compares lexicographically, not numerically.
 - SQL `NULL` values never satisfy a comparison.
@@ -651,26 +684,31 @@ WHERE status != 'cancelled'
 **Unsupported expressions fail loudly:** Constructs that are not yet implemented — such as `BETWEEN`, subqueries (e.g. `IN (SELECT ...)`), or other unsupported WHERE syntax — now raise a clear error instead of silently returning zero rows. This prevents misleading empty results.
 
 ### JOIN Clause
+
 - `JOIN table ON condition` - Inner join
 - `LEFT JOIN table ON condition` - Left outer join
 
 Examples:
+
 ```sql
 JOIN products p ON o.productId = p.id
 LEFT JOIN customers c ON o.customerId = c.id
 ```
 
 **JOIN constraints:**
+
 - Only a single **equi-join** is supported: the `ON` condition must be one `left = right` equality. Compound conditions (`... AND ...`) and range operators (`>`, `>=`, `<`, `<=`, etc.) in `ON` raise a clear error.
 - Join keys use light type coercion: a numeric value matches its string representation (e.g. `5` matches `"5"`), so mismatched JSON types still join as expected.
 - SQL `NULL` join keys never match anything (including other nulls).
 
 ### DISTINCT Clause
+
 - `SELECT DISTINCT column` - Return unique values for a column
 - `SELECT DISTINCT column1, column2` - Return unique combinations of columns
-- `SELECT DISTINCT *` - Return unique rows (all columns must match)
+- `SELECT DISTINCT `* - Return unique rows (all columns must match)
 
 Examples:
+
 ```sql
 SELECT DISTINCT category FROM products
 SELECT DISTINCT name, category FROM products
@@ -682,12 +720,14 @@ SELECT DISTINCT category FROM products ORDER BY category
 **Note:** DISTINCT removes duplicate rows based on all selected columns. Rows are considered duplicates if all their field values are identical. Because DISTINCT runs **before** `LIMIT`/`TOP`, a query like `SELECT DISTINCT category FROM products LIMIT 5` returns up to 5 *distinct* categories (de-duplication happens first, then the limit is applied).
 
 ### ORDER BY Clause
+
 - `ORDER BY column` - Sort ascending (default)
 - `ORDER BY column ASC` - Sort ascending (explicit)
 - `ORDER BY column DESC` - Sort descending
 - `ORDER BY column1, column2 DESC` - Multi-column sort
 
 Examples:
+
 ```sql
 ORDER BY price
 ORDER BY price ASC
@@ -697,12 +737,14 @@ ORDER BY p.name, o.orderDate DESC
 ```
 
 **Note:** ORDER BY supports:
+
 - Numbers (sorted numerically)
 - Text (sorted alphabetically)
 - Booleans (false < true)
 - Qualified column names (`p.price`, `o.quantity`)
 
 ### TOP / LIMIT
+
 - `SELECT TOP n` - Limit to first n results
 - `SELECT ... LIMIT n` - Alternative syntax
 
@@ -767,9 +809,10 @@ A mapping associates a table name (alias) with a JSONPath expression and, option
 - **JSONPath only** — `alias "$.path.to.array"`: the JSONPath must start with `$`. The data is read from `<alias>.json` in the active data directory.
 - **File + JSONPath** — `alias "filename.json:$.path"`: read the path from a specific file (relative to `--data-dir`, or an absolute path).
 - **Directory + JSONPath** — `alias "subdir:$.path"`: load **all** `.json` files found under `subdir` **recursively** (including nested subdirectories) and combine their arrays into one table.
-- **Windows absolute paths** are supported, e.g. `alias "C:\data\products.json:$.items"`. The drive-letter colon is handled correctly and is not confused with the `file:path` separator.
+- **Absolute paths** (Windows, Linux, macOS) — e.g. `alias "/var/data/products.json:$.items"` or `alias "C:\data\products.json:$.items"`. Absolute paths are used as-is (not relative to `--data-dir`). The `file:path` delimiter is the colon immediately before the JSONPath (`:$`), so a Windows drive-letter colon (e.g. `C:`) is not mistaken for the separator.
 
 Validation:
+
 - The JSONPath portion **must** begin with `$`; mappings that don't are rejected when added.
 - Invalid mappings fail at `--add-mapping` time with a clear error, rather than silently failing later at query time.
 
@@ -783,7 +826,10 @@ jsonsql --add-mapping orders "ecommerce.json:$.store.orders"
 # Directory (recursive) — combines every .json file under products-multi/
 jsonsql --add-mapping all_products "products-multi:$.products" --data-dir example-data
 
-# Windows absolute path
+# Absolute path (Linux / macOS)
+jsonsql --add-mapping items "/var/data/inventory.json:$.items"
+
+# Absolute path (Windows)
 jsonsql --add-mapping items "C:\data\inventory.json:$.items"
 ```
 
@@ -838,7 +884,7 @@ jsonsql --add-mapping all_products "products-multi:$.products" --data-dir exampl
 jsonsql --add-mapping all_orders "orders-multi:$.orders" --data-dir example-data
 
 # Query combines data from all files automatically
-jsonsql --query "SELECT * FROM all_products" --data-dir example-data
+jsonsql --query "SELECT * FROM all_products" --data-dir example-dataWITH
 
 # JOIN works across partitioned files too!
 jsonsql --query "SELECT p.name, o.quantity FROM all_orders o JOIN all_products p ON o.productId = p.id" --data-dir example-data
@@ -886,6 +932,7 @@ jsonsql --clear-cache
 ```
 
 How it works:
+
 - When `--enable-cache` is set, parsed JSON is stored under a local `.jsonsql-cache/` directory.
 - The cache is **freshness-aware**: each entry's key includes the source file's last-modified time and size, so the cache is automatically invalidated and rebuilt whenever a source file changes. You never need to manually clear it after editing data.
 - CTE (`WITH`) results are also cached, keyed by the CTE's full definition (SELECT list, WHERE, ORDER BY, LIMIT/TOP) and the freshness fingerprint of its source files.
@@ -912,6 +959,7 @@ jsonsql --drop-index products category --data-dir example-data
 ```
 
 How it works:
+
 - Index **definitions** live in `.jsonsql-indexes.json`; the per-file **summaries** live under `.jsonsql-index/` in the data directory.
 - Each summary records, per file, the distinct values (up to a cardinality cap), `min`/`max`, value type, and a freshness fingerprint (last-modified time + size).
 - Pruning is **correctness-preserving**: a file is skipped only when a fresh summary proves no row can satisfy a mandatory `AND` predicate (`=`, `IN`, or a range `>`,`>=`,`<`,`<=`). Anything uncertain (no index, an `OR`, a stale/missing summary, mixed types, a changed mapping) falls back to a full scan, so results are always identical to running without an index.
@@ -928,6 +976,7 @@ Understanding how JsonSQL processes data helps set expectations for large inputs
 - **Optional disk cache**: Use `--enable-cache` to persist parsed JSON between runs (see [Caching](#caching)). The cache speeds up repeated queries against unchanged sources but does not reduce per-query memory usage.
 
 For very large files (>100MB), consider:
+
 - Adding specific `WHERE` clauses to reduce the result set (note this does not reduce memory used to load the source)
 - Splitting large JSON files into smaller files (directory mappings load matching files recursively)
 - Enabling the disk cache (`--enable-cache`) for repeated queries over the same data
@@ -937,36 +986,42 @@ For very large files (>100MB), consider:
 ### Common Issues
 
 **"No mapping found for table"**
+
 ```bash
 # Add the mapping first
 jsonsql --add-mapping products "$.data.products"
 ```
 
 **"JSON file not found"**
+
 ```bash
 # Verify file location and use --data-dir
 jsonsql --data-dir /path/to/data --query "SELECT * FROM products"
 ```
 
 **"Invalid SQL syntax"**
+
 ```bash
 # Check query syntax, especially quotes
 jsonsql --query "SELECT * FROM products WHERE name = 'Widget'"
 ```
 
 **Empty results**
+
 ```bash
 # Verify JSONPath expression returns array
 jsonsql --list-tables  # Check configured paths
 ```
 
 **"Data directory does not exist" / "is not a directory"**
+
 ```bash
 # --data-dir must point to an existing directory
 jsonsql --data-dir ./example-data --query "SELECT * FROM products"
 ```
 
 **"Only one action may be specified" (or similar)**
+
 ```bash
 # Primary actions are mutually exclusive — run them one at a time
 jsonsql --list-tables          # don't combine with --query
@@ -1003,14 +1058,17 @@ Planned features for future releases, organized by priority:
 ### High Priority (Core SQL Features)
 
 **WHERE Clause Operators:**
+
 - `BETWEEN` operator - Range checking (e.g., `WHERE price BETWEEN 100 AND 500`). Currently raises a clear "unsupported expression" error rather than being silently ignored.
 
 **Aggregation & Grouping:**
+
 - `GROUP BY` clause with aggregation functions
 - `COUNT`, `SUM`, `AVG`, `MIN`, `MAX` functions
 - `HAVING` clause for filtering grouped results
 
 **Query Features:**
+
 - Subqueries (e.g., `WHERE price > (SELECT AVG(price) FROM products)`)
 - `UNION` / `UNION ALL` for combining result sets
 - Calculated fields in SELECT (e.g., `SELECT price * 1.1 AS price_with_tax`)
@@ -1018,50 +1076,60 @@ Planned features for future releases, organized by priority:
 ### Medium Priority (Advanced Features)
 
 **JOIN Enhancements:**
+
 - `RIGHT JOIN` and `FULL OUTER JOIN`
 - Self-joins with improved alias handling
 
 **String & Data Functions:**
+
 - String functions: `UPPER`, `LOWER`, `CONCAT`, `SUBSTRING`, `LENGTH`, `TRIM`
 - Date/Time functions: `YEAR`, `MONTH`, `DAY`, `DATE`, `DATEADD`, `DATEDIFF`
 - Numeric functions: `ROUND`, `FLOOR`, `CEIL`, `ABS`, `POWER`
 - `COALESCE` / `IFNULL` for null value handling
 
 **Conditional Logic:**
+
 - `CASE/WHEN/ELSE/END` expressions for conditional values
 - `IF` function for simple conditionals
 
 **Pagination & Limiting:**
+
 - `OFFSET` support for pagination (e.g., `LIMIT 10 OFFSET 20`)
 
 ### Lower Priority (Quality of Life)
 
 **Array/Collection Operations:**
+
 - ✅ `UNNEST` for flattening arrays
 - Array contains/length operations
 - JSONPath expressions in SELECT
 
 **Output Formats:**
+
 - ✅ **CSV output** (`--format csv`) — header row plus RFC 4180–escaped values - **IMPLEMENTED**
 - TSV output format (`--format tsv`)
 - ASCII table format (`--format table`)
 - XML output format (`--format xml`)
 
 **Saved Query Enhancements:**
+
 - ✅ **Parameterized queries** - Variables in saved queries (e.g., `WHERE price > ${min_price}`) - **IMPLEMENTED**
 - Query templates with default values (✅ supported via `${var:default}` syntax)
 - Named parameters for reusability (✅ supported)
 
 **Developer Tools:**
+
 - ✅ **Query validation / dry-run** (`--dry-run`) — parse + mapping + file checks without executing - **IMPLEMENTED**
 - Query profiling and performance analysis (`--explain`)
 - ✅ **Schema introspection** (`--describe <table>`) — field paths, types, sample values - **IMPLEMENTED**
 
 **Performance Optimizations:**
+
 - ✅ **Declared indexes** (`--add-index`) — per-file value summaries for file-level pruning of multi-file tables - **IMPLEMENTED** (see [Indexing](INDEXING.md)); row-level/NDJSON offset indexing still planned
 - Streaming mode for very large files
 
 **SQL Compatibility:**
+
 - Full three-valued logic (TRUE/FALSE/UNKNOWN) for NULL handling
 - Additional comparison operators (`<>` as synonym for `!=`)
 - Comment support in SQL (`--` and `/* */`)
@@ -1074,6 +1142,7 @@ Have a feature request? Please open an issue on GitHub!
 ## Architecture
 
 JsonSQL is built with:
+
 - **Java 21**: Modern Java features for clean, efficient code
 - **Picocli**: Command-line interface
 - **Jackson**: JSON parsing and manipulation
@@ -1083,6 +1152,7 @@ JsonSQL is built with:
 ## Contributing
 
 Contributions are welcome! Please ensure:
+
 - All tests pass: `mvn test`
 - Code follows Java 21 best practices
 - New features include unit tests
@@ -1094,4 +1164,3 @@ Contributions are welcome! Please ensure:
 ## Support
 
 For issues, questions, or feature requests, please [open an issue](link-to-issues).
-

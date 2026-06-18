@@ -10,6 +10,11 @@ import com.jsonsql.index.IndexDefinition;
 import com.jsonsql.index.IndexManager;
 import com.jsonsql.index.IndexStore;
 import com.jsonsql.index.TableIndex;
+import com.jsonsql.view.MaterializedViewBuilder;
+import com.jsonsql.view.MaterializedViewDefinition;
+import com.jsonsql.view.MaterializedViewManager;
+import com.jsonsql.view.MaterializedViewStore;
+import com.jsonsql.view.SourceFingerprint;
 import com.jsonsql.introspection.TableDescriber;
 import com.jsonsql.output.OutputFormat;
 import com.jsonsql.output.OutputHandler;
@@ -27,7 +32,7 @@ import java.util.concurrent.Callable;
 @Command(
     name = "jsonsql",
     mixinStandardHelpOptions = true,
-    version = "JsonSQL 1.3.0",
+    version = "JsonSQL 1.4.0",
     description = "Query JSON files using SQL-like syntax"
 )
 public class JsonSqlCli implements Callable<Integer> {
@@ -109,6 +114,27 @@ public class JsonSqlCli implements Callable<Integer> {
 
     @Option(names = {"--no-index"}, description = "Bypass declared indexes for this query (force full scan)")
     private boolean noIndex;
+
+    @Option(names = {"--views-file"}, description = "Path to materialized view definitions file", defaultValue = ".jsonsql-views.json")
+    private File viewsFile;
+
+    @Option(names = {"--materialize-view"}, description = "Create a materialized view from a WITH query (arg: view name)", arity = "1")
+    private String materializeViewName;
+
+    @Option(names = {"--list-materialized-views"}, description = "List materialized views with SQL and freshness")
+    private boolean listMaterializedViews;
+
+    @Option(names = {"--show-view"}, description = "Show one materialized view definition", arity = "1")
+    private String showViewName;
+
+    @Option(names = {"--drop-materialized-view"}, description = "Remove a materialized view", arity = "1")
+    private String dropMaterializedViewName;
+
+    @Option(names = {"--rebuild-view"}, description = "Rebuild one materialized view", arity = "1")
+    private String rebuildViewName;
+
+    @Option(names = {"--rebuild-views"}, description = "Rebuild all materialized views")
+    private boolean rebuildViews;
 
     public static void main(String[] args) {
         int exitCode = new CommandLine(new JsonSqlCli()).execute(args);
@@ -192,7 +218,9 @@ public class JsonSqlCli implements Callable<Integer> {
             }
             try {
                 CacheManager cacheManager = enableCache ? new CacheManager(dataDirectory) : null;
-                TableDescriber describer = new TableDescriber(mappingManager, dataDirectory, cacheManager);
+                MaterializedViewManager viewManager = loadViewManagerQuietly();
+                TableDescriber describer = new TableDescriber(mappingManager, dataDirectory,
+                    cacheManager, viewManager);
                 System.out.println(describer.describe(describeTable));
                 return 0;
             } catch (IllegalArgumentException e) {
@@ -211,6 +239,12 @@ public class JsonSqlCli implements Callable<Integer> {
         if (addIndex != null || dropIndex != null || listIndexes
             || rebuildIndex != null || rebuildIndexes) {
             return handleIndexCommands(mappingManager);
+        }
+
+        // Handle materialized view commands
+        if (materializeViewName != null || listMaterializedViews || showViewName != null
+            || dropMaterializedViewName != null || rebuildViewName != null || rebuildViews) {
+            return handleViewCommands(mappingManager);
         }
 
         // Handle save-query command
@@ -280,9 +314,10 @@ public class JsonSqlCli implements Callable<Integer> {
                 
                 // Create CacheManager if caching is enabled
                 CacheManager cacheManager = enableCache ? new CacheManager(dataDirectory) : null;
-                // Load declared indexes for file pruning unless explicitly bypassed.
                 IndexManager indexManager = noIndex ? null : loadIndexManagerQuietly();
-                QueryExecutor executor = new QueryExecutor(mappingManager, dataDirectory, cacheManager, indexManager);
+                MaterializedViewManager viewManager = loadViewManagerQuietly();
+                QueryExecutor executor = new QueryExecutor(mappingManager, dataDirectory, cacheManager,
+                    indexManager, viewManager);
                 if (dryRun) {
                     System.out.println(DryRunReporter.format(executor.dryRunValidate(query), mappingManager));
                     return 0;
@@ -327,6 +362,13 @@ public class JsonSqlCli implements Callable<Integer> {
         System.err.println("  --list-queries          List saved queries");
         System.err.println("  --add-mapping <a> <p>   Add a JSONPath mapping");
         System.err.println("  --clear-cache           Clear cached data");
+        System.err.println("  --add-index <table> <field>   Declare and build an index");
+        System.err.println("  --list-indexes          List declared indexes");
+        System.err.println("  --materialize-view <name> --query <sql>   Persist a WITH query as a view");
+        System.err.println("  --list-materialized-views   List materialized views");
+        System.err.println("  --show-view <name>      Show one materialized view");
+        System.err.println("  --rebuild-view <name>   Rebuild a materialized view");
+        System.err.println("  (Use -h or --help for the full option list)");
         return 1;
     }
 
@@ -382,15 +424,22 @@ public class JsonSqlCli implements Callable<Integer> {
         if (listIndexes) actions++;
         if (rebuildIndex != null) actions++;
         if (rebuildIndexes) actions++;
-        // Inline query execution counts as an action only when not used as a save payload
-        // and not combined with run-query (handled separately below).
-        if (query != null && saveQueryName == null && runQueryName == null) actions++;
+        if (materializeViewName != null) actions++;
+        if (listMaterializedViews) actions++;
+        if (showViewName != null) actions++;
+        if (dropMaterializedViewName != null) actions++;
+        if (rebuildViewName != null) actions++;
+        if (rebuildViews) actions++;
+        // Inline query execution counts as an action only when not used as a save/materialize payload
+        if (query != null && saveQueryName == null && runQueryName == null
+            && materializeViewName == null) actions++;
 
         if (actions > 1) {
             return "Multiple actions specified. Use only one of --query, --run-query, --save-query, "
                 + "--delete-query, --list-tables, --describe, --list-queries, --add-mapping, "
                 + "--clear-cache, --add-index, --drop-index, --list-indexes, --rebuild-index, "
-                + "or --rebuild-indexes at a time.";
+                + "--rebuild-indexes, --materialize-view, --list-materialized-views, --show-view, "
+                + "--drop-materialized-view, --rebuild-view, or --rebuild-views at a time.";
         }
 
         if (runQueryName != null && query != null) {
@@ -443,14 +492,18 @@ public class JsonSqlCli implements Callable<Integer> {
             return 1;
         }
         IndexStore indexStore = new IndexStore(dataDirectory);
-        IndexBuilder builder = new IndexBuilder(mappingManager, dataDirectory, indexStore);
+        MaterializedViewManager viewManager = loadViewManagerQuietly();
+        MaterializedViewStore viewStore = viewManager != null
+            ? new MaterializedViewStore(dataDirectory) : null;
+        IndexBuilder builder = new IndexBuilder(mappingManager, dataDirectory, indexStore,
+            viewManager, viewStore);
 
         if (addIndex != null) {
             String table = addIndex[0];
             String field = addIndex[1];
-            if (!mappingManager.hasMapping(table)) {
-                System.err.println("Error: No mapping found for table: " + table
-                    + ". Use --add-mapping to define it.");
+            boolean isView = viewManager != null && viewManager.hasView(table);
+            if (!mappingManager.hasMapping(table) && !isView) {
+                System.err.println("Error: No mapping or materialized view found for table: " + table);
                 return 1;
             }
             try {
@@ -601,6 +654,175 @@ public class JsonSqlCli implements Callable<Integer> {
             return "FRESH";
         } catch (Exception e) {
             return "STALE";
+        }
+    }
+
+    /**
+     * Handle materialized view management commands.
+     */
+    private Integer handleViewCommands(MappingManager mappingManager) {
+        String dataDirError = validateDataDirectory();
+        if (dataDirError != null) {
+            System.err.println("Error: " + dataDirError);
+            return 1;
+        }
+        MaterializedViewManager viewManager;
+        try {
+            viewManager = new MaterializedViewManager(viewsFile);
+        } catch (RuntimeException e) {
+            System.err.println("Error loading materialized views: " + e.getMessage());
+            return 1;
+        }
+        MaterializedViewStore viewStore = new MaterializedViewStore(dataDirectory);
+        IndexManager indexManager = loadIndexManagerQuietly();
+        MaterializedViewBuilder builder = new MaterializedViewBuilder(
+            mappingManager, dataDirectory, viewManager, viewStore);
+
+        if (materializeViewName != null) {
+            if (query == null) {
+                System.err.println("Error: --query is required with --materialize-view");
+                return 1;
+            }
+            try {
+                MaterializedViewDefinition def = builder.materialize(materializeViewName, query, indexManager);
+                System.out.println("Materialized view created: " + def.getName());
+                System.out.println("  SQL: " + def.getCteSql());
+                System.out.println("  rows=" + def.getRowCount());
+                return 0;
+            } catch (Exception e) {
+                System.err.println("Error materializing view: " + e.getMessage());
+                if (isDebugEnabled()) {
+                    e.printStackTrace();
+                }
+                return 1;
+            }
+        }
+
+        if (dropMaterializedViewName != null) {
+            boolean removed = viewManager.dropView(dropMaterializedViewName);
+            viewStore.delete(dropMaterializedViewName);
+            if (indexManager != null) {
+                for (IndexDefinition idx : indexManager.getIndexesForTable(dropMaterializedViewName)) {
+                    indexManager.dropIndex(idx.getTable(), idx.getField());
+                    new IndexStore(dataDirectory).delete(idx.getTable(), idx.getField());
+                }
+            }
+            System.out.println(removed
+                ? "Materialized view dropped: " + dropMaterializedViewName
+                : "No such materialized view: " + dropMaterializedViewName);
+            return 0;
+        }
+
+        if (listMaterializedViews) {
+            listMaterializedViews(viewManager, mappingManager);
+            return 0;
+        }
+
+        if (showViewName != null) {
+            showMaterializedView(showViewName, viewManager, mappingManager, indexManager);
+            return 0;
+        }
+
+        if (rebuildViewName != null) {
+            if (!viewManager.hasView(rebuildViewName)) {
+                System.err.println("Error: No materialized view: " + rebuildViewName);
+                return 1;
+            }
+            try {
+                MaterializedViewDefinition def = builder.rebuild(rebuildViewName, indexManager);
+                System.out.println("Rebuilt materialized view: " + def.getName());
+                System.out.println("  rows=" + def.getRowCount());
+                return 0;
+            } catch (Exception e) {
+                System.err.println("Error rebuilding view: " + e.getMessage());
+                if (isDebugEnabled()) {
+                    e.printStackTrace();
+                }
+                return 1;
+            }
+        }
+
+        if (rebuildViews) {
+            List<MaterializedViewDefinition> defs = viewManager.getAllViews();
+            if (defs.isEmpty()) {
+                System.out.println("No materialized views to rebuild.");
+                return 0;
+            }
+            int ok = 0;
+            int failed = 0;
+            for (MaterializedViewDefinition def : defs) {
+                try {
+                    builder.rebuild(def.getName(), indexManager);
+                    System.out.println("Rebuilt: " + def.getName());
+                    ok++;
+                } catch (Exception e) {
+                    System.err.println("Failed: " + def.getName() + " - " + e.getMessage());
+                    failed++;
+                }
+            }
+            System.out.println("Rebuilt " + ok + " view(s)"
+                + (failed > 0 ? ", " + failed + " failed" : "") + ".");
+            return failed > 0 ? 1 : 0;
+        }
+
+        return 0;
+    }
+
+    private void listMaterializedViews(MaterializedViewManager viewManager, MappingManager mappingManager) {
+        List<MaterializedViewDefinition> defs = viewManager.getAllViews();
+        if (defs.isEmpty()) {
+            System.out.println("No materialized views.");
+            System.out.println("Create one with: jsonsql --materialize-view <name> --query \"WITH <name> AS (...) SELECT ...\"");
+            return;
+        }
+        System.out.println("Materialized views:");
+        System.out.println("─".repeat(80));
+        for (MaterializedViewDefinition def : defs) {
+            SourceFingerprint.warnIfDataDirectoryMismatch(def, dataDirectory);
+            String status = SourceFingerprint.isFresh(def, mappingManager, dataDirectory) ? "FRESH" : "STALE";
+            System.out.printf("  %-20s -> %s%n", def.getName(), def.getCteSql());
+            System.out.printf("                         rows=%d  built=%s  [%s]%n",
+                def.getRowCount(), def.getBuiltAt(), status);
+        }
+        System.out.println("─".repeat(80));
+        System.out.println("Total: " + defs.size() + " materialized view(s)");
+    }
+
+    private void showMaterializedView(String name, MaterializedViewManager viewManager,
+                                      MappingManager mappingManager, IndexManager indexManager) {
+        MaterializedViewDefinition def = viewManager.getView(name);
+        if (def == null) {
+            System.err.println("No materialized view: " + name);
+            return;
+        }
+        SourceFingerprint.warnIfDataDirectoryMismatch(def, dataDirectory);
+        String status = SourceFingerprint.isFresh(def, mappingManager, dataDirectory) ? "FRESH" : "STALE";
+        System.out.println("Materialized view: " + def.getName());
+        System.out.println("  SQL: " + def.getCteSql());
+        System.out.println("  Rows: " + def.getRowCount());
+        System.out.println("  Built: " + def.getBuiltAt());
+        System.out.println("  Status: " + status);
+        if (indexManager != null) {
+            List<IndexDefinition> indexes = indexManager.getIndexesForTable(name);
+            if (!indexes.isEmpty()) {
+                System.out.println("  Indexes:");
+                for (IndexDefinition idx : indexes) {
+                    System.out.println("    - " + idx.getField());
+                }
+            }
+        }
+    }
+
+    /**
+     * Load materialized view definitions for query-time resolution.
+     */
+    private MaterializedViewManager loadViewManagerQuietly() {
+        try {
+            MaterializedViewManager manager = new MaterializedViewManager(viewsFile);
+            return manager.size() > 0 ? manager : null;
+        } catch (RuntimeException e) {
+            System.err.println("Warning: ignoring materialized view definitions (" + e.getMessage() + ")");
+            return null;
         }
     }
 

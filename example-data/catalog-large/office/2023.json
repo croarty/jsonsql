@@ -1,0 +1,126 @@
+{
+  "year": 2023,
+  "category": "Office",
+  "products": [
+    {
+      "id": 1113,
+      "name": "Office item 1 (2023)",
+      "brand": "Acme",
+      "category": "Office",
+      "price": 218.78,
+      "inStock": true,
+      "year": 2023,
+      "region": "East",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1114,
+      "name": "Office item 2 (2023)",
+      "brand": "Acme",
+      "category": "Office",
+      "price": 212.05,
+      "inStock": true,
+      "year": 2023,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1115,
+      "name": "Office item 3 (2023)",
+      "brand": "Acme",
+      "category": "Office",
+      "price": 238.73,
+      "inStock": false,
+      "year": 2023,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1116,
+      "name": "Office item 4 (2023)",
+      "brand": "Globex",
+      "category": "Office",
+      "price": 361.59,
+      "inStock": true,
+      "year": 2023,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1117,
+      "name": "Office item 5 (2023)",
+      "brand": "Initech",
+      "category": "Office",
+      "price": 106.38,
+      "inStock": true,
+      "year": 2023,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1118,
+      "name": "Office item 6 (2023)",
+      "brand": "Initech",
+      "category": "Office",
+      "price": 454.98,
+      "inStock": false,
+      "year": 2023,
+      "region": "East",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1119,
+      "name": "Office item 7 (2023)",
+      "brand": "Initech",
+      "category": "Office",
+      "price": 116.08,
+      "inStock": true,
+      "year": 2023,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1120,
+      "name": "Office item 8 (2023)",
+      "brand": "Globex",
+      "category": "Office",
+      "price": 322.22,
+      "inStock": true,
+      "year": 2023,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    }
+  ]
+}

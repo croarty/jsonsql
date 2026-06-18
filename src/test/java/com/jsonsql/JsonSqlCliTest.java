@@ -125,6 +125,8 @@ class JsonSqlCliTest {
         // Help should enumerate the available actions
         assertTrue(r.err().contains("--query"));
         assertTrue(r.err().contains("--list-tables"));
+        assertTrue(r.err().contains("--materialize-view"));
+        assertTrue(r.err().contains("--list-materialized-views"));
     }
 
     @Test
@@ -215,7 +217,7 @@ class JsonSqlCliTest {
     void testDescribeUnknownTableReportsError() {
         CliResult r = runCli(withConfig("--describe", "missing"));
         assertEquals(1, r.exitCode());
-        assertTrue(r.err().toLowerCase().contains("no mapping found"));
+        assertTrue(r.err().toLowerCase().contains("no mapping or materialized view"));
     }
 
     @Test
@@ -238,7 +240,7 @@ class JsonSqlCliTest {
     void testDryRunReportsMissingMapping() {
         CliResult r = runCli(withConfig("-q", "SELECT * FROM missing", "--dry-run"));
         assertEquals(1, r.exitCode());
-        assertTrue(r.err().toLowerCase().contains("no mapping found"));
+        assertTrue(r.err().toLowerCase().contains("no mapping or materialized view"));
     }
 
     @Test

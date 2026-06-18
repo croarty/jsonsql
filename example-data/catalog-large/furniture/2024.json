@@ -1,0 +1,126 @@
+{
+  "year": 2024,
+  "category": "Furniture",
+  "products": [
+    {
+      "id": 1057,
+      "name": "Furniture item 1 (2024)",
+      "brand": "Initech",
+      "category": "Furniture",
+      "price": 183.88,
+      "inStock": true,
+      "year": 2024,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1058,
+      "name": "Furniture item 2 (2024)",
+      "brand": "Initech",
+      "category": "Furniture",
+      "price": 278.36,
+      "inStock": true,
+      "year": 2024,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1059,
+      "name": "Furniture item 3 (2024)",
+      "brand": "Acme",
+      "category": "Furniture",
+      "price": 77.24,
+      "inStock": false,
+      "year": 2024,
+      "region": "North",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1060,
+      "name": "Furniture item 4 (2024)",
+      "brand": "Initech",
+      "category": "Furniture",
+      "price": 103.2,
+      "inStock": true,
+      "year": 2024,
+      "region": "East",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1061,
+      "name": "Furniture item 5 (2024)",
+      "brand": "Globex",
+      "category": "Furniture",
+      "price": 210.94,
+      "inStock": true,
+      "year": 2024,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1062,
+      "name": "Furniture item 6 (2024)",
+      "brand": "Initech",
+      "category": "Furniture",
+      "price": 75.6,
+      "inStock": false,
+      "year": 2024,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1063,
+      "name": "Furniture item 7 (2024)",
+      "brand": "Acme",
+      "category": "Furniture",
+      "price": 446.91,
+      "inStock": true,
+      "year": 2024,
+      "region": "South",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    },
+    {
+      "id": 1064,
+      "name": "Furniture item 8 (2024)",
+      "brand": "Globex",
+      "category": "Furniture",
+      "price": 277.97,
+      "inStock": true,
+      "year": 2024,
+      "region": "West",
+      "tags": [
+        "retail",
+        "bulk",
+        "seasonal"
+      ]
+    }
+  ]
+}

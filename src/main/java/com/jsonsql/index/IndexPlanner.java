@@ -6,6 +6,8 @@ import com.jsonsql.query.ParsedQuery;
 import com.jsonsql.query.TableFileResolver;
 import com.jsonsql.query.TableInfo;
 import com.jsonsql.query.UnnestInfo;
+import com.jsonsql.view.MaterializedViewBuilder;
+import com.jsonsql.view.MaterializedViewManager;
 import net.sf.jsqlparser.expression.DoubleValue;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.LongValue;
@@ -52,13 +54,21 @@ public class IndexPlanner {
     private final IndexStore indexStore;
     private final MappingManager mappingManager;
     private final TableFileResolver resolver;
+    private final MaterializedViewManager viewManager;
 
     public IndexPlanner(IndexManager indexManager, IndexStore indexStore,
                         MappingManager mappingManager, TableFileResolver resolver) {
+        this(indexManager, indexStore, mappingManager, resolver, null);
+    }
+
+    public IndexPlanner(IndexManager indexManager, IndexStore indexStore,
+                        MappingManager mappingManager, TableFileResolver resolver,
+                        MaterializedViewManager viewManager) {
         this.indexManager = indexManager;
         this.indexStore = indexStore;
         this.mappingManager = mappingManager;
         this.resolver = resolver;
+        this.viewManager = viewManager;
     }
 
     /**
@@ -83,7 +93,9 @@ public class IndexPlanner {
         collectConjuncts(query.getWhereExpression(), conjuncts);
 
         String alias = fromTable.getEffectiveName();
-        String mappingJsonPath = mappingManager.getJsonPathOnly(table);
+        String mappingJsonPath = isMaterializedView(table)
+            ? MaterializedViewBuilder.INDEX_JSON_PATH_MARKER
+            : mappingManager.getJsonPathOnly(table);
 
         // Map UNNEST element column -> the (alias-stripped) source array path.
         Map<String, String> unnestSource = new HashMap<>();
@@ -120,7 +132,7 @@ public class IndexPlanner {
             return currentFiles;
         }
 
-        File base = resolver.resolveBase(table);
+        File base = isMaterializedView(table) ? new File(table) : resolver.resolveBase(table);
         List<File> keep = new ArrayList<>();
         for (File file : currentFiles) {
             boolean prunable = false;
@@ -428,5 +440,9 @@ public class IndexPlanner {
             }
         }
         return true;
+    }
+
+    private boolean isMaterializedView(String table) {
+        return viewManager != null && viewManager.hasView(table) && !mappingManager.hasMapping(table);
     }
 }
