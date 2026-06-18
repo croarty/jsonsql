@@ -1,7 +1,0 @@
-[ {
-  "table" : "sales",
-  "field" : "quarter"
-}, {
-  "table" : "expensive",
-  "field" : "category"
-} ]
