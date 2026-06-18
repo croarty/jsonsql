@@ -103,6 +103,22 @@ class CteTest {
     }
     
     @Test
+    void testCteReferenceIsCaseInsensitive() throws Exception {
+        String sql = """
+            WITH expensive_products AS (
+              SELECT * FROM products WHERE price > 100
+            )
+            SELECT * FROM EXPENSIVE_PRODUCTS
+            """;
+
+        String result = executor.execute(sql);
+        JsonNode resultArray = objectMapper.readTree(result);
+
+        assertTrue(resultArray.isArray());
+        assertEquals(4, resultArray.size());
+    }
+
+    @Test
     void testCTEWithJoin() throws Exception {
         String sql = """
             WITH expensive_products AS (

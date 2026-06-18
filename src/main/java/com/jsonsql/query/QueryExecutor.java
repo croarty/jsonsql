@@ -155,7 +155,7 @@ public class QueryExecutor implements FieldAccessor {
 
     private void ensureTableAccessible(String tableName, Set<String> availableCtes,
                                        Set<String> resolvedTables) throws IOException {
-        if (availableCtes.contains(tableName)) {
+        if (CteNames.contains(availableCtes, tableName)) {
             return;
         }
         if (isMaterializedView(tableName)) {

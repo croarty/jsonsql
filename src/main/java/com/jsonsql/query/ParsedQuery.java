@@ -127,6 +127,15 @@ public class ParsedQuery {
         this.commonTableExpressions.put(name, cteQuery);
     }
 
+    public boolean hasCteNamed(String name) {
+        return CteNames.resolveKey(commonTableExpressions, name) != null;
+    }
+
+    public ParsedQuery getCteNamed(String name) {
+        String key = CteNames.resolveKey(commonTableExpressions, name);
+        return key != null ? commonTableExpressions.get(key) : null;
+    }
+
     public boolean hasCTEs() {
         return commonTableExpressions != null && !commonTableExpressions.isEmpty();
     }

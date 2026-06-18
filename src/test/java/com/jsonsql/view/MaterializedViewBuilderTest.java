@@ -55,6 +55,18 @@ class MaterializedViewBuilderTest {
     }
 
     @Test
+    void materializeAcceptsCaseInsensitiveCteName() throws Exception {
+        String sql = """
+            WITH premium AS (SELECT id, name, price FROM products WHERE price > 10)
+            SELECT * FROM premium""";
+        MaterializedViewDefinition def = builder.materialize("Premium", sql, null);
+
+        assertEquals("SELECT id, name, price FROM products WHERE price > 10", def.getCteSql());
+        assertEquals(2, def.getRowCount());
+        assertEquals("Premium", def.getName());
+    }
+
+    @Test
     void rejectsDuplicateViewName() throws Exception {
         String sql = "WITH v AS (SELECT * FROM products) SELECT * FROM v";
         builder.materialize("v", sql, null);

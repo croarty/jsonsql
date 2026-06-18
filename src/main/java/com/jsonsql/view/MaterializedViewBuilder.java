@@ -1,7 +1,6 @@
 package com.jsonsql.view;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jsonsql.config.MappingManager;
 import com.jsonsql.index.IndexManager;
 import com.jsonsql.query.ParsedQuery;
@@ -12,7 +11,6 @@ import com.jsonsql.query.TableFileResolver;
 
 import java.io.File;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -26,7 +24,6 @@ public class MaterializedViewBuilder {
     private final MaterializedViewManager viewManager;
     private final MaterializedViewStore viewStore;
     private final QueryParser queryParser;
-    private final ObjectMapper objectMapper;
 
     public MaterializedViewBuilder(MappingManager mappingManager, File dataDirectory,
                                    MaterializedViewManager viewManager,
@@ -36,7 +33,6 @@ public class MaterializedViewBuilder {
         this.viewManager = viewManager;
         this.viewStore = viewStore;
         this.queryParser = new QueryParser();
-        this.objectMapper = new ObjectMapper();
     }
 
     /**
@@ -57,13 +53,13 @@ public class MaterializedViewBuilder {
         }
 
         ParsedQuery parsed = queryParser.parse(fullSql);
-        if (!parsed.hasCTEs() || !parsed.getCommonTableExpressions().containsKey(name)) {
+        if (!parsed.hasCTEs() || !parsed.hasCteNamed(name)) {
             throw new QueryParseException(
                 "Query must contain WITH " + name + " AS (...). CTE '" + name + "' was not found.");
         }
 
         String cteSql = queryParser.extractCteSql(fullSql, name);
-        ParsedQuery cteBody = parsed.getCommonTableExpressions().get(name);
+        ParsedQuery cteBody = parsed.getCteNamed(name);
 
         QueryExecutor executor = QueryExecutor.forMaterialization(
             mappingManager, dataDirectory, null, indexManager, viewManager);

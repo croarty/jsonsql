@@ -19,7 +19,8 @@ public class QueryExecutionContext {
      * @return The CTE result data, or null if not found
      */
     public List<JsonNode> getCTEResult(String cteName) {
-        return cteResults.get(cteName);
+        String key = CteNames.resolveKey(cteResults, cteName);
+        return key != null ? cteResults.get(key) : null;
     }
     
     /**
@@ -28,7 +29,7 @@ public class QueryExecutionContext {
      * @return true if the CTE result exists
      */
     public boolean hasCTE(String cteName) {
-        return cteResults.containsKey(cteName);
+        return CteNames.resolveKey(cteResults, cteName) != null;
     }
     
     /**

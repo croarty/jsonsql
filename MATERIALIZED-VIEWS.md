@@ -53,6 +53,7 @@ under `.jsonsql-views/<name>.json` inside the data directory.
 
 - A view name cannot match an existing table mapping.
 - Creating a view that already exists fails; use `--rebuild-view` or drop first.
+- The `--materialize-view` name must match a CTE in the query (**case-insensitive**, like SQL identifiers).
 - An inline `WITH` in your query **shadows** a materialized view of the same name.
 
 ### Freshness (stale policy)
