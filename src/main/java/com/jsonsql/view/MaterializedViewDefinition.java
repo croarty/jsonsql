@@ -84,6 +84,11 @@ public class MaterializedViewDefinition {
         this.rowCount = rowCount;
     }
 
+    /**
+     * Compares by name only. Views are uniquely identified by name within the system;
+     * two definitions with the same name represent the same materialized view even if
+     * other fields (cteSql, fingerprint, etc.) differ.
+     */
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -92,6 +97,9 @@ public class MaterializedViewDefinition {
         return Objects.equals(name, that.name);
     }
 
+    /**
+     * Hash code based on name only to maintain consistency with equals().
+     */
     @Override
     public int hashCode() {
         return Objects.hash(name);
