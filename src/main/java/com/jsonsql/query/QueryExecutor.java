@@ -115,6 +115,11 @@ public class QueryExecutor implements FieldAccessor {
             System.err.println("DEBUG: Query has no CTEs");
         }
         
+        // Execute UNION query if present
+        if (parsedQuery.isUnionQuery()) {
+            return executeUnionQuery(parsedQuery.getUnionQuery(), context);
+        }
+        
         // Execute main query with context
         return executeQuery(parsedQuery, context);
     }
@@ -131,6 +136,15 @@ public class QueryExecutor implements FieldAccessor {
     }
 
     private void validateResolvedTables(ParsedQuery parsedQuery, Set<String> resolvedTables) throws IOException {
+        // Handle UNION query - validate all sub-queries
+        if (parsedQuery.isUnionQuery()) {
+            UnionQuery unionQuery = parsedQuery.getUnionQuery();
+            for (ParsedQuery subQuery : unionQuery.getSubQueries()) {
+                validateResolvedTables(subQuery, resolvedTables);
+            }
+            return;
+        }
+        
         Set<String> availableCtes = new LinkedHashSet<>();
         for (Map.Entry<String, ParsedQuery> cte : parsedQuery.getCommonTableExpressions().entrySet()) {
             validateTableReferences(cte.getValue(), availableCtes, resolvedTables);
@@ -249,6 +263,52 @@ public class QueryExecutor implements FieldAccessor {
         ArrayNode resultArray = objectMapper.createArrayNode();
         projectedData.forEach(resultArray::add);
 
+        return objectMapper.writeValueAsString(resultArray);
+    }
+    
+    /**
+     * Execute a UNION query and return the combined results.
+     */
+    private String executeUnionQuery(UnionQuery unionQuery, QueryExecutionContext context) throws Exception {
+        List<JsonNode> allResults = new ArrayList<>();
+        
+        // Execute each sub-query and combine results
+        for (int i = 0; i < unionQuery.getSubQueries().size(); i++) {
+            ParsedQuery subQuery = unionQuery.getSubQueries().get(i);
+            
+            if (System.getenv("DEBUG") != null) {
+                System.err.println("DEBUG: Executing UNION query part " + (i + 1));
+            }
+            
+            String resultJson = executeQuery(subQuery, context);
+            JsonNode resultArray = objectMapper.readTree(resultJson);
+            
+            if (resultArray.isArray()) {
+                resultArray.forEach(node -> allResults.add((JsonNode) objectMapper.valueToTree(node)));
+            }
+        }
+        
+        // Apply UNION deduplication if not UNION ALL
+        List<JsonNode> finalResults = allResults;
+        if (!unionQuery.isAll() && !allResults.isEmpty()) {
+            finalResults = applyDistinct(allResults);
+        }
+        
+        // Apply ORDER BY if specified (before LIMIT)
+        if (unionQuery.hasOrderBy()) {
+            finalResults = applyOrderBy(finalResults, unionQuery.getOrderBy());
+        }
+        
+        // Apply LIMIT/TOP last
+        if (unionQuery.getEffectiveLimit() != null) {
+            int limit = unionQuery.getEffectiveLimit().intValue();
+            finalResults = finalResults.subList(0, Math.min(limit, finalResults.size()));
+        }
+        
+        // Convert to JSON array string
+        ArrayNode resultArray = objectMapper.createArrayNode();
+        finalResults.forEach(resultArray::add);
+        
         return objectMapper.writeValueAsString(resultArray);
     }
     

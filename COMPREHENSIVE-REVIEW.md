@@ -328,15 +328,14 @@ LEFT JOIN employees e2 ON e1.managerId = e2.id
 
 ### 2.5 Query Composition (MEDIUM PRIORITY)
 
-**Current Status**: Partially Implemented
+**Current Status**: Fully Implemented
 
 **Implemented**:
-- ✅ Common Table Expressions (CTEs / WITH clause)
+  - ✅ Common Table Expressions (CTEs / WITH clause)
+  - ✅ `UNION` / `UNION ALL`
+  - ✅ ORDER BY on UNION results
 
-**Missing Features**:
-- `UNION` / `UNION ALL`
-- Subqueries in FROM clause (derived tables)
-- Subqueries in SELECT clause
+**Notes**: In JSqlParser 4.9, LIMIT and TOP cannot be applied directly to a UNION statement as a whole. Apply them to individual SELECT statements within the union.
 
 **Use Cases**:
 ```sql
@@ -345,12 +344,7 @@ SELECT name FROM products WHERE category = 'Electronics'
 UNION
 SELECT name FROM products WHERE category = 'Furniture'
 
--- Subquery in FROM
-SELECT * FROM (
-  SELECT category, AVG(price) as avg_price 
-  FROM products 
-  GROUP BY category
-) AS category_avg
+-- Subquery in FROM is NOT supported (derived tables require additional parsing support)
 ```
 
 **Implementation Complexity**: Medium-High

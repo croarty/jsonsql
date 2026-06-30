@@ -9,6 +9,7 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
   - `FROM` - Specify data sources with table aliases
   - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses, LIKE, ILIKE, IN, IS NULL)
   - `JOIN` / `LEFT JOIN` - Combine data from multiple sources
+  - `UNION` / `UNION ALL` - Combine result sets from multiple queries
   - `WITH` - Common Table Expressions (CTEs) for composing queries
   - `UNNEST` - Flatten arrays into individual rows
   - `TOP x` / `LIMIT` - Limit result sets
@@ -556,7 +557,22 @@ jsonsql --query "SELECT o.orderId, p.name, c.name FROM orders o JOIN products p 
 # JOIN with TOP
 jsonsql --query "SELECT TOP 5 p.name, o.quantity FROM orders o JOIN products p ON o.productId = p.id"
 
-# UNNEST - Flatten arrays
+### UNION Queries
+
+Combine results from multiple SELECT queries using `UNION` or `UNION ALL`:
+
+```bash
+# UNION - combine results and remove duplicates
+jsonsql --query "SELECT name FROM products WHERE category = 'Tools' UNION SELECT name FROM categories"
+
+# UNION ALL - combine all results including duplicates
+jsonsql --query "SELECT name FROM products WHERE category = 'Tools' UNION ALL SELECT name FROM products WHERE category = 'Electronics'"
+
+# ORDER BY applies to the entire result set
+jsonsql --query "SELECT name FROM products WHERE category = 'Tools' UNION ALL SELECT name FROM categories ORDER BY name"
+```
+
+### UNNEST - Flatten arrays
 jsonsql --query "SELECT name, tag FROM products, UNNEST(tags) AS t(tag)"
 
 # UNNEST with complex objects
@@ -774,6 +790,29 @@ SELECT name, price FROM in_stock
 ```
 
 CTE results are materialized and can be referenced like any other table. When `--enable-cache` is active, CTE results are cached and invalidated based on their source files (see [Caching](#caching)).
+
+### UNION Queries
+
+Combine result sets from multiple SELECT queries:
+
+```sql
+-- UNION: Combine results and remove duplicates
+SELECT name FROM products WHERE category = 'Tools'
+UNION
+SELECT name FROM categories
+
+-- UNION ALL: Keep all rows including duplicates
+SELECT name FROM products WHERE category = 'Tools'
+UNION ALL
+SELECT name FROM products WHERE category = 'Electronics'
+
+-- ORDER BY applies to the entire result set
+SELECT name FROM products WHERE category = 'Tools'
+UNION ALL
+SELECT name FROM categories
+ORDER BY name ASC
+
+**Note:** In JSqlParser 4.9, `LIMIT` and `TOP` clauses cannot be applied directly to a UNION statement as a whole. Apply them to individual SELECT statements within the union.
 
 ## Advanced Usage
 
@@ -1070,7 +1109,6 @@ Planned features for future releases, organized by priority:
 **Query Features:**
 
 - Subqueries (e.g., `WHERE price > (SELECT AVG(price) FROM products)`)
-- `UNION` / `UNION ALL` for combining result sets
 - Calculated fields in SELECT (e.g., `SELECT price * 1.1 AS price_with_tax`)
 
 ### Medium Priority (Advanced Features)

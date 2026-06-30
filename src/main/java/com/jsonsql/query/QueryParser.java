@@ -32,21 +32,108 @@ public class QueryParser {
             // Parse WITH clause (CTEs) from Select level before parsing main query
             parseWithClauseFromSelect(select, query);
             
-            PlainSelect plainSelect = getPlainSelect(select);
+            // Check if this is a UNION query (SetOperationList)
+            if (select instanceof net.sf.jsqlparser.statement.select.SetOperationList) {
+                net.sf.jsqlparser.statement.select.SetOperationList setOp = 
+                    (net.sf.jsqlparser.statement.select.SetOperationList) select;
+                UnionQuery unionQuery = parseUnionQuery(setOp, query);
+                
+                // Validate column consistency across all sub-queries
+                unionQuery.validateColumnConsistency();
+                
+                query.setUnionQuery(unionQuery);
+            } else {
+                PlainSelect plainSelect = getPlainSelect(select);
+                
+                if (plainSelect == null) {
+                    // This shouldn't happen since we already checked for Union
+                    throw new QueryParseException("Failed to extract SELECT statement");
+                }
+                
+                // Build the main query (CTEs already stored in query)
+                buildParsedQuery(plainSelect, query);
+            }
             
-            // Build the main query (CTEs already stored in query)
-            return buildParsedQuery(plainSelect, query);
+            return query;
         } catch (JSQLParserException e) {
             throw new QueryParseException("Invalid SQL syntax: " + e.getMessage(), e);
         }
     }
 
     private PlainSelect getPlainSelect(Select select) throws QueryParseException {
+        // Check for UNION first - if it's a SetOperationList (UNION), we handle it separately
+        if (select instanceof net.sf.jsqlparser.statement.select.SetOperationList) {
+            return null;  // Signal that this is a UNION query
+        }
+        
         if (!(select instanceof PlainSelect)) {
-            throw new QueryParseException("Only simple SELECT queries are supported (no UNION, etc.)");
+            throw new QueryParseException("Only simple SELECT queries are supported");
         }
         
         return (PlainSelect) select;
+    }
+
+    /**
+     * Parse a UNION query and build the UnionQuery object.
+     */
+    private UnionQuery parseUnionQuery(net.sf.jsqlparser.statement.select.SetOperationList setOp, ParsedQuery parentQuery) 
+            throws QueryParseException {
+        UnionQuery unionQuery = new UnionQuery();
+        
+        // Determine if this is UNION ALL or UNION by checking operations
+        boolean allFound = false;
+        for (net.sf.jsqlparser.statement.select.SetOperation op : setOp.getOperations()) {
+            if (op instanceof net.sf.jsqlparser.statement.select.UnionOp) {
+                if (((net.sf.jsqlparser.statement.select.UnionOp) op).isAll()) {
+                    allFound = true;
+                    break;
+                }
+            }
+        }
+        unionQuery.setIsAll(allFound);
+        
+        // Get the list of SELECT statements
+        List<net.sf.jsqlparser.statement.select.Select> selectList = setOp.getSelects();
+        if (selectList == null || selectList.isEmpty()) {
+            throw new QueryParseException("UNION must have at least two queries");
+        }
+        
+        // Parse each SELECT in the UNION
+        for (int i = 0; i < selectList.size(); i++) {
+            net.sf.jsqlparser.statement.select.Select select = selectList.get(i);
+            PlainSelect plainSelect = extractPlainSelect(select);
+            
+            if (plainSelect == null) {
+                throw new QueryParseException("Query " + (i + 1) + " in UNION must be a SELECT query");
+            }
+            
+            // Transfer CTEs from parent to this sub-query
+            ParsedQuery subQuery = buildParsedQuery(plainSelect, new ParsedQuery());
+            if (parentQuery != null && parentQuery.hasCTEs()) {
+                for (java.util.Map.Entry<String, ParsedQuery> cte : 
+                        parentQuery.getCommonTableExpressions().entrySet()) {
+                    subQuery.addCTE(cte.getKey(), cte.getValue());
+                }
+            }
+            
+            unionQuery.addSubQuery(subQuery);
+        }
+        
+        // Parse ORDER BY from the SetOperationList (LIMIT/TOP are only on individual SELECT statements)
+        if (setOp.getOrderByElements() != null && !setOp.getOrderByElements().isEmpty()) {
+            List<net.sf.jsqlparser.statement.select.OrderByElement> orderByElements = 
+                setOp.getOrderByElements();
+            List<OrderByInfo> orderByInfos = new ArrayList<>();
+            
+            for (net.sf.jsqlparser.statement.select.OrderByElement element : orderByElements) {
+                String column = element.getExpression().toString();
+                boolean ascending = element.isAsc() || !element.isAscDescPresent();
+                orderByInfos.add(new OrderByInfo(column, ascending));
+            }
+            unionQuery.setOrderBy(orderByInfos);
+        }
+        
+        return unionQuery;
     }
 
     private ParsedQuery buildParsedQuery(PlainSelect plainSelect) throws QueryParseException {

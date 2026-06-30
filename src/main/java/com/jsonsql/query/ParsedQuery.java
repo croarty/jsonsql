@@ -20,6 +20,9 @@ public class ParsedQuery {
     private boolean distinct = false;
     private java.util.Map<String, ParsedQuery> commonTableExpressions = new java.util.LinkedHashMap<>();
 
+    // UNION query support
+    private UnionQuery unionQuery;
+
     public List<ColumnInfo> getSelectColumns() {
         return selectColumns;
     }
@@ -138,6 +141,18 @@ public class ParsedQuery {
 
     public boolean hasCTEs() {
         return commonTableExpressions != null && !commonTableExpressions.isEmpty();
+    }
+
+    public UnionQuery getUnionQuery() {
+        return unionQuery;
+    }
+
+    public void setUnionQuery(UnionQuery unionQuery) {
+        this.unionQuery = unionQuery;
+    }
+
+    public boolean isUnionQuery() {
+        return unionQuery != null;
     }
 }
 
