@@ -54,6 +54,60 @@ Or create an alias for convenience:
 alias jsonsql='java -jar /path/to/jsonsql-1.3.0.jar'
 ```
 
+## Continuous Integration & Security
+
+The project ships with GitHub Actions workflows (in `.github/`) that build,
+test, and continuously monitor dependencies for security issues.
+
+### Automated build (CI)
+
+`.github/workflows/ci.yml` runs on every push and pull request to `master`
+(and can be triggered manually via the **Actions** tab). It:
+
+- Builds and runs the full test suite with `mvn -B -ntp clean verify`
+- Tests against JDK 21 (the project target) and JDK 24 (forward-compat check)
+- Caches Maven downloads for faster runs
+- Uploads the Surefire test reports and the packaged JAR as build artifacts
+
+### Dependency security monitoring
+
+Three layers keep an eye on vulnerable dependencies:
+
+1. **Dependabot** (`.github/dependabot.yml`) — watches `pom.xml` and the GitHub
+   Actions used in the workflows. It opens PRs for outdated dependencies
+   (grouped by minor/patch) and raises an immediate PR whenever a dependency
+   has a known security advisory. Enable **Dependabot alerts** and
+   **Dependabot security updates** under *Settings > Code security* to get the
+   most out of it.
+2. **Dependency Review** (`.github/workflows/dependency-review.yml`) — runs on
+   pull requests and fails the check if the PR introduces a dependency with a
+   known high-severity vulnerability, blocking risky changes before merge.
+3. **OWASP Dependency-Check** (`.github/workflows/security-scan.yml`) — a
+   weekly scheduled scan of the full dependency tree against the NVD CVE
+   database. Results are published to the **Security > Code scanning** tab.
+
+### Static analysis
+
+`.github/workflows/codeql.yml` runs GitHub CodeQL (`security-and-quality`
+queries) on pushes, pull requests, and a weekly schedule, reporting findings
+under **Security > Code scanning**.
+
+### Running the security scan locally
+
+The OWASP Dependency-Check scan is also available as a Maven profile:
+
+```bash
+# Optional but recommended – avoids NVD rate limiting.
+# Free key: https://nvd.nist.gov/developers/request-an-api-key
+export NVD_API_KEY=your-key
+
+mvn -Psecurity verify
+```
+
+The build fails on any dependency with a CVSS score of 7.0 or higher, and a
+report is written to `target/dependency-check-report.html`. The first run
+downloads the NVD data set and may take several minutes.
+
 ## Quick Start
 
 ### 1. Configure JSONPath Mappings
@@ -1194,6 +1248,11 @@ Contributions are welcome! Please ensure:
 - All tests pass: `mvn test`
 - Code follows Java 21 best practices
 - New features include unit tests
+
+Every pull request is automatically built and tested by the
+[CI workflow](.github/workflows/ci.yml), scanned for vulnerable dependencies by
+[Dependency Review](.github/workflows/dependency-review.yml), and analyzed by
+[CodeQL](.github/workflows/codeql.yml). Please keep these checks green.
 
 ## License
 

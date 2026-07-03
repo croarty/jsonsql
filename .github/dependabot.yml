@@ -1,0 +1,46 @@
+# Dependabot keeps dependencies up to date and opens PRs for known
+# security vulnerabilities in the dependency graph.
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+updates:
+  # Java / Maven dependencies declared in pom.xml
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "java"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    # Group routine (non-security) version bumps so they arrive as a single
+    # PR instead of one-per-dependency. Security updates are always raised
+    # individually and immediately, regardless of this grouping.
+    groups:
+      maven-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # JSqlParser 5.x introduces breaking AST/visitor API changes; stay on 4.x
+      # until the code is migrated. Remove this once 5.x is supported.
+      - dependency-name: "com.github.jsqlparser:jsqlparser"
+        update-types:
+          - "version-update:semver-major"
+
+  # GitHub Actions used by the workflows in .github/workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"

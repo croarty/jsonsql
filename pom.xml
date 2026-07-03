@@ -25,6 +25,9 @@
         <!-- JSqlParser pinned to the latest 4.x (4.9); 5.x introduces breaking AST/visitor API changes -->
         <jsqlparser.version>4.9</jsqlparser.version>
         <junit.version>5.11.4</junit.version>
+
+        <!-- Security tooling -->
+        <dependency-check.version>10.0.4</dependency-check.version>
     </properties>
 
     <dependencies>
@@ -150,5 +153,49 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+            Security scan profile. Run with:  mvn -Psecurity verify
+            Scans all (non-test) dependencies against the NVD and OSS Index
+            CVE databases and fails the build on high-severity findings.
+
+            The first run downloads the NVD data set and can take several
+            minutes. Set an NVD API key to speed this up and avoid throttling:
+                export NVD_API_KEY=your-key           # get one for free at
+                                                        # https://nvd.nist.gov/developers/request-an-api-key
+                mvn -Psecurity verify
+        -->
+        <profile>
+            <id>security</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.owasp</groupId>
+                        <artifactId>dependency-check-maven</artifactId>
+                        <version>${dependency-check.version}</version>
+                        <configuration>
+                            <!-- Fail the build on CVSS >= 7.0 (High/Critical). -->
+                            <failBuildOnCVSS>7</failBuildOnCVSS>
+                            <formats>
+                                <format>HTML</format>
+                                <format>SARIF</format>
+                            </formats>
+                            <!-- Test-only dependencies are not shipped. -->
+                            <skipTestScope>true</skipTestScope>
+                            <nvdApiKey>${env.NVD_API_KEY}</nvdApiKey>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
 
