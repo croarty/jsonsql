@@ -207,6 +207,13 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 - **Picocli 4.7.5**: Command-line interface
 - **JUnit 5.10.1**: Testing framework
 
+#### Build & Security Tooling
+- **GitHub Actions CI** (`.github/workflows/ci.yml`): builds and tests every push/PR on JDK 21 and 24
+- **Dependabot** (`.github/dependabot.yml`): automated dependency + GitHub Actions updates and security-advisory PRs
+- **Dependency Review** (`.github/workflows/dependency-review.yml`): blocks PRs introducing vulnerable dependencies
+- **CodeQL** (`.github/workflows/codeql.yml`): static security/quality analysis
+- **OWASP Dependency-Check** (`mvn -Psecurity verify`, `.github/workflows/security-scan.yml`): weekly CVE scan of the dependency tree
+
 ---
 
 ## Part 2: Missing Core SQL Features
