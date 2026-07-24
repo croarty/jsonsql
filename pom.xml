@@ -20,7 +20,7 @@
         
         <!-- Dependency versions -->
         <picocli.version>4.7.6</picocli.version>
-        <jackson.version>2.18.6</jackson.version>
+        <jackson.version>2.18.8</jackson.version>
         <jsonpath.version>2.9.0</jsonpath.version>
         <!-- JSqlParser pinned to the latest 4.x (4.9); 5.x introduces breaking AST/visitor API changes -->
         <jsqlparser.version>4.9</jsqlparser.version>
