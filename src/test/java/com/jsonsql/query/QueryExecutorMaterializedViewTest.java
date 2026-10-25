@@ -2,6 +2,7 @@ package com.jsonsql.query;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jsonsql.config.CacheManager;
 import com.jsonsql.config.MappingManager;
 import com.jsonsql.view.MaterializedViewBuilder;
 import com.jsonsql.view.MaterializedViewManager;
@@ -99,6 +100,27 @@ class QueryExecutorMaterializedViewTest {
         } finally {
             System.setErr(origErr);
         }
+    }
+
+    @Test
+    void cachedCteOverViewIsInvalidatedWhenViewIsRebuilt() throws Exception {
+        CacheManager cacheManager = new CacheManager(tempDir);
+        QueryExecutor cachingExecutor = new QueryExecutor(mappingManager, tempDir, cacheManager, null, viewManager);
+        String sql = "WITH t AS (SELECT id FROM expensive) SELECT * FROM t";
+        assertEquals(2, objectMapper.readTree(cachingExecutor.execute(sql)).size());
+
+        Files.writeString(tempDir.toPath().resolve("products.json"), """
+            {"products":[
+              {"id":1,"name":"Cheap","price":5,"category":"Tools"},
+              {"id":2,"name":"Mid","price":15,"category":"Tools"},
+              {"id":3,"name":"Pricey","price":50,"category":"Electronics"},
+              {"id":4,"name":"Premium","price":500,"category":"Electronics"}
+            ]}""");
+        new MaterializedViewBuilder(mappingManager, tempDir, viewManager, new MaterializedViewStore(tempDir))
+            .rebuild("expensive", null);
+
+        assertEquals(3, objectMapper.readTree(cachingExecutor.execute(sql)).size(),
+            "a cached CTE reading a materialized view must see the rebuilt view");
     }
 
     @Test

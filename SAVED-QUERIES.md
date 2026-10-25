@@ -19,6 +19,12 @@ See [SAVED-QUERIES-REFERENCE.md](SAVED-QUERIES-REFERENCE.md) for complete docume
 ## Quick Start
 
 ```bash
+# 0. One-time: map the tables the pre-configured queries use (the mappings file is not committed)
+jsonsql --add-mapping ecommerce_products "ecommerce.json:$.store.data.products"
+jsonsql --add-mapping ecommerce_orders   "ecommerce.json:$.store.data.orders"
+jsonsql --add-mapping complex_products   "complex-products.json:$.products[*]"
+jsonsql --add-mapping products_multi     "products-multi:$.products"
+
 # 1. List pre-configured queries (39 included!)
 jsonsql --list-queries
 
@@ -109,6 +115,17 @@ jsonsql --save-query incomplete_products --query "SELECT * FROM products WHERE (
 jsonsql --save-query premium_customer_orders --query "SELECT c.name, o.orderId, o.status FROM customers c JOIN orders o ON c.id = o.customerId WHERE c.VIP.status IN ('Gold', 'Platinum') AND o.status != 'cancelled' ORDER BY c.name"
 ```
 
+### Parameterized Queries
+
+Use `${name}` (required) or `${name:default}` placeholders and supply values with `--param name=value` at run time. In bash/zsh, escape the `$` inside double quotes (`\${name}`) — otherwise the shell substitutes the variable before JsonSQL sees it:
+
+```bash
+jsonsql --save-query products_above --query "SELECT name, price FROM products WHERE price > \${min_price:50} ORDER BY price DESC"
+jsonsql --run-query products_above --data-dir example-data --param min_price=100
+```
+
+See [Parameterized Queries](README.md#parameterized-queries) in the README for the full rules.
+
 ## Running Saved Queries
 
 ### Basic Execution
@@ -168,15 +185,17 @@ Saved Queries:
 ────────────────────────────────────────────────────────────────────────────────
   all_products         -> SELECT * FROM products
   electronics          -> SELECT * FROM products WHERE category = 'Electronics'
-  expensive_electronics -> SELECT name, price FROM products WHERE category IN...
-  product_orders       -> SELECT p.name, o.quantity FROM orders o JOIN products p...
+  expensive_electronics -> SELECT name, price FROM products WHERE category IN ('Electronics', 'Appliances') AND price > 100 AND name LIKE '%e%'
+  product_orders       -> SELECT p.name, o.quantity, o.orderDate FROM orders o JOIN products p ON o.productId = p.id
 ────────────────────────────────────────────────────────────────────────────────
 Total: 4 saved queries
 ```
 
+Queries are listed in the order they were saved, names are padded to 20 characters, and the full SQL is always printed.
+
 ### Update a Query
 
-To update a saved query, simply save it again with the same name:
+To update a saved query, simply save it again with the same name (it is overwritten without confirmation; the SQL is not validated when saving, so test it with `--dry-run` first):
 
 ```bash
 # Original query
@@ -194,7 +213,7 @@ jsonsql --delete-query old_query
 
 ### View Query Details
 
-When running a query, the SQL is displayed:
+When running a query, the SQL is displayed on **stderr** (results go to stdout, so piping is unaffected):
 
 ```bash
 $ jsonsql --run-query electronics --data-dir example-data
@@ -203,6 +222,8 @@ SQL: SELECT * FROM products WHERE category = 'Electronics' ORDER BY price DESC
 
 [results...]
 ```
+
+For parameterized queries an extra `SQL (with parameters): ...` line shows the substituted SQL.
 
 ## Best Practices
 
@@ -380,6 +401,10 @@ project-b/
   .jsonsql-mappings.json
   data/
 ```
+
+Config files are resolved relative to the directory you run `jsonsql` from, so `cd` into the project first (or pass `--queries-file` / `-c` explicitly).
+
+> Note: this repository's `.gitignore` excludes `.jsonsql-mappings.json`. If you want teammates to be able to run shared queries, either commit a mappings file under another name and pass it with `-c`, or document the `--add-mapping` commands alongside the queries.
 
 ## Advanced Features
 

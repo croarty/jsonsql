@@ -4,7 +4,16 @@ This document describes all 39 saved queries included with JsonSQL, organized by
 
 ## Quick Test
 
-Run any query with:
+The queries live in the committed `.jsonsql-queries.json`, but the table mappings they use are **not** committed (`.jsonsql-mappings.json` is git-ignored). Create them once from the repository root:
+
+```bash
+jsonsql --add-mapping ecommerce_products "ecommerce.json:$.store.data.products"
+jsonsql --add-mapping ecommerce_orders   "ecommerce.json:$.store.data.orders"
+jsonsql --add-mapping complex_products   "complex-products.json:$.products[*]"
+jsonsql --add-mapping products_multi     "products-multi:$.products"
+```
+
+Then run any query with:
 ```bash
 jsonsql --run-query <query_name> --data-dir example-data --pretty
 ```
@@ -332,6 +341,8 @@ Run with values, e.g. `--param min_price=20 --param category=Electronics`.
 
 ## Feature Coverage Matrix
 
+Core-operator coverage for queries `01`–`30` (queries `31`–`36` and `filtered_products` are described in [Advanced Feature Queries](#advanced-feature-queries)):
+
 | Query | SELECT | WHERE | JOIN | LIKE | IN | IS NULL | AND/OR/NOT | ORDER BY | TOP/LIMIT | AS |
 |-------|--------|-------|------|------|----|---------|-----------| ---------|-----------|-----|
 | 01 | ✅ * | | | | | | | | | |
@@ -416,6 +427,15 @@ jsonsql --run-query 26_desk_or_monitor_items --data-dir example-data --pretty
 jsonsql --run-query 30_showcase_all_operators --data-dir example-data --pretty
 jsonsql --run-query completed_orders --data-dir example-data --pretty
 jsonsql --run-query expensive_electronics --data-dir example-data --pretty
+
+# Advanced features
+jsonsql --run-query 31_distinct_categories --data-dir example-data --pretty
+jsonsql --run-query 32_case_insensitive_search --data-dir example-data --pretty
+jsonsql --run-query 33_orders_left_join --data-dir example-data --pretty
+jsonsql --run-query 34_expensive_products_cte --data-dir example-data --pretty
+jsonsql --run-query 35_product_tags --data-dir example-data --pretty
+jsonsql --run-query 36_multiyear_products --data-dir example-data --pretty
+jsonsql --run-query filtered_products --data-dir example-data --pretty --param min_price=20 --param category=Electronics
 ```
 
 ---
@@ -473,15 +493,22 @@ jsonsql --run-query expensive_electronics --data-dir example-data --pretty
 ✅ **WHERE Operators**
 - Comparison: =, !=, <, >, <=, >=
 - List matching: IN, NOT IN
-- Pattern matching: LIKE, NOT LIKE
+- Pattern matching: LIKE, NOT LIKE, ILIKE
 - Null checking: IS NULL, IS NOT NULL
 - Boolean logic: AND, OR, NOT
 - Grouping: () parentheses
 
 ✅ **JOIN Operations**
-- INNER JOIN with ON condition
+- INNER JOIN and LEFT JOIN with ON condition
 - Table aliases (o, p)
 - Qualified column names (o.orderId, p.name)
+
+✅ **Query Composition & Arrays**
+- SELECT DISTINCT
+- WITH (CTE)
+- UNNEST of arrays
+- Directory-backed multi-file tables
+- Parameterized queries (`${var}`)
 
 ✅ **Sorting**
 - ORDER BY single column
@@ -560,5 +587,5 @@ These 39 queries provide:
 - ✅ Educational progression
 - ✅ Ready-to-use templates
 
-Queries `01`–`34`, `completed_orders`, and `expensive_electronics` use `example-data/ecommerce.json` (the `ecommerce_products` / `ecommerce_orders` tables). Queries `35_product_tags` and `filtered_products` use the `complex_products` table (`complex-products.json`), and `36_multiyear_products` uses the `products_multi` directory table (`products-multi/`). All run against the shipped `example-data/` directory with the default `.jsonsql-mappings.json`.
+Queries `01`–`34`, `completed_orders`, and `expensive_electronics` use `example-data/ecommerce.json` (the `ecommerce_products` / `ecommerce_orders` tables). Queries `35_product_tags` and `filtered_products` use the `complex_products` table (`complex-products.json`), and `36_multiyear_products` uses the `products_multi` directory table (`products-multi/`). All 39 run against the shipped `example-data/` directory once the four mappings from [Quick Test](#quick-test) have been added.
 

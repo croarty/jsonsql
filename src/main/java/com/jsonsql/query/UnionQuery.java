@@ -8,7 +8,8 @@ import java.util.List;
  */
 public class UnionQuery {
     private List<ParsedQuery> subQueries = new ArrayList<>();
-    private boolean isAll;  // true = UNION ALL (keep duplicates), false = UNION (dedupe)
+    // One entry per operator between consecutive sub-queries: true = UNION ALL, false = UNION
+    private final List<Boolean> operationIsAll = new ArrayList<>();
     private List<OrderByInfo> orderBy = new ArrayList<>();
     private Long limit;
     private Long top;
@@ -21,12 +22,16 @@ public class UnionQuery {
         this.subQueries = subQueries;
     }
 
-    public boolean isAll() {
-        return isAll;
+    /** Record the operator joining the next sub-query to the ones before it. */
+    public void addOperation(boolean isAll) {
+        operationIsAll.add(isAll);
     }
 
-    public void setIsAll(boolean isAll) {
-        this.isAll = isAll;
+    /**
+     * Whether the operator between sub-query {@code index} and {@code index + 1} is UNION ALL.
+     */
+    public boolean isAllAt(int index) {
+        return operationIsAll.get(index);
     }
 
     public List<OrderByInfo> getOrderBy() {

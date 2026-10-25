@@ -75,7 +75,8 @@ class JsonSqlCliIndexTest {
             "-d", dataDir.toString(),
             "-c", mappingFile.toString(),
             "--queries-file", queriesFile.toString(),
-            "--indexes-file", indexesFile.toString()
+            "--indexes-file", indexesFile.toString(),
+            "--views-file", tempDir.resolve(".jsonsql-views.json").toString()
         };
         String[] all = new String[base.length + args.length];
         System.arraycopy(base, 0, all, 0, base.length);

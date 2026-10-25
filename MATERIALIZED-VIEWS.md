@@ -23,6 +23,12 @@ query the compact result set. Combine with `--add-index` on the view for selecti
 
 ## Managing views
 
+These examples assume the `catalog_large` mapping from the [hands-on section](#hands-on-catalog-large-dataset) below:
+
+```bash
+jsonsql --add-mapping catalog_large "catalog-large:$.products[*]"
+```
+
 ```bash
 # Create: the WITH clause must define a CTE whose name matches the view name.
 jsonsql --materialize-view expensive \
@@ -49,12 +55,33 @@ jsonsql --rebuild-views --data-dir example-data   # all views
 Definitions live in `.jsonsql-views.json` (override with `--views-file`). Row data lives
 under `.jsonsql-views/<name>.json` inside the data directory.
 
-### Collision rules
+### What gets materialized
+
+- Only the CTE named by `--materialize-view` is executed and stored. The outer `SELECT`
+  (e.g. `SELECT * FROM expensive`) is required syntactically but is not executed, and
+  any other CTEs in the `WITH` list are ignored.
+- The view's CTE body may read **mapped tables only**. It cannot reference another
+  materialized view or a sibling CTE from the same `WITH` list — those fail with
+  "No mapping or materialized view found".
+- The body follows the normal CTE rules: a single plain `SELECT` (JOINs, `UNNEST`,
+  `WHERE`, `ORDER BY`, `DISTINCT`, `TOP`/`LIMIT` are fine; no `UNION`). Unsupported SQL
+  such as `GROUP BY` or `COUNT(*)` is rejected, so a view cannot be used to pre-aggregate
+  data yet.
+- With `--enable-cache`, a cached CTE that reads a view is invalidated when the view is
+  rebuilt.
+- Declared indexes on the source tables are used while building the view.
+
+### Collision and naming rules
 
 - A view name cannot match an existing table mapping.
 - Creating a view that already exists fails; use `--rebuild-view` or drop first.
 - The `--materialize-view` name must match a CTE in the query (**case-insensitive**, like SQL identifiers).
+- The view is stored under the exact name passed to `--materialize-view`, and querying it
+  is **case-sensitive**: after `--materialize-view Premium`, `FROM Premium` works but
+  `FROM premium` does not. Lower-case view names avoid surprises.
 - An inline `WITH` in your query **shadows** a materialized view of the same name.
+- The row file name is the view name with any character outside `[A-Za-z0-9_-]`
+  replaced by `_`.
 
 ### Freshness (stale policy)
 
@@ -87,6 +114,11 @@ jsonsql --add-index expensive category --data-dir example-data
 jsonsql -q "SELECT id FROM expensive WHERE category = 'Tools'" --data-dir example-data
 ```
 
+After `--rebuild-view`, run `--rebuild-index <view> <field>` (or `--rebuild-indexes`) —
+the rebuilt row file no longer matches the index fingerprint, so pruning is disabled
+(and `--list-indexes` shows the index as `STALE`) until the index is rebuilt. Use
+`--show-view` to see which indexes a view has.
+
 See [Indexing Guide](INDEXING.md) for predicate rules (`=`, `IN`, ranges, `UNNEST`).
 
 ## Hands-on: `catalog-large` dataset
@@ -96,7 +128,7 @@ The bundled `example-data/catalog-large/` tree has **16 partition files** (4 cat
 
 ```bash
 # One-time setup (from repo root)
-JAR=target/jsonsql-1.4.0.jar
+JAR=target/jsonsql-1.6.0.jar
 CFG=/tmp/jsonsql-mv-mappings.json
 DATA=example-data
 
@@ -124,7 +156,10 @@ java -jar $JAR -c $CFG --data-dir $DATA -q \
 ## `--describe` and dry-run
 
 - `--describe <view>` works for materialized views (shows stored CTE SQL as the mapping).
-- `--dry-run` resolves materialized view names like mapped tables.
+- `--dry-run` resolves materialized view names like mapped tables, and fails if the
+  view's row file is missing (`Run --rebuild-view <name>`).
+- Views can be used anywhere a mapped table can: `FROM`, `JOIN`, inside a CTE, or in a
+  `UNION` branch.
 
 ## Related documentation
 

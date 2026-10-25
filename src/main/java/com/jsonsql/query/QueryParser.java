@@ -1,7 +1,10 @@
 package com.jsonsql.query;
 
 import net.sf.jsqlparser.JSQLParserException;
+import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.*;
 
@@ -80,22 +83,23 @@ public class QueryParser {
             throws QueryParseException {
         UnionQuery unionQuery = new UnionQuery();
         
-        // Determine if this is UNION ALL or UNION by checking operations
-        boolean allFound = false;
         for (net.sf.jsqlparser.statement.select.SetOperation op : setOp.getOperations()) {
-            if (op instanceof net.sf.jsqlparser.statement.select.UnionOp) {
-                if (((net.sf.jsqlparser.statement.select.UnionOp) op).isAll()) {
-                    allFound = true;
-                    break;
-                }
+            if (!(op instanceof net.sf.jsqlparser.statement.select.UnionOp)) {
+                throw unsupported(op.toString().trim(), "only UNION and UNION ALL are supported");
             }
+            unionQuery.addOperation(((net.sf.jsqlparser.statement.select.UnionOp) op).isAll());
         }
-        unionQuery.setIsAll(allFound);
         
         // Get the list of SELECT statements
         List<net.sf.jsqlparser.statement.select.Select> selectList = setOp.getSelects();
         if (selectList == null || selectList.isEmpty()) {
             throw new QueryParseException("UNION must have at least two queries");
+        }
+
+        rejectOffset(setOp.getOffset() != null || setOp.getFetch() != null
+            || (setOp.getLimit() != null && setOp.getLimit().getOffset() != null));
+        if (setOp.getLimit() != null && setOp.getLimit().getRowCount() != null) {
+            unionQuery.setLimit(parseRowCount(setOp.getLimit().getRowCount().toString(), "LIMIT"));
         }
         
         // Parse each SELECT in the UNION
@@ -115,11 +119,20 @@ public class QueryParser {
                     subQuery.addCTE(cte.getKey(), cte.getValue());
                 }
             }
+
+            // JSqlParser attaches a trailing "... UNION SELECT ... LIMIT n" (without ORDER BY) to
+            // the last unparenthesized branch; in SQL it limits the whole union.
+            boolean lastBranch = i == selectList.size() - 1;
+            if (lastBranch && select instanceof PlainSelect && subQuery.getLimit() != null
+                    && unionQuery.getLimit() == null) {
+                unionQuery.setLimit(subQuery.getLimit());
+                subQuery.setLimit(null);
+            }
             
             unionQuery.addSubQuery(subQuery);
         }
         
-        // Parse ORDER BY from the SetOperationList (LIMIT/TOP are only on individual SELECT statements)
+        // Parse ORDER BY from the SetOperationList (TOP and parenthesized LIMIT stay per-branch)
         if (setOp.getOrderByElements() != null && !setOp.getOrderByElements().isEmpty()) {
             List<net.sf.jsqlparser.statement.select.OrderByElement> orderByElements = 
                 setOp.getOrderByElements();
@@ -142,6 +155,8 @@ public class QueryParser {
     
     private ParsedQuery buildParsedQuery(PlainSelect plainSelect, ParsedQuery query) throws QueryParseException {
         // CTEs are already parsed and stored in query, so we don't need to parse them again
+
+        rejectUnsupportedClauses(plainSelect);
 
         // Parse DISTINCT
         if (plainSelect.getDistinct() != null) {
@@ -177,6 +192,52 @@ public class QueryParser {
     }
 
     /**
+     * Reject clauses that JSqlParser accepts but the engine does not implement, so they fail
+     * loudly instead of being silently ignored.
+     */
+    private void rejectUnsupportedClauses(PlainSelect plainSelect) throws QueryParseException {
+        if (plainSelect.getGroupBy() != null) {
+            throw unsupported("GROUP BY");
+        }
+        if (plainSelect.getHaving() != null) {
+            throw unsupported("HAVING");
+        }
+        rejectOffset(plainSelect.getOffset() != null || plainSelect.getFetch() != null
+            || (plainSelect.getLimit() != null && plainSelect.getLimit().getOffset() != null));
+    }
+
+    private void rejectOffset(boolean hasOffset) throws QueryParseException {
+        if (hasOffset) {
+            throw unsupported("OFFSET / FETCH");
+        }
+    }
+
+    private static QueryParseException unsupported(String feature) {
+        return new QueryParseException(feature + " is not supported");
+    }
+
+    private static QueryParseException unsupported(String feature, String hint) {
+        return new QueryParseException(feature + " is not supported (" + hint + ")");
+    }
+
+    /**
+     * Only plain column references and {@code *} can be projected; anything else would
+     * otherwise be looked up as a field name and silently produce null.
+     */
+    private void validateSelectItem(SelectItem<?> item) throws QueryParseException {
+        Expression expression = item.getExpression();
+        if (expression instanceof AllTableColumns) {
+            throw unsupported("SELECT " + expression, "use SELECT * or list the columns");
+        }
+        if (expression instanceof AllColumns || expression instanceof Column) {
+            return;
+        }
+        String kind = expression instanceof Function ? "Function or aggregate" : "Expression";
+        throw unsupported(kind + " in SELECT list: " + expression,
+            "only column references and * can be selected");
+    }
+
+    /**
      * Parse and validate a LIMIT/TOP row count: must be a non-negative integer.
      */
     private long parseRowCount(String raw, String clause) throws QueryParseException {
@@ -192,11 +253,12 @@ public class QueryParser {
         return value;
     }
 
-    private void parseSelectItems(PlainSelect plainSelect, ParsedQuery query) {
+    private void parseSelectItems(PlainSelect plainSelect, ParsedQuery query) throws QueryParseException {
         List<SelectItem<?>> selectItems = plainSelect.getSelectItems();
         List<ColumnInfo> columns = new ArrayList<>();
 
         for (SelectItem<?> item : selectItems) {
+            validateSelectItem(item);
             String fullString = item.toString();
             String expression;
             String alias = null;
@@ -255,6 +317,7 @@ public class QueryParser {
                 UnnestInfo unnestInfo = extractUnnestInfo((net.sf.jsqlparser.statement.select.TableFunction) rightItem);
                 unnestInfos.add(unnestInfo);
             } else {
+                rejectUnsupportedJoinType(join);
                 // Regular JOIN
                 JoinInfo joinInfo = new JoinInfo();
                 joinInfo.setLeftJoin(join.isLeft());
@@ -272,6 +335,21 @@ public class QueryParser {
         
         query.setJoins(joinInfos);
         query.setUnnests(unnestInfos);
+    }
+
+    private void rejectUnsupportedJoinType(Join join) throws QueryParseException {
+        if (join.isRight()) {
+            throw unsupported("RIGHT JOIN");
+        }
+        if (join.isFull()) {
+            throw unsupported("FULL OUTER JOIN");
+        }
+        if (join.isCross()) {
+            throw unsupported("CROSS JOIN");
+        }
+        if (join.isNatural()) {
+            throw unsupported("NATURAL JOIN");
+        }
     }
 
     private TableInfo extractTableInfo(FromItem fromItem) {

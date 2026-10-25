@@ -2,6 +2,10 @@
 
 JsonSQL now supports full boolean logic in WHERE clauses, including `AND`, `OR`, `NOT`, and parentheses for grouping. This document provides comprehensive examples of the complex WHERE clause functionality.
 
+Most examples use a generic `products` / `orders` / `customers` / `users` schema to illustrate syntax; fields such as `stock`, `description`, or `notes` only exist in some of the shipped fixtures. For copy-paste runnable queries against `example-data/`, see [Examples with Real Data](#examples-with-real-data) at the end.
+
+> **Operand rule:** every predicate must be written as *field operator literal* (`price > 100`). A literal on the left (`100 < price`), a field on both sides (`price > stock`), or a function call (`UPPER(name) = 'X'`) is not rejected but matches no rows.
+
 ## Table of Contents
 
 - [Simple Conditions](#simple-conditions)
@@ -29,8 +33,9 @@ jsonsql --query "SELECT * FROM products WHERE price > 100"
 # Less than or equal
 jsonsql --query "SELECT * FROM products WHERE stock <= 10"
 
-# Not equal
+# Not equal (!= and <> are equivalent)
 jsonsql --query "SELECT * FROM products WHERE status != 'discontinued'"
+jsonsql --query "SELECT * FROM products WHERE status <> 'discontinued'"
 
 # Boolean field
 jsonsql --query "SELECT * FROM products WHERE inStock = true"
@@ -83,6 +88,8 @@ jsonsql --query "SELECT * FROM products WHERE NOT (category = 'Electronics' AND 
 # NOT with OR
 jsonsql --query "SELECT * FROM products WHERE NOT (category = 'Furniture' OR price < 50)"
 ```
+
+> **NOT and NULLs:** JsonSQL uses two-valued logic, so a comparison on a missing/null field is FALSE and `NOT` turns it into TRUE. `WHERE NOT price > 1000` therefore also returns rows that have no `price`. Add `AND price IS NOT NULL` to exclude them.
 
 ## Parentheses for Grouping
 
@@ -233,7 +240,7 @@ jsonsql --query "SELECT * FROM products WHERE price > 50 AND category = 'RareCat
 
 ### Comparison Operators
 - `=` - Equals
-- `!=` - Not equals
+- `!=` / `<>` - Not equals
 - `>` - Greater than
 - `<` - Less than
 - `>=` - Greater than or equal to
@@ -284,7 +291,7 @@ jsonsql --query "SELECT * FROM products WHERE name LIKE 'Laptop'"
 # Matches "Desk Lamp" (one character between "Desk" and "amp")
 jsonsql --query "SELECT * FROM products WHERE name LIKE 'Desk _amp'"
 
-# Match 3-letter category starting with 'F' ending with 'rniture'
+# 'F', then exactly two characters, then 'niture' (matches "Furniture")
 jsonsql --query "SELECT * FROM products WHERE category LIKE 'F__niture'"
 ```
 
@@ -355,15 +362,17 @@ jsonsql --query "SELECT * FROM products WHERE name LIKE '%(%)%'"
 
 ### LIKE Pattern Tips
 
-1. **% matches everything**: `LIKE '%'` matches all non-null strings
+1. **% matches everything**: `LIKE '%'` matches all non-null strings (but `%` and `_` do not match newline characters)
 2. **Case-sensitive**: `LIKE 'laptop%'` will NOT match "Laptop"
 3. **Empty pattern**: `LIKE ''` matches only empty strings
-4. **Wildcard positioning matters**:
+4. **Strings only**: number, boolean, array, and null fields never match `LIKE` — and `NOT LIKE` excludes them too
+5. **No ESCAPE**: an `ESCAPE` clause is ignored, so a literal `%` or `_` cannot be matched
+6. **Wildcard positioning matters**:
    - `'%text'` - ends with text
    - `'text%'` - starts with text
    - `'%text%'` - contains text
    - `'%te%xt%'` - contains "te" followed by "xt"
-5. **Single vs multiple wildcards**:
+7. **Single vs multiple wildcards**:
    - `'_ext'` - exactly 4 characters ending in "ext"
    - `'%ext'` - any number of characters ending in "ext"
 
@@ -479,9 +488,10 @@ Both will match `WHERE category IS NULL` and fail `WHERE category IS NOT NULL`.
    - `WHERE category = 'Electronics'` excludes rows where category is NULL
    - `WHERE category != 'Electronics'` also excludes rows where category is NULL
 
-2. **Only IS NULL finds NULLs:**
+2. **IS NULL is the reliable way to find NULLs:**
    - `WHERE description IS NULL` - finds null and missing
    - `WHERE description IS NOT NULL` - finds only present values
+   - Beware `NOT`: `WHERE NOT category = 'Electronics'` *does* return rows where `category` is NULL, because NOT inverts the FALSE produced by the NULL comparison (unlike standard SQL)
 
 3. **Combine for flexible filtering:**
    ```bash
@@ -574,7 +584,7 @@ jsonsql --query "SELECT * FROM orders o JOIN products p ON o.productId = p.id WH
 # Top 5 products in specific categories
 jsonsql --query "SELECT TOP 5 * FROM products WHERE category IN ('Electronics', 'Furniture') ORDER BY price DESC"
 
-# Paginated results with IN
+# First 10 results with IN (OFFSET is not supported, so this is not true pagination)
 jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics', 'Tools', 'Office') ORDER BY name LIMIT 10"
 ```
 
@@ -625,14 +635,19 @@ Following standard SQL rules:
 
 ### Data Type Handling
 
-- **Numbers**: Compared numerically (e.g., `10 < 100`)
-- **Strings**: Compared lexicographically (e.g., `'Apple' < 'Banana'`)
-- **Booleans**: `true` and `false` values
-- **Null**: Null values evaluate to false in comparisons
+- **Numbers**: Compared numerically (e.g., `10 < 100`); equality uses a `0.0001` tolerance
+- **Strings**: Compared lexicographically and case-sensitively (e.g., `'Apple' < 'Banana'`). A number stored as a JSON string (`"10"`) is compared as text.
+- **Booleans**: `true` and `false` values (equality only; range operators never match booleans)
+- **Null**: Null values evaluate to false in comparisons (see the `NOT` caveat above)
 
 ## Examples with Real Data
 
-Using the example data from the JsonSQL repository:
+Using the example data from the JsonSQL repository. First map the two `ecommerce.json` tables:
+
+```bash
+jsonsql --add-mapping ecommerce_products "ecommerce.json:$.store.data.products"
+jsonsql --add-mapping ecommerce_orders "ecommerce.json:$.store.data.orders"
+```
 
 ```bash
 # Electronics over $100 or Tools under $50
@@ -642,7 +657,7 @@ jsonsql --query "SELECT * FROM ecommerce_products WHERE (category = 'Electronics
 jsonsql --query "SELECT name, price, category FROM ecommerce_products WHERE NOT (category = 'Electronics') AND (price >= 100 AND price <= 500) ORDER BY price DESC" --data-dir example-data --pretty
 
 # Complex order query with JOIN
-jsonsql --query "SELECT o.orderId, p.name, p.price FROM ecommerce_orders o JOIN ecommerce_products p ON o.productId = p.id WHERE (o.status = 'completed' OR o.status = 'processing') AND p.price > 50 ORDER BY p.price DESC" --data-dir example-data --pretty
+jsonsql --query "SELECT o.orderId, p.name, p.price FROM ecommerce_orders o JOIN ecommerce_products p ON o.productId = p.id WHERE (o.status = 'delivered' OR o.status = 'processing') AND p.price > 50 ORDER BY p.price DESC" --data-dir example-data --pretty
 ```
 
 ## Summary
@@ -651,7 +666,7 @@ Complex WHERE clauses in JsonSQL provide powerful filtering capabilities:
 
 ✅ **Full Boolean Logic**: AND, OR, NOT operators
 ✅ **List Matching**: IN and NOT IN for checking against value lists
-✅ **Pattern Matching**: LIKE and NOT LIKE with % and _ wildcards
+✅ **Pattern Matching**: LIKE / NOT LIKE (and case-insensitive ILIKE / NOT ILIKE) with % and _ wildcards
 ✅ **Null Handling**: IS NULL and IS NOT NULL for missing and null fields
 ✅ **Unlimited Nesting**: Parentheses for any complexity level
 ✅ **Short-Circuit Evaluation**: Efficient query execution

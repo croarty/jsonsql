@@ -6,7 +6,7 @@ Every query below uses only features JsonSQL actually supports today (nested-fie
 
 ## Data Setup
 
-First, set up the mappings for the complex data (these are stored in `.jsonsql-mappings.json`):
+First, set up the mappings for the complex data (these are stored in `.jsonsql-mappings.json` in the current directory; note that they **overwrite** any existing `customers` / `orders` / `products` mappings, such as the ones created in [QUICK-START.md](QUICK-START.md) — use `-c <file>` if you want to keep both):
 
 ```bash
 jsonsql --add-mapping customers "complex-customers.json:$.customers[*]" --data-dir example-data
@@ -226,12 +226,21 @@ ORDER BY o.totals.total DESC
 
 ## Planned / Not Yet Supported
 
-The following analytics features are **not implemented yet** and will raise an error if used. They are listed here as a roadmap, not as runnable examples:
+The following analytics features are **not implemented yet**. They are listed here as a roadmap, not as runnable examples. Almost all of them are rejected with a clear error:
 
-- Aggregation and grouping: `GROUP BY`, `HAVING`, `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `COUNT(DISTINCT ...)`
-- Conditional expressions: `CASE WHEN ... THEN ... END`
-- SQL functions: string (`UPPER`, `LOWER`, `CONCAT`, ...), date (`DATE_FORMAT`, `MONTH`, `NOW`, ...), and JSON (`JSON_CONTAINS`, `JSON_OBJECT`, `JSON_LENGTH`) functions
-- Result-set composition: `UNION` / `UNION ALL`, `OFFSET`, and subqueries (in `WHERE`, `FROM`, or `SELECT`)
-- Additional joins: `RIGHT JOIN`, `FULL OUTER JOIN`
+| Feature | Current behavior |
+|---|---|
+| `GROUP BY`, `HAVING` | Error: `GROUP BY is not supported` |
+| Aggregates: `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `COUNT(DISTINCT ...)` | Error: `Function or aggregate in SELECT list: ... is not supported` |
+| `CASE WHEN ... THEN ... END`, arithmetic, string concatenation in SELECT | Error: `Expression in SELECT list: ... is not supported` |
+| SQL functions in SELECT: string (`UPPER`, `LOWER`, `CONCAT`, ...), date (`DATE_FORMAT`, `MONTH`, `NOW`, ...), JSON (`JSON_CONTAINS`, `JSON_LENGTH`, ...) | Error: `Function or aggregate in SELECT list: ... is not supported` |
+| Functions in WHERE (`WHERE UPPER(name) = 'X'`) | **Not rejected** — the predicate matches no rows |
+| `OFFSET` | Error: `OFFSET / FETCH is not supported` |
+| `RIGHT JOIN`, `FULL OUTER JOIN` | Error: `RIGHT JOIN is not supported` / `FULL OUTER JOIN is not supported` |
+| `INTERSECT`, `EXCEPT` | Error: `INTERSECT is not supported (...)` |
+| Subqueries in `WHERE` (`IN (SELECT ...)`, `EXISTS`) | Error: unsupported expression |
+| Subqueries in `FROM` / `JOIN` (derived tables) | Error: no mapping found (use `WITH` instead) |
 
-For the authoritative list of supported syntax, see the [SQL Syntax Support](README.md#sql-syntax-support) section of the README. Until aggregation lands, you can pipe JsonSQL output to a tool like `jq` for counts and sums, e.g. `jsonsql --query "SELECT category FROM products" | jq 'length'`.
+`UNION` / `UNION ALL` **are** supported — see [UNION Queries](README.md#union-queries).
+
+For the authoritative list of supported syntax, see the [SQL Syntax Support](README.md#sql-syntax-support) and [Known Limitations](README.md#known-limitations) sections of the README. Until aggregation lands, you can pipe JsonSQL output to a tool like `jq` for counts and sums, e.g. `jsonsql --query "SELECT category FROM products" | jq 'length'`.
