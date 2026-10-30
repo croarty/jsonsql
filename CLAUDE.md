@@ -33,6 +33,7 @@ The course in `jsonsql-course/` is generated. Edit `modules/`, `_base.html` or `
 - Reject unimplemented SQL at parse time with a clear error. Don't let it silently match nothing.
 - Config files (`.jsonsql-mappings.json`, `.jsonsql-queries.json`, `.jsonsql-indexes.json`, `.jsonsql-views.json`) resolve from the current directory, not `--data-dir`.
 - `.jsonsql-mappings.json` is git-ignored, so a fresh clone has no mappings.
+- Read data files through `JsonPathConfig`. JsonPath's default json-smart parser accepts truncated JSON from 2.6.0, which gives silently wrong results.
 
 ## Every code change needs tests and docs
 

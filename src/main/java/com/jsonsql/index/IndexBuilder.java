@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
-import com.jayway.jsonpath.Option;
+import com.jsonsql.query.JsonPathConfig;
 import com.jsonsql.config.MappingManager;
 import com.jsonsql.query.TableFileResolver;
 import com.jsonsql.view.MaterializedViewBuilder;
@@ -50,9 +50,7 @@ public class IndexBuilder {
         this.viewManager = viewManager;
         this.viewStore = viewStore;
         this.objectMapper = new ObjectMapper();
-        this.jsonPathConfig = Configuration.builder()
-            .options(Option.DEFAULT_PATH_LEAF_TO_NULL, Option.SUPPRESS_EXCEPTIONS)
-            .build();
+        this.jsonPathConfig = JsonPathConfig.create();
     }
 
     /**

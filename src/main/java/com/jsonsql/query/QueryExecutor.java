@@ -6,7 +6,6 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
-import com.jayway.jsonpath.Option;
 import com.jsonsql.DebugMode;
 import com.jsonsql.config.CacheManager;
 import com.jsonsql.config.MappingManager;
@@ -70,9 +69,7 @@ public class QueryExecutor implements FieldAccessor {
         this.viewStore = viewManager != null ? new MaterializedViewStore(dataDirectory) : null;
         this.objectMapper = new ObjectMapper();
         this.queryParser = new QueryParser();
-        this.jsonPathConfig = Configuration.builder()
-            .options(Option.DEFAULT_PATH_LEAF_TO_NULL, Option.SUPPRESS_EXCEPTIONS)
-            .build();
+        this.jsonPathConfig = JsonPathConfig.create();
         this.fileResolver = new TableFileResolver(mappingManager, dataDirectory);
         this.indexPlanner = indexManager != null
             ? new IndexPlanner(indexManager, new IndexStore(dataDirectory), mappingManager,
