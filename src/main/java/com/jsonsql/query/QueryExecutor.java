@@ -354,7 +354,7 @@ public class QueryExecutor implements FieldAccessor {
             }
             
             // Save to cache if enabled
-            if (cacheManager != null && cteData != null && !cteData.isEmpty()) {
+            if (cacheManager != null && !cteData.isEmpty()) {
                 try {
                     if (DebugMode.isEnabled()) {
                         System.err.println("DEBUG: Caching CTE " + cteName + " with key: " + cteCacheKey + ", data size: " + cteData.size());
@@ -373,7 +373,7 @@ public class QueryExecutor implements FieldAccessor {
                     }
                 }
             } else if (DebugMode.isEnabled()) {
-                System.err.println("DEBUG: Not caching CTE " + cteName + " - cacheManager=" + (cacheManager != null) + ", cteData=" + (cteData != null) + ", isEmpty=" + (cteData == null ? "N/A" : cteData.isEmpty()));
+                System.err.println("DEBUG: Not caching CTE " + cteName + " - cacheManager=" + (cacheManager != null) + ", isEmpty=" + cteData.isEmpty());
             }
             
             // Store CTE result in context
@@ -409,7 +409,7 @@ public class QueryExecutor implements FieldAccessor {
         // Add JOINs if any
         if (cteQuery.hasJoins()) {
             for (var join : cteQuery.getJoins()) {
-                keyBuilder.append("JOIN:").append(join.getTable().getTableName())
+                keyBuilder.append(join.isLeftJoin() ? "LEFTJOIN:" : "JOIN:").append(join.getTable().getTableName())
                     .append(":").append(join.getOnCondition()).append(":");
             }
         }
@@ -710,7 +710,7 @@ public class QueryExecutor implements FieldAccessor {
 
         for (JoinInfo joinInfo : parsedQuery.getJoins()) {
             List<JsonNode> rightData = loadTableData(joinInfo.getTable(), context);
-            result = performJoin(result, rightData, joinInfo, parsedQuery.getFromTable());
+            result = performJoin(result, rightData, joinInfo);
         }
 
         return result;
@@ -722,8 +722,7 @@ public class QueryExecutor implements FieldAccessor {
     private List<JsonNode> performJoin(
         List<JsonNode> leftData,
         List<JsonNode> rightData,
-        JoinInfo joinInfo,
-        TableInfo leftTableInfo
+        JoinInfo joinInfo
     ) {
         List<JsonNode> result = new ArrayList<>();
         String onCondition = joinInfo.getOnCondition();
@@ -878,9 +877,7 @@ public class QueryExecutor implements FieldAccessor {
         }
         
         // Search within each table wrapper for both qualified and unqualified paths
-        var fields = row.fields();
-        while (fields.hasNext()) {
-            var entry = fields.next();
+        for (var entry : row.properties()) {
             JsonNode tableData = entry.getValue();
             
             if (tableData.isObject()) {
@@ -1095,9 +1092,9 @@ public class QueryExecutor implements FieldAccessor {
     private JsonNode flattenRow(JsonNode row) {
         ObjectNode flattened = objectMapper.createObjectNode();
         
-        row.fields().forEachRemaining(entry -> {
+        row.properties().forEach(entry -> {
             if (entry.getValue().isObject()) {
-                entry.getValue().fields().forEachRemaining(innerEntry -> {
+                entry.getValue().properties().forEach(innerEntry -> {
                     flattened.set(innerEntry.getKey(), innerEntry.getValue());
                 });
             } else {
@@ -1137,7 +1134,7 @@ public class QueryExecutor implements FieldAccessor {
                     ObjectNode newRow = objectMapper.createObjectNode();
                     
                     // Copy all original fields
-                    row.fields().forEachRemaining(entry -> {
+                    row.properties().forEach(entry -> {
                         newRow.set(entry.getKey(), entry.getValue());
                     });
                     
@@ -1186,7 +1183,7 @@ public class QueryExecutor implements FieldAccessor {
         try {
             // Create a sorted map of field names to values
             Map<String, JsonNode> fieldMap = new TreeMap<>();
-            row.fields().forEachRemaining(entry -> {
+            row.properties().forEach(entry -> {
                 fieldMap.put(entry.getKey(), entry.getValue());
             });
             

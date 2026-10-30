@@ -85,53 +85,12 @@ public class CacheManager {
     }
     
     /**
-     * Clear all cached files.
-     * Iterates through all mappings and clears their caches.
-     * 
-     * @param mappingManager The mapping manager to get all table names
-     * @param dataDirectory The data directory to find JSON files
+     * Clear all cached files, including CTE caches.
+     *
      * @return Number of cache files cleared
      */
-    public int clearAllCaches(MappingManager mappingManager, File dataDirectory) {
+    public int clearAllCaches() {
         int clearedCount = 0;
-        
-        // Get all mappings
-        var mappings = mappingManager.getAllMappings();
-        
-        for (String tableName : mappings.keySet()) {
-            try {
-                // Get the file(s) for this mapping
-                String fileName = mappingManager.getFileName(tableName);
-                List<File> jsonFiles = new ArrayList<>();
-                
-                if (fileName != null) {
-                    File fileOrDir = new File(dataDirectory, fileName);
-                    if (fileOrDir.isDirectory()) {
-                        // Directory - get all JSON files
-                        File[] files = fileOrDir.listFiles((dir, name) -> 
-                            name.toLowerCase().endsWith(".json"));
-                        if (files != null) {
-                            for (File f : files) {
-                                jsonFiles.add(f);
-                            }
-                        }
-                    } else {
-                        jsonFiles.add(fileOrDir);
-                    }
-                } else {
-                    // Fall back to table name
-                    File tableFile = new File(dataDirectory, tableName + ".json");
-                    if (tableFile.exists()) {
-                        jsonFiles.add(tableFile);
-                    }
-                }
-                
-                // Note: We can't clear specific JSONPath variations without knowing which were used.
-                // We'll clear all cache files at the end instead.
-            } catch (Exception e) {
-                // Continue clearing other caches even if one fails
-            }
-        }
         
         // Clear all cache files (handles all JSONPath variations for all files, plus CTE caches)
         // This is the correct behavior for --clear-cache: clear everything
@@ -185,7 +144,7 @@ public class CacheManager {
      * This ensures unique cache files for different JSONPath expressions on the same file.
      */
     private String hashPath(String cacheKey) throws NoSuchAlgorithmException {
-        MessageDigest md = MessageDigest.getInstance("MD5");
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
         byte[] hashBytes = md.digest(cacheKey.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         
         StringBuilder sb = new StringBuilder();

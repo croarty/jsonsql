@@ -83,7 +83,7 @@ class MaterializedViewBuilderTest {
 
     @Test
     void rejectsMissingCteInQuery() {
-        assertThrows(Exception.class,
+        assertThrows(com.jsonsql.query.QueryParseException.class,
             () -> builder.materialize("nope", "SELECT * FROM products", null));
     }
 

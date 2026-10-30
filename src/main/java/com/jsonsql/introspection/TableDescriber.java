@@ -10,7 +10,6 @@ import com.jsonsql.view.MaterializedViewManager;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -74,9 +73,7 @@ public class TableDescriber {
         if (!node.isObject()) {
             return;
         }
-        Iterator<Map.Entry<String, JsonNode>> it = node.fields();
-        while (it.hasNext()) {
-            Map.Entry<String, JsonNode> entry = it.next();
+        for (Map.Entry<String, JsonNode> entry : node.properties()) {
             String fieldPath = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
             JsonNode value = entry.getValue();
 

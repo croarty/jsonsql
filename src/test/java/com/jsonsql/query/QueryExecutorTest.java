@@ -232,7 +232,7 @@ class QueryExecutorTest {
 
     @Test
     void testInvalidQuery() {
-        assertThrows(Exception.class, () -> 
+        assertThrows(QueryParseException.class, () -> 
             queryExecutor.execute("INVALID SQL")
         );
     }
@@ -707,15 +707,17 @@ class QueryExecutorTest {
 
     @Test
     void testSelectWithAllComparators() throws Exception {
-        // Test all WHERE operators
-        queryExecutor.execute("SELECT * FROM products WHERE price = 19.99");
-        queryExecutor.execute("SELECT * FROM products WHERE price != 19.99");
-        queryExecutor.execute("SELECT * FROM products WHERE price > 10");
-        queryExecutor.execute("SELECT * FROM products WHERE price < 100");
-        queryExecutor.execute("SELECT * FROM products WHERE price >= 19.99");
-        queryExecutor.execute("SELECT * FROM products WHERE price <= 29.99");
-        
-        // All should execute without error
+        // Prices are 19.99, 29.99 and 9.99
+        assertEquals(1, countRows("price = 19.99"));
+        assertEquals(2, countRows("price != 19.99"));
+        assertEquals(2, countRows("price > 10"));
+        assertEquals(1, countRows("price < 10"));
+        assertEquals(2, countRows("price >= 19.99"));
+        assertEquals(2, countRows("price <= 19.99"));
+    }
+
+    private int countRows(String condition) throws Exception {
+        return objectMapper.readTree(queryExecutor.execute("SELECT * FROM products WHERE " + condition)).size();
     }
 
     @Test

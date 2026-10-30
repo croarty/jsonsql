@@ -178,7 +178,7 @@ class CTECacheTest {
         assertTrue(cteCacheFilesBefore.length > 0, "CTE cache should exist");
         
         // Clear cache
-        int clearedCount = cacheManager.clearAllCaches(mappingManager, testDir);
+        int clearedCount = cacheManager.clearAllCaches();
         assertTrue(clearedCount > 0, "Should clear at least one cache file");
         
         // Verify CTE cache is gone

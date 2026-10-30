@@ -96,6 +96,6 @@ class CsvFormatterTest {
 
     @Test
     void formatRejectsNonArrayInput() {
-        assertThrows(Exception.class, () -> formatter.format("{\"name\":\"Widget\"}"));
+        assertThrows(java.io.IOException.class, () -> formatter.format("{\"name\":\"Widget\"}"));
     }
 }

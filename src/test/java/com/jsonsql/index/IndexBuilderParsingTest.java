@@ -33,7 +33,7 @@ class IndexBuilderParsingTest {
         Files.writeString(new File(tempDir, "cut.json").toPath(), "{\"items\": [{\"id\": 1}, {\"id\"");
         mappingManager.addMapping("cut", "cut.json:$.items");
 
-        assertThrows(Exception.class, () -> builder.build("cut", "id"));
+        assertThrows(java.io.IOException.class, () -> builder.build("cut", "id"));
     }
 
     @Test
