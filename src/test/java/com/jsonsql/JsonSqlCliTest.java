@@ -271,9 +271,9 @@ class JsonSqlCliTest {
 
     @Test
     void testDryRunRejectsUnsupportedSyntax() {
-        CliResult r = runCli(withConfig("-q", "SELECT name FROM products LIMIT 1 OFFSET 1", "--dry-run"));
+        CliResult r = runCli(withConfig("-q", "SELECT name FROM products GROUP BY name", "--dry-run"));
         assertEquals(1, r.exitCode());
-        assertTrue(r.err().contains("OFFSET / FETCH is not supported"), r.err());
+        assertTrue(r.err().contains("GROUP BY is not supported"), r.err());
         assertFalse(r.out().contains("Dry run OK"));
     }
 

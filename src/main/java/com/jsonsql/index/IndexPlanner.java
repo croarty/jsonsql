@@ -14,6 +14,7 @@ import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.Parenthesis;
 import net.sf.jsqlparser.expression.StringValue;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
+import net.sf.jsqlparser.expression.operators.relational.Between;
 import net.sf.jsqlparser.expression.operators.relational.ComparisonOperator;
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
 import net.sf.jsqlparser.expression.operators.relational.GreaterThan;
@@ -162,6 +163,17 @@ public class IndexPlanner {
             AndExpression and = (AndExpression) e;
             collectConjuncts(and.getLeftExpression(), out);
             collectConjuncts(and.getRightExpression(), out);
+        } else if (e instanceof Between && !((Between) e).isNot()) {
+            // x BETWEEN a AND b is the range x >= a AND x <= b
+            Between between = (Between) e;
+            GreaterThanEquals atLeast = new GreaterThanEquals();
+            atLeast.setLeftExpression(between.getLeftExpression());
+            atLeast.setRightExpression(between.getBetweenExpressionStart());
+            MinorThanEquals atMost = new MinorThanEquals();
+            atMost.setLeftExpression(between.getLeftExpression());
+            atMost.setRightExpression(between.getBetweenExpressionEnd());
+            out.add(atLeast);
+            out.add(atMost);
         } else {
             out.add(e);
         }

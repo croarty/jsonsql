@@ -88,6 +88,19 @@ class IndexPlannerTest {
     }
 
     @Test
+    void betweenPrunesLikeARange() throws Exception {
+        assertEquals(prune("SELECT * FROM products WHERE price >= 1 AND price <= 100"),
+            prune("SELECT * FROM products WHERE price BETWEEN 1 AND 100"));
+        assertTrue(prune("SELECT * FROM products WHERE price BETWEEN 1000000 AND 2000000").isEmpty());
+    }
+
+    @Test
+    void notBetweenDoesNotPrune() throws Exception {
+        assertEquals(prune("SELECT * FROM products").size(),
+            prune("SELECT * FROM products WHERE price NOT BETWEEN 1 AND 2").size());
+    }
+
+    @Test
     void equalityPrunesToMatchingFile() throws Exception {
         assertOnly(prune("SELECT * FROM products WHERE category = 'Furniture'"), "2024");
         assertOnly(prune("SELECT * FROM products WHERE category = 'Tools'"), "2023");

@@ -235,7 +235,7 @@ The following analytics features are **not implemented yet**. They are listed he
 | `CASE WHEN ... THEN ... END`, arithmetic, string concatenation in SELECT | Error: `Expression in SELECT list: ... is not supported` |
 | SQL functions in SELECT: string (`UPPER`, `LOWER`, `CONCAT`, ...), date (`DATE_FORMAT`, `MONTH`, `NOW`, ...), JSON (`JSON_CONTAINS`, `JSON_LENGTH`, ...) | Error: `Function or aggregate in SELECT list: ... is not supported` |
 | Functions in WHERE (`WHERE UPPER(name) = 'X'`) | **Not rejected** — the predicate matches no rows |
-| `OFFSET` | Error: `OFFSET / FETCH is not supported` |
+| `FETCH` | Error: `FETCH is not supported` |
 | `RIGHT JOIN`, `FULL OUTER JOIN` | Error: `RIGHT JOIN is not supported` / `FULL OUTER JOIN is not supported` |
 | `INTERSECT`, `EXCEPT` | Error: `INTERSECT is not supported (...)` |
 | Subqueries in `WHERE` (`IN (SELECT ...)`, `EXISTS`) | Error: unsupported expression |

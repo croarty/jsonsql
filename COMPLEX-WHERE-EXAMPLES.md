@@ -260,6 +260,7 @@ jsonsql --query "SELECT * FROM products WHERE price > 50 AND category = 'RareCat
   - **Note:** Both missing fields and explicitly null fields are treated as NULL
 
 ### List Matching
+- `BETWEEN a AND b` - Check if a value is in an inclusive range
 - `IN` - Check if value matches any value in a list
 - `NOT IN` - Check if value does not match any value in the list
   - **Note:** NULL values are excluded from both IN and NOT IN results
@@ -584,7 +585,7 @@ jsonsql --query "SELECT * FROM orders o JOIN products p ON o.productId = p.id WH
 # Top 5 products in specific categories
 jsonsql --query "SELECT TOP 5 * FROM products WHERE category IN ('Electronics', 'Furniture') ORDER BY price DESC"
 
-# First 10 results with IN (OFFSET is not supported, so this is not true pagination)
+# First 10 results with IN (add OFFSET 10 for the next page)
 jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics', 'Tools', 'Office') ORDER BY name LIMIT 10"
 ```
 

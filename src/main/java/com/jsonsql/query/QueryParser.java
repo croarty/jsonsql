@@ -109,8 +109,8 @@ public class QueryParser {
             throw new QueryParseException("UNION must have at least two queries");
         }
 
-        rejectOffset(setOp.getOffset() != null || setOp.getFetch() != null
-            || (setOp.getLimit() != null && setOp.getLimit().getOffset() != null));
+        rejectFetch(setOp.getFetch() != null);
+        unionQuery.setOffset(parseOffset(setOp.getOffset(), setOp.getLimit()));
         if (setOp.getLimit() != null && setOp.getLimit().getRowCount() != null) {
             unionQuery.setLimit(parseRowCount(setOp.getLimit().getRowCount().toString(), "LIMIT"));
         }
@@ -140,6 +140,11 @@ public class QueryParser {
                     && unionQuery.getLimit() == null) {
                 unionQuery.setLimit(subQuery.getLimit());
                 subQuery.setLimit(null);
+            }
+            if (lastBranch && select instanceof PlainSelect && subQuery.getOffset() != null
+                    && unionQuery.getOffset() == null) {
+                unionQuery.setOffset(subQuery.getOffset());
+                subQuery.setOffset(null);
             }
             
             unionQuery.addSubQuery(subQuery);
@@ -209,7 +214,8 @@ public class QueryParser {
         // Parse ORDER BY clause
         parseOrderBy(plainSelect, query);
 
-        // Parse TOP/LIMIT
+        // Parse TOP/LIMIT/OFFSET
+        query.setOffset(parseOffset(plainSelect.getOffset(), plainSelect.getLimit()));
         if (plainSelect.getLimit() != null && plainSelect.getLimit().getRowCount() != null) {
             query.setLimit(parseRowCount(plainSelect.getLimit().getRowCount().toString(), "LIMIT"));
         }
@@ -231,14 +237,26 @@ public class QueryParser {
         if (plainSelect.getHaving() != null) {
             throw unsupported("HAVING");
         }
-        rejectOffset(plainSelect.getOffset() != null || plainSelect.getFetch() != null
-            || (plainSelect.getLimit() != null && plainSelect.getLimit().getOffset() != null));
+        rejectFetch(plainSelect.getFetch() != null);
     }
 
-    private void rejectOffset(boolean hasOffset) throws QueryParseException {
-        if (hasOffset) {
-            throw unsupported("OFFSET / FETCH");
+    private void rejectFetch(boolean hasFetch) throws QueryParseException {
+        if (hasFetch) {
+            throw unsupported("FETCH", "use LIMIT and OFFSET");
         }
+    }
+
+    /**
+     * The row offset from "OFFSET n" or "LIMIT n, m", or null if there is none.
+     */
+    private Long parseOffset(Offset offset, Limit limit) throws QueryParseException {
+        if (offset != null) {
+            return parseRowCount(offset.getOffset().toString(), "OFFSET");
+        }
+        if (limit != null && limit.getOffset() != null) {
+            return parseRowCount(limit.getOffset().toString(), "OFFSET");
+        }
+        return null;
     }
 
     private static QueryParseException unsupported(String feature) {
@@ -293,7 +311,12 @@ public class QueryParser {
             }
             case IsNullExpression isNull -> validateField(isNull.getLeftExpression(), isNull);
             case InExpression in -> validateIn(in);
-            // Anything else, such as BETWEEN, is reported by WhereEvaluator
+            case Between between -> {
+                validateOperand(between.getLeftExpression());
+                validateOperand(between.getBetweenExpressionStart());
+                validateOperand(between.getBetweenExpressionEnd());
+            }
+            // Anything else, such as EXISTS, is reported by WhereEvaluator
             default -> {
             }
         }

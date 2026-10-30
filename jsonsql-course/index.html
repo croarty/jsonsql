@@ -676,7 +676,7 @@
           </div>
           <div class="dnd-zones">
             <div class="dnd-zone" data-correct="where">
-              <p class="dnd-zone-label">Support <code>WHERE price BETWEEN 10 AND 50</code></p>
+              <p class="dnd-zone-label">Support <code>WHERE EXISTS (...)</code></p>
               <div class="dnd-zone-target">Drop here</div>
             </div>
             <div class="dnd-zone" data-correct="cli">
@@ -1321,7 +1321,7 @@
       <!-- SCREEN 1 -->
       <section class="screen animate-in">
         <h2 class="screen-heading">Fail loudly, never quietly</h2>
-        <p>A smoke alarm with a dead battery is worse than no alarm, because you <em>trust</em> it. Early on, a WHERE condition JsonSQL didn't understand (like <code>BETWEEN</code>) simply matched nothing, and you got an empty answer that looked real. Now the judge refuses to guess:</p>
+        <p>A smoke alarm with a dead battery is worse than no alarm, because you <em>trust</em> it. Early on, a WHERE condition JsonSQL didn't understand (like <code>EXISTS</code>) simply matched nothing, and you got an empty answer that looked real. Now the judge refuses to guess:</p>
 
         <div class="translation-block animate-in">
           <div class="translation-code">
@@ -1334,7 +1334,7 @@
               <p class="tl">If we reach this line, none of the known operators matched.</p>
               <p class="tl">Stop everything and raise an alarm...</p>
               <p class="tl">...quoting the exact piece of SQL we did not understand...</p>
-              <p class="tl">...and what kind of thing the parser said it was (e.g. "Between"), which is a great clue for whoever adds support for it.</p>
+              <p class="tl">...and what kind of thing the parser said it was (e.g. "ExistsExpression"), which is a great clue for whoever adds support for it.</p>
               <p class="tl">&nbsp;</p>
             </div>
           </div>
@@ -1546,7 +1546,7 @@
       <!-- SCREEN 6 -->
       <section class="screen animate-in">
         <h2 class="screen-heading">The safety net: tests and docs, every time</h2>
-        <p>This repository contains instructions for Claude in <code>CLAUDE.md</code>. They say that a change is not done until it has thorough tests <em>and</em> updated documentation, and a hook runs the tests automatically. That is why there are 66 test files guarding the behaviour you've learned about.</p>
+        <p>This repository contains instructions for Claude in <code>CLAUDE.md</code>. They say that a change is not done until it has thorough tests <em>and</em> updated documentation, and a hook runs the tests automatically. That is why there are 67 test files guarding the behaviour you've learned about.</p>
 
         <div class="file-tree animate-in">
           <div class="ft-folder open">
@@ -1587,7 +1587,7 @@
           </div>
           <div class="icon-row">
             <div class="icon-circle" style="background: var(--color-success-light)">🎯</div>
-            <div><strong>"Add BETWEEN to WhereEvaluator, and teach IndexPlanner to treat it as a range so it can prune files. Update the README's Future Enhancements."</strong><p>Covers the judge, the speed-up, and the docs the project's rule requires.</p></div>
+            <div><strong>"Add EXISTS to WhereEvaluator, and make sure IndexPlanner never prunes on it. Update the README's Future Enhancements."</strong><p>Covers the judge, the speed-up, and the docs the project's rule requires.</p></div>
           </div>
         </div>
       </section>
@@ -1637,17 +1637,17 @@
 
           <div class="quiz-question-block"
                data-correct="a"
-               data-explanation-right="The error is intentional: BETWEEN is listed as not yet supported, and JsonSQL now refuses rather than silently returning nothing. Rewriting as two range conditions joined by AND works today and can even use an index on price to skip files."
-               data-explanation-wrong="This error is the tool doing its job: saying clearly that it does not support BETWEEN yet, instead of quietly returning zero rows. You can get the same result today with price &gt;= 10 AND price &lt;= 50, which the index planner can also use.">
+               data-explanation-right="The error is intentional: arithmetic in WHERE is not supported, and JsonSQL refuses rather than silently returning nothing. Rewriting it as price &gt; 40 works today and can even use an index on price to skip files."
+               data-explanation-wrong="This error is the tool doing its job: saying clearly that it does not support arithmetic in WHERE, instead of quietly returning zero rows. You can get the same result today with price &gt; 40, which the index planner can also use.">
             <div class="scenario-block">
               <div class="scenario-context">
                 <span class="scenario-label">Scenario</span>
-                <p><code>WHERE price BETWEEN 10 AND 50</code> fails with "Unsupported WHERE expression ... (type: Between)". You need results today.</p>
+                <p><code>WHERE price + 10 &gt; 50</code> fails with "Expression in WHERE: price + 10 is not supported". You need results today.</p>
               </div>
             </div>
             <h3 class="quiz-question">Best move?</h3>
             <div class="quiz-options">
-              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Rewrite as <code>price &gt;= 10 AND price &lt;= 50</code></span></button>
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Rewrite as <code>price &gt; 40</code></span></button>
               <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Set <code>DEBUG=1</code> and retry</span></button>
               <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Ask AI to remove the exception so the query returns whatever it can</span></button>
             </div>
