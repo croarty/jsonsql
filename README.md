@@ -848,6 +848,7 @@ LEFT JOIN customers c ON o.customerId = c.id
 **JOIN constraints:**
 
 - Only a single **equi-join** is supported: the `ON` condition must be one `left = right` equality. Compound conditions (`... AND ...`) and range operators (`>`, `>=`, `<`, `<=`, etc.) in `ON` raise a clear error.
+- The two sides of `ON` can be written in either order (`o.productId = p.id` or `p.id = o.productId`).
 - Join keys use light type coercion: a numeric value matches its string representation (e.g. `5` matches `"5"`), so mismatched JSON types still join as expected.
 - SQL `NULL` join keys never match anything (including other nulls).
 - Unmatched `LEFT JOIN` rows return `null` for every selected right-hand column.
