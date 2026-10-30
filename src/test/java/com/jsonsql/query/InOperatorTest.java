@@ -294,15 +294,13 @@ class InOperatorTest {
     
     @Test
     void testNotWithIn() throws Exception {
-        // Using NOT with IN - subtly different from NOT IN for NULL values
+        // NOT (x IN ...) agrees with x NOT IN ...: NULL IN is UNKNOWN, and NOT UNKNOWN stays UNKNOWN
         String sql = "SELECT * FROM products WHERE NOT (category IN ('Electronics'))";
         String jsonResult = executor.execute(sql);
         JsonNode result = objectMapper.readTree(jsonResult);
-        
-        // NOT (IN) with NULL: IN returns FALSE for NULL, NOT FALSE = TRUE, so NULL is INCLUDED
-        // This is different from NOT IN which excludes NULL
-        // Returns Furniture, Tools, AND the null category (Lamp)
-        assertEquals(5, result.size());
+
+        // Returns Furniture and Tools, but not the null category (Lamp)
+        assertEquals(4, result.size());
     }
     
     @Test

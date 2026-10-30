@@ -192,17 +192,12 @@ class NullHandlingTest {
     
     @Test
     void testNotConditionWithNull() throws Exception {
-        // NOT with null value
-        // Note: Full SQL three-valued logic (NULL as UNKNOWN) would exclude nulls,
-        // but our implementation treats NOT false as true
+        // NOT UNKNOWN stays UNKNOWN, so rows with a null or missing category are excluded
         String sql = "SELECT * FROM products WHERE NOT (category = 'Electronics')";
         String jsonResult = executor.execute(sql);
         JsonNode result = objectMapper.readTree(jsonResult);
-        
-        // Currently returns items where category comparison returns false (including nulls)
-        // Future enhancement: implement full three-valued logic where NOT UNKNOWN = UNKNOWN
-        assertEquals(3, result.size());
-        // Returns: Desk (null category), Chair (missing category), Unknown item
+
+        assertEquals(1, result.size());
     }
     
     @Test

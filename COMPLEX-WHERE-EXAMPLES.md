@@ -89,7 +89,7 @@ jsonsql --query "SELECT * FROM products WHERE NOT (category = 'Electronics' AND 
 jsonsql --query "SELECT * FROM products WHERE NOT (category = 'Furniture' OR price < 50)"
 ```
 
-> **NOT and NULLs:** JsonSQL uses two-valued logic, so a comparison on a missing/null field is FALSE and `NOT` turns it into TRUE. `WHERE NOT price > 1000` therefore also returns rows that have no `price`. Add `AND price IS NOT NULL` to exclude them.
+> **NOT and NULLs:** JsonSQL follows SQL three-valued logic. A condition on a missing or null field is unknown, and `NOT` leaves it unknown, so `WHERE NOT price > 1000` does not return rows with no `price`. Add `OR price IS NULL` to include them.
 
 ## Parentheses for Grouping
 
@@ -491,7 +491,7 @@ Both will match `WHERE category IS NULL` and fail `WHERE category IS NOT NULL`.
 2. **IS NULL is the reliable way to find NULLs:**
    - `WHERE description IS NULL` - finds null and missing
    - `WHERE description IS NOT NULL` - finds only present values
-   - Beware `NOT`: `WHERE NOT category = 'Electronics'` *does* return rows where `category` is NULL, because NOT inverts the FALSE produced by the NULL comparison (unlike standard SQL)
+   - `NOT` does not bring NULLs back: `WHERE NOT category = 'Electronics'` leaves out rows where `category` is NULL, as standard SQL does
 
 3. **Combine for flexible filtering:**
    ```bash
