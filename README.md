@@ -422,13 +422,15 @@ jsonsql --query "SELECT * FROM products WHERE price > \${min_price}" \
   --param min_price=200
 ```
 
+To choose a field or table at run time, such as `ORDER BY ${sort_by}`, see [Choosing fields and tables at run time](SAVED-QUERIES.md#choosing-fields-and-tables-at-run-time).
+
 **Parameter Rules:**
 
 - Required parameters (no default): Must be provided with a non-empty `--param` value or an error is thrown (`Missing required parameters: ...`)
 - Optional parameters (with default): Use default value if not provided
 - Parameter names: Any characters except `}` and `:` (keys and values are trimmed); `--param` must be `key=value`
 - Extra `--param` values that don't match a placeholder are ignored
-- Parameter values: Values from `--param` can't change the query. Inside single quotes (`'${name}'`), apostrophes are escaped, so `--param name=O'Brien` works. Outside quotes, a value must be a number, a boolean, a single-quoted string or a comma-separated list of those, so use quotes in the query for plain text. Default values are part of the query and are used as written.
+- Parameter values: Values from `--param` can't change the query. Inside single quotes (`'${name}'`), apostrophes are escaped, so `--param name=O'Brien` works. Outside quotes, a value must be a number, a boolean, a single-quoted string or a comma-separated list of those, so use quotes in the query for plain text. After `SELECT`, `FROM`, `JOIN` or `ORDER BY`, a value can also be a field or table name, or a comma-separated list of names. Default values are part of the query and are used as written.
 
 #### Delete a Saved Query
 

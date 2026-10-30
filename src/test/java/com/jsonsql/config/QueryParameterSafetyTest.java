@@ -2,6 +2,7 @@ package com.jsonsql.config;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Map;
@@ -58,6 +59,69 @@ class QueryParameterSafetyTest {
     @ValueSource(strings = {"'x'", "'a', 'b'", "'it''s', 'b'", "1, 'a'", "''"})
     void quotedStringsAndListsWorkOutsideQuotes(String value) {
         assertEquals("WHERE a IN (" + value + ")", replace("WHERE a IN (${v})", value));
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+        "SELECT id FROM t ORDER BY ${v}                 | price",
+        "SELECT id FROM t ORDER BY name, ${v}           | price",
+        "SELECT id FROM t ORDER BY price ${v}           | DESC",
+        "SELECT id FROM t ORDER BY ${v}                 | p.price",
+        "SELECT id FROM t ORDER BY ${v}                 | name, price",
+        "SELECT ${v} FROM t                             | name",
+        "SELECT ${v} FROM t                             | name, price",
+        "SELECT DISTINCT ${v} FROM t                    | category",
+        "SELECT id, ${v} FROM t                         | name",
+        "SELECT id FROM ${v}                            | products",
+        "SELECT a.id FROM a JOIN ${v} ON a.id = b.id    | b",
+        "SELECT id FROM t WHERE a = 1 ORDER BY ${v}     | price",
+        "select id from t order   by ${v}               | price",
+    })
+    void namesWorkWhereTheQueryNamesSomething(String query, String value) {
+        assertEquals(query.replace("${v}", value), replace(query, value));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "SELECT id FROM t WHERE a > ${v}", "SELECT id FROM t WHERE a = 1 AND b = ${v}", "SELECT id FROM t WHERE a IN (${v})",
+        "SELECT id FROM t WHERE ${v} = 1", "SELECT a.id FROM a JOIN b ON a.id = ${v}", "SELECT id FROM t LIMIT ${v}",
+        "SELECT id FROM t ORDER BY id LIMIT ${v}",
+    })
+    void namesAreRejectedInConditionsAndLimits(String query) {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> replace(query, "abc"));
+
+        assertTrue(e.getMessage().contains("must be a number, a boolean or a quoted string"), e.getMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "price; DROP TABLE t", "price DESC", "price, (1)", "price OR 1=1", "a b", "1abc", "price -- x", "price,", "name FROM other",
+    })
+    void onlyPlainNamesWorkWhereNamesAreAllowed(String value) {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+            () -> replace("SELECT id FROM t ORDER BY ${v}", value));
+
+        assertTrue(e.getMessage().contains("must be a name"), e.getMessage());
+    }
+
+    @Test
+    void aKeywordInsideAStringDoesNotChangeThePosition() {
+        assertThrows(IllegalArgumentException.class,
+            () -> replace("SELECT id FROM t WHERE a = 'ORDER BY' AND b > ${v}", "abc"));
+    }
+
+    @Test
+    void literalsStillWorkWhereNamesAreAllowed() {
+        assertEquals("SELECT TOP 5 id FROM t", replace("SELECT TOP ${v} id FROM t", "5"));
+        assertEquals("SELECT id FROM t ORDER BY 2", replace("SELECT id FROM t ORDER BY ${v}", "2"));
+    }
+
+    @Test
+    void theNearestClauseDecides() {
+        assertEquals("SELECT id FROM t WHERE a = 1 ORDER BY b",
+            QueryParameterReplacer.replaceParameters("SELECT id FROM t WHERE a = ${x} ORDER BY ${y}", Map.of("x", "1", "y", "b")));
+        assertThrows(IllegalArgumentException.class, () ->
+            QueryParameterReplacer.replaceParameters("SELECT id FROM t WHERE a = ${x} ORDER BY ${y}", Map.of("x", "b", "y", "b")));
     }
 
     @Test
