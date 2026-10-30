@@ -4,7 +4,7 @@ JsonSQL now supports full boolean logic in WHERE clauses, including `AND`, `OR`,
 
 Most examples use a generic `products` / `orders` / `customers` / `users` schema to illustrate syntax; fields such as `stock`, `description`, or `notes` only exist in some of the shipped fixtures. For copy-paste runnable queries against `example-data/`, see [Examples with Real Data](#examples-with-real-data) at the end.
 
-> **Operand rule:** every predicate must be written as *field operator literal* (`price > 100`). A literal on the left (`100 < price`), a field on both sides (`price > stock`), or a function call (`UPPER(name) = 'X'`) is not rejected but matches no rows.
+> **Operands:** each side of a comparison can be a field or a literal, in either order (`price > 100`, `100 < price`, `price > stock`). Text needs single quotes, because an unquoted word is a field. Arithmetic and functions (`UPPER(name) = 'X'`) are rejected.
 
 ## Table of Contents
 
@@ -366,7 +366,7 @@ jsonsql --query "SELECT * FROM products WHERE name LIKE '%(%)%'"
 2. **Case-sensitive**: `LIKE 'laptop%'` will NOT match "Laptop"
 3. **Empty pattern**: `LIKE ''` matches only empty strings
 4. **Strings only**: number, boolean, array, and null fields never match `LIKE` — and `NOT LIKE` excludes them too
-5. **No ESCAPE**: an `ESCAPE` clause is ignored, so a literal `%` or `_` cannot be matched
+5. **ESCAPE**: use `ESCAPE` to match a literal `%` or `_`, as in `name LIKE '50!%' ESCAPE '!'`
 6. **Wildcard positioning matters**:
    - `'%text'` - ends with text
    - `'text%'` - starts with text

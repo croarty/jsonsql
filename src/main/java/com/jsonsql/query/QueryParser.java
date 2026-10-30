@@ -1,8 +1,10 @@
 package com.jsonsql.query;
 
 import net.sf.jsqlparser.JSQLParserException;
-import net.sf.jsqlparser.expression.Expression;
-import net.sf.jsqlparser.expression.Function;
+import net.sf.jsqlparser.expression.*;
+import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
+import net.sf.jsqlparser.expression.operators.conditional.OrExpression;
+import net.sf.jsqlparser.expression.operators.relational.*;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.Statement;
@@ -139,7 +141,7 @@ public class QueryParser {
             List<OrderByInfo> orderByInfos = new ArrayList<>();
             
             for (net.sf.jsqlparser.statement.select.OrderByElement element : orderByElements) {
-                String column = element.getExpression().toString();
+                String column = resolveUnionOrderColumn(element.getExpression(), unionQuery);
                 boolean ascending = element.isAsc() || !element.isAscDescPresent();
                 orderByInfos.add(new OrderByInfo(column, ascending));
             }
@@ -147,6 +149,21 @@ public class QueryParser {
         }
         
         return unionQuery;
+    }
+
+    /**
+     * A UNION sorts its combined output, so ORDER BY refers to output names. A position
+     * uses the first branch's names.
+     */
+    private String resolveUnionOrderColumn(Expression expression, UnionQuery unionQuery) throws QueryParseException {
+        if (expression instanceof LongValue) {
+            return selectedColumn((LongValue) expression, unionQuery.getSubQueries().get(0).getSelectColumns())
+                .getOutputName();
+        }
+        if (!(expression instanceof Column)) {
+            throw unsupported("Expression in ORDER BY: " + expression, "order by a column or a position");
+        }
+        return fieldName(expression);
     }
 
     private ParsedQuery buildParsedQuery(PlainSelect plainSelect) throws QueryParseException {
@@ -174,6 +191,7 @@ public class QueryParser {
 
         // Parse WHERE clause
         if (plainSelect.getWhere() != null) {
+            validateWhere(plainSelect.getWhere());
             query.setWhereExpression(plainSelect.getWhere());
         }
 
@@ -238,6 +256,95 @@ public class QueryParser {
     }
 
     /**
+     * Each side of a condition must be a field or a literal. Anything else would otherwise be
+     * looked up as a field name and silently match nothing.
+     */
+    private void validateWhere(Expression expression) throws QueryParseException {
+        switch (expression) {
+            case AndExpression and -> {
+                validateWhere(and.getLeftExpression());
+                validateWhere(and.getRightExpression());
+            }
+            case OrExpression or -> {
+                validateWhere(or.getLeftExpression());
+                validateWhere(or.getRightExpression());
+            }
+            case NotExpression not -> validateWhere(not.getExpression());
+            case Parenthesis parenthesis -> validateWhere(parenthesis.getExpression());
+            case ComparisonOperator comparison -> {
+                validateOperand(comparison.getLeftExpression());
+                validateOperand(comparison.getRightExpression());
+            }
+            case LikeExpression like -> {
+                validateField(like.getLeftExpression(), like);
+                validateOperand(like.getRightExpression());
+                likeEscape(like);
+            }
+            case IsNullExpression isNull -> validateField(isNull.getLeftExpression(), isNull);
+            case InExpression in -> validateIn(in);
+            // Anything else, such as BETWEEN, is reported by WhereEvaluator
+            default -> {
+            }
+        }
+    }
+
+    private void validateIn(InExpression in) throws QueryParseException {
+        validateField(in.getLeftExpression(), in);
+        if (in.getRightExpression() instanceof ParenthesedExpressionList<?> list) {
+            for (Object item : list) {
+                validateOperand((Expression) item);
+            }
+        }
+    }
+
+    private void validateField(Expression expression, Expression condition) throws QueryParseException {
+        if (!(expression instanceof Column)) {
+            throw unsupported("Expression in WHERE: " + condition, "the left side must be a field");
+        }
+    }
+
+    private void validateOperand(Expression expression) throws QueryParseException {
+        if (expression instanceof Parenthesis) {
+            validateOperand(((Parenthesis) expression).getExpression());
+            return;
+        }
+        boolean signedNumber = expression instanceof SignedExpression
+            && (((SignedExpression) expression).getExpression() instanceof LongValue
+                || ((SignedExpression) expression).getExpression() instanceof DoubleValue);
+        if (expression instanceof Column || expression instanceof StringValue || expression instanceof LongValue
+                || expression instanceof DoubleValue || expression instanceof NullValue || signedNumber) {
+            return;
+        }
+        String kind = expression instanceof Function ? "Function" : "Expression";
+        throw unsupported(kind + " in WHERE: " + expression, "compare a field with a field or a literal");
+    }
+
+    /**
+     * The field path of a column reference, without any double quotes around its name.
+     */
+    static String fieldName(Expression expression) {
+        return unquote(expression.toString());
+    }
+
+    private static String unquote(String name) {
+        return name == null ? null : name.replace("\"", "");
+    }
+
+    /**
+     * The character set by LIKE ... ESCAPE, or null if there is none.
+     */
+    static Character likeEscape(LikeExpression like) throws UnsupportedExpressionException {
+        Expression escape = like.getEscape();
+        if (escape == null) {
+            return null;
+        }
+        if (escape instanceof StringValue && ((StringValue) escape).getNotExcapedValue().length() == 1) {
+            return ((StringValue) escape).getNotExcapedValue().charAt(0);
+        }
+        throw new UnsupportedExpressionException("ESCAPE must be a single character, got: " + escape);
+    }
+
+    /**
      * Parse and validate a LIMIT/TOP row count: must be a non-negative integer.
      */
     private long parseRowCount(String raw, String clause) throws QueryParseException {
@@ -282,7 +389,7 @@ public class QueryParser {
                 expression = fullString;
             }
             
-            columns.add(new ColumnInfo(expression, alias));
+            columns.add(new ColumnInfo(unquote(expression), unquote(alias)));
         }
 
         query.setSelectColumns(columns);
@@ -419,7 +526,7 @@ public class QueryParser {
         return new UnnestInfo(arrayExpression, alias, elementColumn);
     }
 
-    private void parseOrderBy(PlainSelect plainSelect, ParsedQuery query) {
+    private void parseOrderBy(PlainSelect plainSelect, ParsedQuery query) throws QueryParseException {
         List<net.sf.jsqlparser.statement.select.OrderByElement> orderByElements = plainSelect.getOrderByElements();
         
         if (orderByElements == null || orderByElements.isEmpty()) {
@@ -429,13 +536,44 @@ public class QueryParser {
         List<OrderByInfo> orderByInfos = new ArrayList<>();
         
         for (net.sf.jsqlparser.statement.select.OrderByElement element : orderByElements) {
-            String column = element.getExpression().toString();
+            String column = resolveOrderColumn(element.getExpression(), query.getSelectColumns());
             boolean ascending = element.isAsc() || !element.isAscDescPresent(); // Default to ASC if not specified
-            
+
             orderByInfos.add(new OrderByInfo(column, ascending));
         }
         
         query.setOrderBy(orderByInfos);
+    }
+
+    /**
+     * Sorting runs before projection, so an alias or a position has to become the source
+     * field it stands for. As in SQL, an alias takes priority over a field of the same name.
+     */
+    private String resolveOrderColumn(Expression expression, List<ColumnInfo> columns) throws QueryParseException {
+        if (expression instanceof LongValue) {
+            return selectedColumn((LongValue) expression, columns).getExpression();
+        }
+        if (!(expression instanceof Column)) {
+            throw unsupported("Expression in ORDER BY: " + expression, "order by a column, an alias or a position");
+        }
+        String name = fieldName(expression);
+        for (ColumnInfo column : columns) {
+            if (column.hasAlias() && column.getAlias().equalsIgnoreCase(name)) {
+                return column.getExpression();
+            }
+        }
+        return name;
+    }
+
+    private ColumnInfo selectedColumn(LongValue position, List<ColumnInfo> columns) throws QueryParseException {
+        long index = position.getValue();
+        if (columns.stream().anyMatch(column -> "*".equals(column.getExpression()))) {
+            throw unsupported("ORDER BY " + index + " with SELECT *", "list the columns or order by a field name");
+        }
+        if (index < 1 || index > columns.size()) {
+            throw new QueryParseException("ORDER BY position " + index + " is not in the SELECT list");
+        }
+        return columns.get((int) index - 1);
     }
 
     /**

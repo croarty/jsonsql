@@ -539,7 +539,7 @@ jsonsql --query "SELECT * FROM products WHERE ((category = 'Electronics' AND pri
 - Operator precedence follows standard SQL rules
 - SQL comments (`-- ...` and `/* ... */`) are accepted anywhere in the query
 
-**Operand shape:** every predicate must have the **field on the left and a literal on the right** (`price > 20`, not `20 < price`). Reversed comparisons and field-to-field comparisons (`price > stock`) are not rejected — they simply match no rows.
+**Operands:** each side of a comparison can be a field or a literal, in either order, so `price > 20`, `20 < price` and `price > stock` all work. Text needs single quotes: an unquoted word is a field, so `category = Tools` compares two fields. Double-quoted names are fields, or text if no such field exists. Field names are case-sensitive, and a field that doesn't exist reads as NULL. Arithmetic and functions (`price + 1 > 20`, `LOWER(name) = 'x'`) are rejected.
 
 **Pattern Matching with LIKE:**
 
@@ -597,7 +597,7 @@ jsonsql --query "SELECT * FROM products WHERE name ILIKE '%e%' AND category ILIK
 - Only JSON string fields can match. Numbers, booleans, arrays, and NULLs never match `LIKE` — and are also excluded by `NOT LIKE`.
 - Regex metacharacters in the pattern (`.`, `(`, `[`, ...) are matched literally.
 - `%` and `_` do not match newline characters.
-- An `ESCAPE` clause is accepted by the parser but ignored, so there is no way to match a literal `%` or `_`.
+- Use `ESCAPE` to match a literal `%` or `_`: `name LIKE '50!%' ESCAPE '!'` matches text starting with `50%`. The escape must be one character.
 
 **Null Value Handling with IS NULL / IS NOT NULL:**
 
@@ -773,7 +773,7 @@ jsonsql --query "SELECT * FROM products" --output results.json --pretty
 
 ## SQL Syntax Support
 
-> **Query phase order:** clauses are applied in the order **FROM → UNNEST → JOIN → WHERE → ORDER BY → projection (SELECT list) → DISTINCT → LIMIT/TOP**. This means sorting happens against the full source rows (you can `ORDER BY` a column you do not select, but not a SELECT alias), `DISTINCT` is applied to the projected columns, and `LIMIT`/`TOP` is applied last (after de-duplication).
+> **Query phase order:** clauses are applied in the order **FROM → UNNEST → JOIN → WHERE → ORDER BY → projection (SELECT list) → DISTINCT → LIMIT/TOP**. This means sorting happens against the full source rows (you can `ORDER BY` a column you do not select, as well as a SELECT alias or position), `DISTINCT` is applied to the projected columns, and `LIMIT`/`TOP` is applied last (after de-duplication).
 
 ### SELECT Clause
 
@@ -901,7 +901,7 @@ ORDER BY p.name, o.orderDate DESC
 - Qualified column names (`p.price`, `o.quantity`) and nested paths (`vipStatus.points`)
 - Sorting is stable: rows that compare equal keep their source order
 
-Because sorting runs *before* projection, `ORDER BY` must name a **source field**. A SELECT alias (`SELECT price AS cost ... ORDER BY cost`) or a column position (`ORDER BY 2`) is not rejected but has no effect — the rows come back unsorted. (In a `UNION`, the opposite applies: see below.)
+Sorting runs *before* projection, so `ORDER BY` can use a source field you did not select. It also accepts a SELECT alias (`SELECT price AS cost ... ORDER BY cost`) or a column position (`ORDER BY 2`). An alias takes priority over a field with the same name. A position needs an explicit column list, not `SELECT *`. Expressions such as `ORDER BY price * 2` are rejected. (In a `UNION`, see below.)
 
 ### TOP / LIMIT
 
@@ -980,7 +980,7 @@ UNION rules:
 
 - Every branch must select the **same number of columns** (checked at parse time). Column *names* are not unified: each row keeps the output names of the branch it came from, so alias the columns identically (`SELECT id AS key ... UNION SELECT orderId AS key ...`) if you want a uniform shape.
 - `UNION` de-duplicates whole rows; `UNION ALL` keeps duplicates. When both appear, operators are applied left to right as in standard SQL: `A UNION ALL B UNION C` de-duplicates everything, while `A UNION B UNION ALL C` de-duplicates `A`+`B` and then appends all of `C`.
-- A trailing `ORDER BY` sorts the combined output and therefore refers to **output column names** (aliases), not qualified source fields.
+- A trailing `ORDER BY` sorts the combined output and therefore refers to **output column names** (aliases) or positions, not qualified source fields. A position uses the first branch's columns.
 - A trailing `LIMIT n` (after the last branch, with or without `ORDER BY`) limits the **whole** result, after de-duplication and sorting. `TOP` and a `LIMIT` inside parentheses apply to their own branch only. `OFFSET` is rejected.
 - `INTERSECT`, `EXCEPT`, and `MINUS` are rejected (`INTERSECT is not supported`).
 - A `WITH` clause may precede a UNION, and its CTEs are visible to every branch. A UNION cannot be used inside a CTE.
@@ -998,17 +998,13 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 | `RIGHT`, `FULL [OUTER]`, `CROSS` (except with `UNNEST`), `NATURAL` joins | `RIGHT JOIN is not supported`, ... |
 | `INTERSECT`, `EXCEPT`, `MINUS` | `INTERSECT is not supported (only UNION and UNION ALL are supported)` |
 | `BETWEEN`, `IN (SELECT ...)`, `EXISTS` in WHERE | `Unsupported WHERE expression: ...` |
+| Arithmetic and functions in WHERE | `Expression in WHERE: price + 1 is not supported (...)` |
+| Expressions in `ORDER BY` | `Expression in ORDER BY: price * 2 is not supported (...)` |
 | Derived tables (`FROM (SELECT ...) t`) | `No mapping or materialized view found for table: ...` |
 
 These checks run at parse time, so `--dry-run` reports them too, and they apply inside CTE bodies and UNION branches as well.
 
-A few constructs are still **accepted but have no effect**. Avoid them:
-
-| Construct | What actually happens |
-|---|---|
-| `ORDER BY alias` or `ORDER BY 2` (non-UNION) | No sorting applied — order by the source field instead |
-| Literal on the left (`20 < price`), field vs field (`price > stock`), function operands (`UPPER(x) = ...`) | Predicate matches no rows |
-| `LIKE ... ESCAPE '...'` | Escape clause ignored |
+A name that matches nothing is not an error, because JSON has no fixed schema and `profile.level` could be a nested field: `SELECT nope` and `SELECT typo.id` return `null`, and `WHERE nope = 1` matches no rows. Check field names and case with `--describe`.
 
 Until aggregation lands, pipe results to a tool like `jq` for counts and sums.
 
@@ -1358,7 +1354,7 @@ Planned features for future releases, organized by priority:
 - Subqueries (e.g., `WHERE price > (SELECT AVG(price) FROM products)`) and derived tables in `FROM`
 - Calculated fields in SELECT (e.g., `SELECT price * 1.1 AS price_with_tax`)
 - ✅ **Unsupported SQL fails loudly** — `GROUP BY`, `HAVING`, `OFFSET`, `RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`, and non-column SELECT items are rejected at parse time instead of being silently ignored - **IMPLEMENTED**
-- `ORDER BY` on a SELECT alias or column position
+- ✅ `ORDER BY` on a SELECT alias or column position - **IMPLEMENTED**
 
 ### Medium Priority (Advanced Features)
 
@@ -1424,8 +1420,9 @@ Planned features for future releases, organized by priority:
 - ✅ Full three-valued logic (TRUE/FALSE/UNKNOWN) for NULL handling - **IMPLEMENTED**
 - ✅ `<>` as a synonym for `!=` - **IMPLEMENTED**
 - ✅ Comment support in SQL (`--` and `/* */`) - **IMPLEMENTED**
-- Comparisons with the literal on the left, and field-to-field comparisons
-- `BETWEEN` (listed above), `LIKE ... ESCAPE`
+- ✅ Comparisons with the literal on the left, and field-to-field comparisons - **IMPLEMENTED**
+- `BETWEEN` (listed above)
+- ✅ `LIKE ... ESCAPE` - **IMPLEMENTED**
 - Case-insensitive table and view names
 - Multi-statement execution
 

@@ -1,11 +1,18 @@
 package com.jsonsql.query;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.BigIntegerNode;
+import com.fasterxml.jackson.databind.node.BooleanNode;
+import com.fasterxml.jackson.databind.node.DecimalNode;
+import com.fasterxml.jackson.databind.node.DoubleNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import net.sf.jsqlparser.expression.*;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.conditional.OrExpression;
 import net.sf.jsqlparser.expression.operators.relational.*;
+import net.sf.jsqlparser.schema.Column;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -57,6 +64,10 @@ public class WhereEvaluator {
                 case UNKNOWN -> UNKNOWN;
             };
         }
+    }
+
+    /** One side of a comparison: its value (null for SQL NULL), and whether it came from a field. */
+    private record Operand(JsonNode value, boolean isField) {
     }
 
     private final FieldAccessor fieldAccessor;
@@ -153,50 +164,97 @@ public class WhereEvaluator {
     }
     
     private Truth evaluateComparison(JsonNode row, ComparisonOperator comparison, String operator) {
-        // Get field value
-        String fieldPath = comparison.getLeftExpression().toString();
-        JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
-        
+        Operand left = resolve(row, comparison.getLeftExpression());
+        Operand right = resolve(row, comparison.getRightExpression());
+
         // In SQL, any comparison with NULL is UNKNOWN, whichever side the NULL is on.
-        // This includes both missing fields (fieldValue == null) and present but null fields (fieldValue.isNull())
-        if (fieldValue == null || fieldValue.isNull() || comparison.getRightExpression() instanceof NullValue) {
+        // This includes both missing fields and present but null fields.
+        if (left.value() == null || right.value() == null) {
             return Truth.UNKNOWN;
         }
 
-        // Get comparison value
-        String compareValue = extractLiteralValue(comparison.getRightExpression());
+        // Compare with the field on the left, so 20 < price behaves like price > 20
+        if (!left.isField() && right.isField()) {
+            return compare(right.value(), flip(operator), left.value());
+        }
+        return compare(left.value(), operator, right.value());
+    }
+
+    private Truth compare(JsonNode left, String operator, JsonNode right) {
+        if (right.isContainerNode()) {
+            return Truth.FALSE;
+        }
+        String compareValue = right.asText();
 
         return Truth.of(switch (operator) {
-            case "=" -> compareEquals(fieldValue, compareValue);
-            case "!=" -> !compareEquals(fieldValue, compareValue);
-            case ">" -> compareGreater(fieldValue, compareValue);
-            case "<" -> compareLess(fieldValue, compareValue);
-            case ">=" -> compareGreater(fieldValue, compareValue) || compareEquals(fieldValue, compareValue);
-            case "<=" -> compareLess(fieldValue, compareValue) || compareEquals(fieldValue, compareValue);
+            case "=" -> compareEquals(left, compareValue);
+            case "!=" -> !compareEquals(left, compareValue);
+            case ">" -> compareGreater(left, compareValue);
+            case "<" -> compareLess(left, compareValue);
+            case ">=" -> compareGreater(left, compareValue) || compareEquals(left, compareValue);
+            case "<=" -> compareLess(left, compareValue) || compareEquals(left, compareValue);
             default -> false;
         });
     }
-    
-    private String extractLiteralValue(Expression expr) {
-        if (expr instanceof StringValue) {
-            return ((StringValue) expr).getValue();
-        } else if (expr instanceof LongValue) {
-            return String.valueOf(((LongValue) expr).getValue());
-        } else if (expr instanceof DoubleValue) {
-            return String.valueOf(((DoubleValue) expr).getValue());
-        } else {
-            // Fallback to string representation
-            String value = expr.toString();
-            // Remove quotes if present
-            if (value.startsWith("'") && value.endsWith("'")) {
-                value = value.substring(1, value.length() - 1);
-            } else if (value.startsWith("\"") && value.endsWith("\"")) {
-                value = value.substring(1, value.length() - 1);
-            }
-            return value;
-        }
+
+    private static String flip(String operator) {
+        return switch (operator) {
+            case ">" -> "<";
+            case "<" -> ">";
+            case ">=" -> "<=";
+            case "<=" -> ">=";
+            default -> operator;
+        };
     }
-    
+
+    /**
+     * Resolve one side of a condition. The parser has already rejected anything that isn't
+     * a field or a literal. As in SQLite, a double-quoted name that isn't a field is read as text.
+     */
+    private Operand resolve(JsonNode row, Expression expr) {
+        if (expr instanceof Parenthesis) {
+            return resolve(row, ((Parenthesis) expr).getExpression());
+        }
+        if (expr instanceof NullValue) {
+            return new Operand(null, false);
+        }
+        if (expr instanceof StringValue) {
+            return new Operand(TextNode.valueOf(((StringValue) expr).getNotExcapedValue()), false);
+        }
+        if (expr instanceof LongValue) {
+            return new Operand(BigIntegerNode.valueOf(((LongValue) expr).getBigIntegerValue()), false);
+        }
+        if (expr instanceof DoubleValue) {
+            return new Operand(DoubleNode.valueOf(((DoubleValue) expr).getValue()), false);
+        }
+        if (expr instanceof SignedExpression) {
+            return new Operand(DecimalNode.valueOf(new BigDecimal(expr.toString().replace(" ", ""))), false);
+        }
+        if (expr instanceof Column) {
+            return resolveColumn(row, (Column) expr);
+        }
+        throw new UnsupportedExpressionException(
+            "Unsupported WHERE expression: " + expr + " (type: " + expr.getClass().getSimpleName() + ")"
+        );
+    }
+
+    private Operand resolveColumn(JsonNode row, Column column) {
+        String name = QueryParser.fieldName(column);
+        if (column.getTable() == null) {
+            if (name.equalsIgnoreCase("true")) {
+                return new Operand(BooleanNode.TRUE, false);
+            }
+            if (name.equalsIgnoreCase("false")) {
+                return new Operand(BooleanNode.FALSE, false);
+            }
+        }
+        JsonNode value = fieldAccessor.getFieldValue(row, name);
+        if (value == null && column.toString().startsWith("\"")) {
+            return new Operand(TextNode.valueOf(name), false);
+        }
+        return new Operand(value == null || value.isNull() ? null : value, true);
+    }
+
     private boolean compareEquals(JsonNode fieldValue, String compareValue) {
         // Handle null values - in SQL, NULL = anything is always false
         if (fieldValue.isNull()) {
@@ -264,26 +322,28 @@ public class WhereEvaluator {
      */
     private Truth evaluateLike(JsonNode row, LikeExpression likeExpr, boolean caseInsensitive) {
         // Get field value
-        String fieldPath = likeExpr.getLeftExpression().toString();
+        String fieldPath = QueryParser.fieldName(likeExpr.getLeftExpression());
         JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
-        
+        JsonNode patternValue = resolve(row, likeExpr.getRightExpression()).value();
+
         // LIKE only applies to strings, so anything else is UNKNOWN. That excludes it from
         // NOT LIKE as well as LIKE, and from NOT (x LIKE ...).
-        if (fieldValue == null || !fieldValue.isTextual() || likeExpr.getRightExpression() instanceof NullValue) {
+        if (fieldValue == null || !fieldValue.isTextual() || patternValue == null) {
             return Truth.UNKNOWN;
         }
 
         String fieldText = fieldValue.asText();
-        String pattern = extractLiteralValue(likeExpr.getRightExpression());
-        
+        String pattern = patternValue.asText();
+        Character escape = QueryParser.likeEscape(likeExpr);
+
         // Convert to lowercase for case-insensitive matching
         if (caseInsensitive) {
             fieldText = fieldText.toLowerCase();
             pattern = pattern.toLowerCase();
         }
-        
+
         // Convert SQL LIKE pattern to regex
-        String regexPattern = convertLikePatternToRegex(pattern);
+        String regexPattern = convertLikePatternToRegex(pattern, escape);
         
         // Evaluate pattern match using a cached compiled pattern (we already lowercased above
         // when case-insensitive, so no flags are needed here).
@@ -303,7 +363,7 @@ public class WhereEvaluator {
      */
     private Truth evaluateIsNull(JsonNode row, IsNullExpression isNullExpr) {
         // Get field value
-        String fieldPath = isNullExpr.getLeftExpression().toString();
+        String fieldPath = QueryParser.fieldName(isNullExpr.getLeftExpression());
         JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
         
         // Check if field is null (missing or explicitly null)
@@ -320,7 +380,7 @@ public class WhereEvaluator {
      */
     private Truth evaluateIn(JsonNode row, InExpression inExpr) {
         // Get field value
-        String fieldPath = inExpr.getLeftExpression().toString();
+        String fieldPath = QueryParser.fieldName(inExpr.getLeftExpression());
         JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
         
         // In SQL, NULL IN (...) and NULL NOT IN (...) are both UNKNOWN
@@ -339,12 +399,12 @@ public class WhereEvaluator {
             // ExpressionList extends List directly (getExpressions() is deprecated)
             boolean listHasNull = false;
             for (var expr : expressionList) {
-                if (expr instanceof NullValue) {
+                JsonNode listValue = resolve(row, (Expression) expr).value();
+                if (listValue == null) {
                     listHasNull = true;
                     continue;
                 }
-                String listValue = extractLiteralValue(expr);
-                if (compareEqualsForIn(fieldValue, listValue)) {
+                if (compareEqualsForIn(fieldValue, listValue.asText())) {
                     // Found a match
                     return Truth.of(!inExpr.isNot()); // IN returns true, NOT IN returns false
                 }
@@ -387,13 +447,20 @@ public class WhereEvaluator {
      * - % matches zero or more characters (converted to .*)
      * - _ matches exactly one character (converted to .)
      * - All other regex special characters are escaped
+     * - The ESCAPE character, if any, makes the next character literal
      */
-    private String convertLikePatternToRegex(String likePattern) {
+    private String convertLikePatternToRegex(String likePattern, Character escape) {
         StringBuilder regex = new StringBuilder();
-        
+
         for (int i = 0; i < likePattern.length(); i++) {
             char c = likePattern.charAt(i);
-            
+
+            if (escape != null && c == escape && i + 1 < likePattern.length()) {
+                i++;
+                regex.append(Pattern.quote(String.valueOf(likePattern.charAt(i))));
+                continue;
+            }
+
             switch (c) {
                 case '%':
                     // % matches zero or more characters
