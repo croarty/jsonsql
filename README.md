@@ -646,11 +646,12 @@ jsonsql --query "SELECT * FROM products WHERE category IN ('Electronics', 'Tools
 
 **Note on NULL behavior with IN:**
 
-- `NULL IN (...)` returns FALSE (excludes row)
-- `NULL NOT IN (...)` returns FALSE (excludes row)
+- `NULL IN (...)` is unknown (excludes row)
+- `NULL NOT IN (...)` is unknown (excludes row)
+- A `NULL` inside the list follows the same rule: `x NOT IN ('A', NULL)` never matches, because any value might equal the `NULL`
 - Use `OR category IS NULL` if you want to include null values
 
-**Note on NULL behavior with NOT:** JsonSQL uses two-valued logic. A comparison against a NULL/missing field is FALSE, so wrapping it in `NOT` makes it TRUE: `WHERE NOT price > 20` *includes* rows with no `price`, unlike standard SQL. Add `AND price IS NOT NULL` if that matters.
+**Note on NULL behavior with NOT:** JsonSQL follows SQL three-valued logic. A condition on a NULL or missing field is *unknown*, `NOT` leaves it unknown, and a row is returned only when the whole `WHERE` clause is true. So `WHERE NOT price > 20` leaves out rows with no `price`, and agrees with `WHERE price <= 20`. Add `OR price IS NULL` to include those rows.
 
 #### Queries with JOINs
 
@@ -828,7 +829,7 @@ WHERE status != 'cancelled'
 - Numeric equality (`=`, `!=`, `IN`) uses a tolerance of `0.0001`.
 - Boolean fields compare against `true`/`false` (the literal `'true'` also matches).
 - String equality is case-sensitive (use `ILIKE` for case-insensitive matching).
-- SQL `NULL` values never satisfy a comparison (but see the `NOT` caveat above).
+- SQL `NULL` values never satisfy a comparison, including inside `NOT`. Comparing with a literal `NULL` (`price = NULL`) never matches, so use `IS NULL`.
 
 **Unsupported WHERE expressions fail loudly:** WHERE constructs that are not implemented — such as `BETWEEN` and subqueries (`IN (SELECT ...)`, `EXISTS (...)`) — raise a clear `Unsupported ...expression` error instead of silently returning zero rows. The check is on the operator, not its operands: a supported operator with an unsupported operand (`UPPER(name) = 'X'`, `20 < price`, `price > stock`) is evaluated as a field lookup that finds nothing and matches no rows (see [Known Limitations](#known-limitations)).
 
@@ -1420,7 +1421,7 @@ Planned features for future releases, organized by priority:
 
 **SQL Compatibility:**
 
-- Full three-valued logic (TRUE/FALSE/UNKNOWN) for NULL handling (currently `NOT` over a NULL comparison evaluates to TRUE)
+- ✅ Full three-valued logic (TRUE/FALSE/UNKNOWN) for NULL handling - **IMPLEMENTED**
 - ✅ `<>` as a synonym for `!=` - **IMPLEMENTED**
 - ✅ Comment support in SQL (`--` and `/* */`) - **IMPLEMENTED**
 - Comparisons with the literal on the left, and field-to-field comparisons
