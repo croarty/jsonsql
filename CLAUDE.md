@@ -11,7 +11,7 @@ mvn package                               # builds target/jsonsql-<version>.jar
 java -jar target/jsonsql-1.6.0.jar --help
 ```
 
-`./mvnw` runs the same commands with the Maven version pinned in `.mvn/wrapper/`.
+`./mvnw` runs the same commands with the Maven version pinned in `.mvn/wrapper/`. CI runs `./mvnw -B -ntp clean verify` on JDK 21 and 25; the workflows are in `.github/workflows/`.
 
 The course in `jsonsql-course/` is generated. Edit `modules/`, `_base.html` or `_footer.html`, never `index.html`, then run `bash build.sh` from that directory.
 
