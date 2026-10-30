@@ -350,7 +350,7 @@ jsonsql --save-query daily_orders --query "SELECT orderId, status, total FROM or
 jsonsql --run-query daily_orders --output daily-$(date +%Y%m%d).json
 ```
 
-> Note: aggregation (`SUM`) and date functions (`TODAY()`) are not yet supported. Totals can be computed by piping to `jq`.
+> Note: date functions (`TODAY()`) are not yet supported, so put the date in the query or a parameter.
 
 ### 2. Data Quality Checks
 
@@ -372,7 +372,7 @@ jsonsql --save-query customer_completed_orders --query "SELECT c.name, o.orderId
 jsonsql --save-query top_order_lines --query "SELECT TOP 10 p.name, o.quantity, p.price FROM orders o JOIN products p ON o.productId = p.id ORDER BY p.price DESC"
 ```
 
-> Note: revenue/lifetime-value style rollups need aggregation (`SUM`, `GROUP BY`), which is not yet supported. Produce the detailed rows above and aggregate downstream (e.g. with `jq`).
+> For revenue rollups, group the rows: `SELECT p.name, SUM(o.quantity) AS units FROM orders o JOIN products p ON o.productId = p.id GROUP BY p.name`.
 
 ### 4. Development Shortcuts
 
@@ -564,15 +564,13 @@ jsonsql --save-query active_items --query "SELECT * FROM products WHERE inStock 
 jsonsql --save-query recent_orders --query "SELECT * FROM orders WHERE orderDate >= '2024-01-01' ORDER BY orderDate DESC"
 ```
 
-### Aggregations (not yet supported)
+### Aggregations
 
-Aggregation/grouping (`COUNT`, `AVG`, `SUM`, `GROUP BY`, `HAVING`) and date functions (`MONTH`, `DATE_SUB`, `NOW`) are on the roadmap but not implemented yet. Until then, save a query that returns the detailed rows and aggregate downstream, for example:
+Save a summary like any other query. Date functions (`MONTH`, `DATE_SUB`, `NOW`) are not implemented yet.
 
 ```bash
-# Save the rows...
-jsonsql --save-query category_rows --query "SELECT category, price FROM products ORDER BY category"
-# ...then summarize with jq
-jsonsql --run-query category_rows --data-dir example-data | jq 'group_by(.category) | map({category: .[0].category, count: length})'
+jsonsql --save-query category_summary --query "SELECT category, COUNT(*) AS products, AVG(price) AS average FROM products GROUP BY category ORDER BY products DESC"
+jsonsql --run-query category_summary --data-dir example-data
 ```
 
 ## Summary

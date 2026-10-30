@@ -5,11 +5,11 @@
 JsonSQL is a well-architected SQL-like query engine for JSON data. This document provides a thorough review of existing functionality and prioritized suggestions for new features.
 
 **Current Status:**
-- **Test Coverage**: 2303 tests across 69 test classes, all passing ✅
+- **Test Coverage**: 2507 tests across 70 test classes, all passing ✅
 - **Core Features**: Fully functional SQL-like query engine
 - **Recent Additions**: DISTINCT, ILIKE, CTEs, `UNION` / `UNION ALL`, CSV output, schema introspection (`--describe`), dry-run validation (`--dry-run`), declared indexes / file-level pruning (`--add-index`), materialized CTE views (`--materialize-view`)
 - **Architecture**: Clean separation of concerns, well-structured, maintainable
-- **Error handling**: unimplemented SQL (`GROUP BY`, `HAVING`, aggregates/functions in SELECT, `RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`) is rejected at parse time, as are arithmetic and functions in WHERE and ORDER BY — see [Part 2.0](#20-unsupported-syntax-handling-high-priority)
+- **Error handling**: unimplemented SQL (functions in SELECT, `RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`) is rejected at parse time, as are arithmetic and functions in WHERE and ORDER BY — see [Part 2.0](#20-unsupported-syntax-handling-high-priority)
 
 ---
 
@@ -31,7 +31,6 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 - **Limitations**:
   - No calculated fields (e.g., `SELECT price * 1.1 AS total`) — rejected with an error
   - No functions in SELECT (e.g., `SELECT UPPER(name)`) — rejected with an error
-  - No aggregation functions (COUNT, SUM, AVG, etc.) — rejected with an error
   - No `t.*` projection — rejected with an error (use `SELECT *`)
 
 #### FROM Clause
@@ -203,7 +202,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Strengths
 - Clean separation of concerns
 - Well-structured packages
-- Comprehensive test coverage (2303 tests, all passing)
+- Comprehensive test coverage (2507 tests, all passing)
 - Good error handling
 - Flexible field accessor pattern
 - Efficient JSONPath integration
@@ -257,12 +256,12 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 
 ### 2.0 Unsupported Syntax Handling (HIGH PRIORITY)
 
-**Current Status**: ✅ Mostly implemented. `QueryParser` rejects SQL that JSqlParser accepts but the engine does not implement, with a `QueryParseException` such as `GROUP BY is not supported`. It does this for the main query, CTE bodies, and UNION branches, so `--dry-run` catches it too. Covered by `UnsupportedSyntaxTest`.
+**Current Status**: ✅ Mostly implemented. `QueryParser` rejects SQL that JSqlParser accepts but the engine does not implement, with a `QueryParseException` such as `HAVING needs GROUP BY or an aggregate`. It does this for the main query, CTE bodies, and UNION branches, so `--dry-run` catches it too. Covered by `UnsupportedSyntaxTest`.
 
 | Construct | Behavior |
 |---|---|
-| `GROUP BY`, `HAVING` | Rejected |
-| Aggregates, functions, arithmetic, literals, `CASE`, `t.*` in SELECT | Rejected |
+| `GROUP BY`, `HAVING`, aggregates | ✅ Implemented |
+| Functions, arithmetic, literals, `CASE`, `t.*` in SELECT | Rejected |
 | `OFFSET` / `LIMIT m, n` | ✅ Implemented |
 | `FETCH` | Rejected |
 | `RIGHT`, `FULL`, `CROSS` (non-`UNNEST`), `NATURAL` joins | Rejected |
@@ -277,41 +276,9 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 **Implementation Complexity**: Low
 **Business Value**: Very High (prevents silently wrong answers)
 
-### 2.1 Aggregation & Grouping (HIGH PRIORITY)
+### 2.1 Aggregation & Grouping
 
-**Current Status**: Not Implemented
-
-**Missing Features**:
-- `GROUP BY` clause
-- Aggregation functions:
-  - `COUNT(*)` / `COUNT(column)`
-  - `SUM(column)`
-  - `AVG(column)`
-  - `MIN(column)`
-  - `MAX(column)`
-- `HAVING` clause (filtering grouped results)
-
-**Use Cases**:
-```sql
--- Count products by category
-SELECT category, COUNT(*) as count 
-FROM products 
-GROUP BY category
-
--- Average price by category
-SELECT category, AVG(price) as avg_price 
-FROM products 
-GROUP BY category
-
--- Categories with more than 5 products
-SELECT category, COUNT(*) as count 
-FROM products 
-GROUP BY category 
-HAVING COUNT(*) > 5
-```
-
-**Implementation Complexity**: Medium-High
-**Business Value**: Very High (essential for analytics)
+**Current Status**: ✅ Implemented: `GROUP BY`, `HAVING`, `COUNT`, `SUM`, `AVG`, `MIN`, `MAX` and `DISTINCT` inside them. Checked against SQLite by `SqliteComparisonTest`.
 
 ### 2.2 Calculated Fields & Functions (HIGH PRIORITY)
 
@@ -527,11 +494,6 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
 ### Phase 1: Core SQL Features (High Impact)
 0. **Reject silently-ignored constructs** ✅ DONE (see 2.0)
 
-1. **Aggregation & GROUP BY** ⭐⭐⭐
-   - Essential for analytics
-   - High user demand
-   - Medium-high complexity
-
 2. **Parameterized Queries** ✅ DONE
    - Implemented via `${var}`/`${var:default}` + `--param`
 
@@ -582,9 +544,8 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 (Parameterized queries — previously listed here — are now implemented.)
 
 ### 5.2 Medium-Term Goals
-1. **Aggregation functions** - Core SQL feature
-2. **String/Numeric functions** - Common use cases
-3. **TSV/Table output** - Better usability (CSV already shipped)
+1. **String/Numeric functions** - Common use cases
+2. **TSV/Table output** - Better usability (CSV already shipped)
 
 ### 5.3 Long-Term Goals
 1. **Subqueries** - Complex but powerful
@@ -603,7 +564,7 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 - DISTINCT implementation uses canonical JSON string representation
 
 ### 6.2 Testing Strategy
-- Maintain high test coverage (currently 2303 tests, all passing)
+- Maintain high test coverage (currently 2507 tests, all passing)
 - Add integration tests for new features
 - Test edge cases (nulls, empty arrays, etc.)
 - Test files organized by feature:
@@ -648,16 +609,14 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 ✅ Clean, maintainable architecture
 
 ### Key Gaps
-❌ No aggregation (GROUP BY, COUNT, SUM, etc.)
 ❌ No calculated fields or functions
 ❌ Limited output formats (JSON and CSV only; no TSV/table/XML)
 ❌ No subqueries or derived tables
 ❌ No RIGHT JOIN or FULL OUTER JOIN
 
 ### Recommended Next Steps
-1. **Short-term**: Aggregation & GROUP BY (high value)
-2. **Medium-term**: Calculated fields & functions
-3. **Long-term**: Advanced features (subqueries, derived tables)
+1. **Medium-term**: Calculated fields & functions
+2. **Long-term**: Advanced features (subqueries, derived tables)
 
 ---
 
@@ -665,6 +624,6 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 
 JsonSQL is a solid foundation with excellent core functionality. Recent additions of DISTINCT, ILIKE, CTEs, UNION, indexes, and materialized views demonstrate the system's extensibility. The suggested enhancements would transform it from a good tool into a comprehensive SQL-like query engine for JSON data. The prioritized roadmap focuses on high-impact features that provide the most value to users.
 
-**Current Test Status**: ✅ 2303 tests passing
+**Current Test Status**: ✅ 2507 tests passing
 **Code Quality**: ✅ High - Clean architecture, good separation of concerns
 **Documentation**: ✅ Comprehensive - README, examples, saved queries reference

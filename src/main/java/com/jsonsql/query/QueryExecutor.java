@@ -233,14 +233,20 @@ public class QueryExecutor implements FieldAccessor {
             filteredData = applyWhere(joinedData, parsedQuery.getWhereExpression());
         }
 
-        // Apply ORDER BY before projection so sort keys not present in the SELECT list
-        // (e.g. ORDER BY id while selecting only name) remain available.
-        if (parsedQuery.hasOrderBy()) {
-            filteredData = applyOrderBy(filteredData, parsedQuery.getOrderBy());
-        }
+        // Group, then apply HAVING, ORDER BY and projection to the groups
+        List<JsonNode> projectedData;
+        if (parsedQuery.isAggregate()) {
+            projectedData = aggregate(filteredData, parsedQuery);
+        } else {
+            // Apply ORDER BY before projection so sort keys not present in the SELECT list
+            // (e.g. ORDER BY id while selecting only name) remain available.
+            if (parsedQuery.hasOrderBy()) {
+                filteredData = applyOrderBy(filteredData, parsedQuery.getOrderBy(), this);
+            }
 
-        // Project SELECT columns
-        List<JsonNode> projectedData = projectColumns(filteredData, parsedQuery.getSelectColumns());
+            // Project SELECT columns
+            projectedData = projectColumns(filteredData, parsedQuery.getSelectColumns());
+        }
 
         // Apply DISTINCT after projection (dedupe the projected rows, preserving sorted order)
         if (parsedQuery.isDistinct()) {
@@ -291,7 +297,7 @@ public class QueryExecutor implements FieldAccessor {
         
         // Apply ORDER BY if specified (before LIMIT)
         if (unionQuery.hasOrderBy()) {
-            finalResults = applyOrderBy(finalResults, unionOrderBy(unionQuery, outputNames));
+            finalResults = applyOrderBy(finalResults, unionOrderBy(unionQuery, outputNames), this);
         }
 
         // Apply OFFSET and LIMIT/TOP last
@@ -304,6 +310,32 @@ public class QueryExecutor implements FieldAccessor {
         return objectMapper.writeValueAsString(resultArray);
     }
     
+    private List<JsonNode> aggregate(List<JsonNode> rows, ParsedQuery query) {
+        // A grouped row holds each value directly under its key, which can contain dots
+        FieldAccessor groupFields = (row, name) -> row.get(name);
+
+        List<JsonNode> groups = new Aggregator().group(rows, query, this);
+        if (query.getHaving() != null) {
+            WhereEvaluator evaluator = new WhereEvaluator(groupFields);
+            groups = groups.stream().filter(group -> evaluator.evaluate(group, query.getHaving())).toList();
+        }
+        if (query.hasOrderBy()) {
+            groups = applyOrderBy(groups, query.getOrderBy(), groupFields);
+        }
+
+        List<String> names = outputNames(query);
+        List<ColumnInfo> columns = query.getSelectColumns();
+        List<JsonNode> projected = new ArrayList<>();
+        for (JsonNode group : groups) {
+            ObjectNode row = objectMapper.createObjectNode();
+            for (int i = 0; i < columns.size(); i++) {
+                row.set(names.get(i), group.get(columns.get(i).getExpression()));
+            }
+            projected.add(row);
+        }
+        return projected;
+    }
+
     private List<JsonNode> applyOffsetAndLimit(List<JsonNode> rows, Long offset, Long limit) {
         int from = offset == null ? 0 : (int) Math.min(offset, rows.size());
         int to = limit == null ? rows.size() : (int) Math.min(from + limit, rows.size());
@@ -318,9 +350,22 @@ public class QueryExecutor implements FieldAccessor {
         if (columns.size() == 1 && "*".equals(columns.get(0).getExpression())) {
             return null;
         }
+        if (query.isAggregate()) {
+            return groupedOutputNames(columns);
+        }
         List<String> names = new ArrayList<>();
         projectColumns(List.of(objectMapper.createObjectNode()), columns).get(0).fieldNames().forEachRemaining(names::add);
         return names;
+    }
+
+    /** As for plain queries, two columns with the same name fall back to their full expression. */
+    private List<String> groupedOutputNames(List<ColumnInfo> columns) {
+        Map<String, Integer> counts = new HashMap<>();
+        columns.forEach(column -> counts.merge(column.getOutputName(), 1, Integer::sum));
+        return columns.stream()
+            .map(column -> counts.get(column.getOutputName()) > 1 && !column.hasAlias()
+                ? column.getExpression() : column.getOutputName())
+            .toList();
     }
 
     /**
@@ -487,6 +532,14 @@ public class QueryExecutor implements FieldAccessor {
                 keyBuilder.append(",");
             }
             keyBuilder.append(":");
+        }
+
+        // Add GROUP BY and HAVING (grouping affects the cached result)
+        if (!cteQuery.getGroupBy().isEmpty()) {
+            keyBuilder.append("GROUPBY:").append(String.join(",", cteQuery.getGroupBy())).append(":");
+        }
+        if (cteQuery.getHaving() != null) {
+            keyBuilder.append("HAVING:").append(cteQuery.getHaving()).append(":");
         }
 
         // Add ORDER BY (ordering affects the cached result, especially combined with LIMIT)
@@ -926,13 +979,13 @@ public class QueryExecutor implements FieldAccessor {
     /**
      * Apply ORDER BY sorting.
      */
-    private List<JsonNode> applyOrderBy(List<JsonNode> data, List<OrderByInfo> orderByList) {
+    private List<JsonNode> applyOrderBy(List<JsonNode> data, List<OrderByInfo> orderByList, FieldAccessor fields) {
         List<JsonNode> sortedData = new ArrayList<>(data);
         
         sortedData.sort((row1, row2) -> {
             for (OrderByInfo orderBy : orderByList) {
-                JsonNode value1 = getFieldValueFlexible(row1, orderBy.getColumn());
-                JsonNode value2 = getFieldValueFlexible(row2, orderBy.getColumn());
+                JsonNode value1 = fields.getFieldValue(row1, orderBy.getColumn());
+                JsonNode value2 = fields.getFieldValue(row2, orderBy.getColumn());
                 
                 int comparison = compareNodes(value1, value2);
                 

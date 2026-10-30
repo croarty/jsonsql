@@ -64,9 +64,8 @@ under `.jsonsql-views/<name>.json` inside the data directory.
   materialized view or a sibling CTE from the same `WITH` list — those fail with
   "No mapping or materialized view found".
 - The body follows the normal CTE rules: a single plain `SELECT` (JOINs, `UNNEST`,
-  `WHERE`, `ORDER BY`, `DISTINCT`, `TOP`/`LIMIT` are fine; no `UNION`). Unsupported SQL
-  such as `GROUP BY` or `COUNT(*)` is rejected, so a view cannot be used to pre-aggregate
-  data yet.
+  `WHERE`, `GROUP BY`, aggregates, `ORDER BY`, `DISTINCT`, `TOP`/`LIMIT` are fine; no `UNION`).
+  A view can therefore hold pre-computed totals for fast repeated use.
 - With `--enable-cache`, a cached CTE that reads a view is invalidated when the view is
   rebuilt.
 - Declared indexes on the source tables are used while building the view.

@@ -2,7 +2,7 @@
 
 This document demonstrates advanced JsonSQL capabilities using complex customer, order, and product data with nested structures and relationships.
 
-Every query below uses only features JsonSQL actually supports today (nested-field access, `UNNEST`, JOINs, `WHERE`, `ORDER BY`, `DISTINCT`, `TOP`/`LIMIT`) and has been run against the shipped `example-data/` fixtures. For analytics features that are **not** yet implemented (aggregation, `GROUP BY`, `CASE`, SQL functions), see [Planned / Not Yet Supported](#planned--not-yet-supported) at the end.
+Every query below uses only features JsonSQL actually supports today (nested-field access, `UNNEST`, JOINs, `WHERE`, `ORDER BY`, `DISTINCT`, `TOP`/`LIMIT`, plus `GROUP BY` and aggregates, covered in the README) and has been run against the shipped `example-data/` fixtures. For analytics features that are **not** yet implemented (`CASE`, SQL functions), see [Planned / Not Yet Supported](#planned--not-yet-supported) at the end.
 
 ## Data Setup
 
@@ -230,8 +230,6 @@ The following analytics features are **not implemented yet**. They are listed he
 
 | Feature | Current behavior |
 |---|---|
-| `GROUP BY`, `HAVING` | Error: `GROUP BY is not supported` |
-| Aggregates: `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `COUNT(DISTINCT ...)` | Error: `Function or aggregate in SELECT list: ... is not supported` |
 | `CASE WHEN ... THEN ... END`, arithmetic, string concatenation in SELECT | Error: `Expression in SELECT list: ... is not supported` |
 | SQL functions in SELECT: string (`UPPER`, `LOWER`, `CONCAT`, ...), date (`DATE_FORMAT`, `MONTH`, `NOW`, ...), JSON (`JSON_CONTAINS`, `JSON_LENGTH`, ...) | Error: `Function or aggregate in SELECT list: ... is not supported` |
 | Functions in WHERE (`WHERE UPPER(name) = 'X'`) | **Not rejected** — the predicate matches no rows |
@@ -243,4 +241,4 @@ The following analytics features are **not implemented yet**. They are listed he
 
 `UNION` / `UNION ALL` **are** supported — see [UNION Queries](README.md#union-queries).
 
-For the authoritative list of supported syntax, see the [SQL Syntax Support](README.md#sql-syntax-support) and [Known Limitations](README.md#known-limitations) sections of the README. Until aggregation lands, you can pipe JsonSQL output to a tool like `jq` for counts and sums, e.g. `jsonsql --query "SELECT category FROM products" | jq 'length'`.
+For the authoritative list of supported syntax, see the [SQL Syntax Support](README.md#sql-syntax-support) and [Known Limitations](README.md#known-limitations) sections of the README.

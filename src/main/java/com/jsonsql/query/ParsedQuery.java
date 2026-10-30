@@ -3,7 +3,10 @@ package com.jsonsql.query;
 import net.sf.jsqlparser.expression.Expression;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Represents a parsed SQL query with all its components.
@@ -18,6 +21,9 @@ public class ParsedQuery {
     private Long limit;
     private Long top;
     private Long offset;
+    private List<String> groupBy = new ArrayList<>();
+    private Expression having;
+    private final Map<String, AggregateCall> aggregates = new LinkedHashMap<>();
     private boolean distinct = false;
     private java.util.Map<String, ParsedQuery> commonTableExpressions = new java.util.LinkedHashMap<>();
 
@@ -74,6 +80,39 @@ public class ParsedQuery {
 
     public void setTop(Long top) {
         this.top = top;
+    }
+
+    public List<String> getGroupBy() {
+        return groupBy;
+    }
+
+    public void setGroupBy(List<String> groupBy) {
+        this.groupBy = groupBy;
+    }
+
+    public Expression getHaving() {
+        return having;
+    }
+
+    public void setHaving(Expression having) {
+        this.having = having;
+    }
+
+    Collection<AggregateCall> getAggregates() {
+        return aggregates.values();
+    }
+
+    void addAggregate(AggregateCall call) {
+        aggregates.put(call.key(), call);
+    }
+
+    boolean hasAggregate(String key) {
+        return aggregates.containsKey(key);
+    }
+
+    /** True if the query produces one row per group rather than one per source row. */
+    public boolean isAggregate() {
+        return !groupBy.isEmpty() || !aggregates.isEmpty();
     }
 
     public Long getOffset() {
