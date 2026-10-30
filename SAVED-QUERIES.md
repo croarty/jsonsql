@@ -117,7 +117,9 @@ jsonsql --save-query premium_customer_orders --query "SELECT c.name, o.orderId, 
 
 ### Parameterized Queries
 
-Use `${name}` (required) or `${name:default}` placeholders and supply values with `--param name=value` at run time. In bash/zsh, escape the `$` inside double quotes (`\${name}`) — otherwise the shell substitutes the variable before JsonSQL sees it:
+Use `${name}` (required) or `${name:default}` placeholders and supply values with `--param name=value` at run time. In bash/zsh, escape the ` inside double quotes (`\${name}`) — otherwise the shell substitutes the variable before JsonSQL sees it:
+
+Values from `--param` can't change the query. Inside single quotes (`'${name}'`), apostrophes are escaped, so `--param name=O'Brien` works. Outside quotes, a value must be a number, a boolean, a single-quoted string or a comma-separated list of those, so use quotes in the query for plain text. Default values are part of the query and are used as written.
 
 ```bash
 jsonsql --save-query products_above --query "SELECT name, price FROM products WHERE price > \${min_price:50} ORDER BY price DESC"
