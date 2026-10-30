@@ -244,10 +244,10 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Dependencies
 - **Java 21**: Modern Java features
 - **JSqlParser 4.9**: SQL parsing (pinned to 4.x; 5.x changes the AST API)
-- **Jackson 2.18.12**: JSON processing
-- **JSONPath 2.9.0**: JSONPath expression evaluation, using Jackson to parse data files (`JsonPathConfig`)
-- **Picocli 4.7.6**: Command-line interface
-- **JUnit 5.11.4**: Testing framework
+- **Jackson 2.22.4**: JSON processing
+- **JSONPath 3.0.0**: JSONPath expression evaluation, using Jackson to parse data files (`JsonPathConfig`)
+- **Picocli 4.7.7**: Command-line interface
+- **JUnit 6.1.3**: Testing framework
 
 #### Build & Security Tooling
 - **GitHub Actions CI** (`.github/workflows/ci.yml`): builds and tests every push/PR on JDK 21 and 25

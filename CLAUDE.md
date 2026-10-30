@@ -40,7 +40,7 @@ The course in `jsonsql-course/` is generated. Edit `modules/`, `_base.html` or `
 Implementing, fixing or changing behaviour isn't finished until all three are done. Don't treat tests or docs as follow-ups, and don't wait to be asked. Questions with no code change need neither.
 
 1. **Code:** a minimal, focused diff.
-2. **Tests:** cover the happy path, edge cases and error paths, in JUnit 5 under `src/test/java/`, matching the existing style.
+2. **Tests:** cover the happy path, edge cases and error paths, in JUnit under `src/test/java/`, matching the existing style.
    - Pure logic: unit tests on the class (e.g. `CsvFormatterTest`)
    - CLI wiring: `JsonSqlCliTest`
    - Query behaviour: the `QueryExecutor`, parser or evaluator tests
