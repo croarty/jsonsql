@@ -858,7 +858,7 @@ LEFT JOIN customers c ON o.customerId = c.id
 - `INNER JOIN` and `LEFT OUTER JOIN` are accepted as synonyms for `JOIN` and `LEFT JOIN`.
 - `RIGHT JOIN`, `FULL [OUTER] JOIN`, `CROSS JOIN`, and `NATURAL JOIN` are rejected (`RIGHT JOIN is not supported`, ...). Comma joins between tables (`FROM a, b`) and `JOIN ... USING (...)` are rejected with `JOIN requires ON condition`. The comma and `CROSS JOIN` forms are only valid with `UNNEST(...)`.
 - Self-joins work as long as each side has its own alias (`FROM products a JOIN products b ON a.id = b.id`).
-- Joins are nested-loop (every left row is compared with every right row), so cost grows with the product of the two table sizes.
+- Joins use a hash lookup on the joined table, so cost grows with the size of the tables, not their product.
 
 ### DISTINCT Clause
 
@@ -1376,7 +1376,7 @@ Planned features for future releases, organized by priority:
 
 - `RIGHT JOIN` and `FULL OUTER JOIN` (currently rejected with an error)
 - Compound (`AND`) and non-equality `ON` conditions
-- Hash joins instead of nested-loop joins
+- ✅ Hash joins instead of nested-loop joins - **IMPLEMENTED**
 
 **String & Data Functions:**
 

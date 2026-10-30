@@ -835,34 +835,31 @@
       <!-- SCREEN 5 -->
       <section class="screen animate-in">
         <h2 class="screen-heading">JOIN: matching socks from two baskets</h2>
-        <p>Emptying a laundry basket, you pick up one sock and compare it against every sock in the other basket. That is exactly how the join works: a
-          <span class="term" data-definition="A loop repeats the same block of code once for each item in a list. A nested loop is a loop inside another loop, so the inner one runs completely for every single step of the outer one.">nested loop</span>.</p>
+        <p>Emptying a laundry basket, you could pick up one sock and compare it against every sock in the other basket. JsonSQL's first join worked that way, using a
+          <span class="term" data-definition="A loop repeats the same block of code once for each item in a list. A nested loop is a loop inside another loop, so the inner one runs completely for every single step of the outer one.">nested loop</span>. Now it sorts one basket into labelled piles first, so each sock goes straight to its pair.</p>
 
         <div class="translation-block animate-in">
           <div class="translation-code">
             <span class="translation-label">QueryExecutor.java</span>
-            <pre><code><span class="code-line">        <span class="code-keyword">for</span> (JsonNode leftRow : leftData) {</span><span class="code-line">            <span class="code-keyword">boolean</span> matchFound = <span class="code-keyword">false</span>;</span><span class="code-line"> </span><span class="code-line">            <span class="code-keyword">for</span> (JsonNode rightRow : rightData) {</span><span class="code-line">                <span class="code-keyword">if</span> (<span class="code-function">matchesJoinCondition</span>(leftRow, rightRow, condition)) {</span><span class="code-line">                    <span class="code-comment">// Merge left and right rows</span></span><span class="code-line">                    ObjectNode mergedRow = objectMapper.<span class="code-function">createObjectNode</span>();</span><span class="code-line">                    mergedRow.<span class="code-function">setAll</span>((ObjectNode) leftRow);</span><span class="code-line">                    mergedRow.<span class="code-function">setAll</span>((ObjectNode) rightRow);</span><span class="code-line">                    result.<span class="code-function">add</span>(mergedRow);</span><span class="code-line">                    matchFound = <span class="code-keyword">true</span>;</span><span class="code-line">                }</span><span class="code-line">            }</span><span class="code-line"> </span><span class="code-line">            <span class="code-comment">// For LEFT JOIN, include left row even if no match found</span></span><span class="code-line">            <span class="code-keyword">if</span> (joinInfo.<span class="code-function">isLeftJoin</span>() &amp;&amp; !matchFound) {</span><span class="code-line">                result.<span class="code-function">add</span>(leftRow);</span><span class="code-line">            }</span><span class="code-line">        }</span></code></pre>
+            <pre><code><span class="code-line">        JoinIndex rightIndex = <span class="code-keyword">new</span> JoinIndex(rightData, row -&gt; getFieldValue(row, condition.rightField()));</span><span class="code-line"> </span><span class="code-line">        <span class="code-keyword">for</span> (JsonNode leftRow : leftData) {</span><span class="code-line">            List&lt;JsonNode&gt; matches = rightIndex.matches(getFieldValue(leftRow, condition.leftField()));</span><span class="code-line"> </span><span class="code-line">            <span class="code-keyword">for</span> (JsonNode rightRow : matches) {</span><span class="code-line">                ObjectNode mergedRow = objectMapper.createObjectNode();</span><span class="code-line">                mergedRow.setAll((ObjectNode) leftRow);</span><span class="code-line">                mergedRow.setAll((ObjectNode) rightRow);</span><span class="code-line">                result.add(mergedRow);</span><span class="code-line">            }</span><span class="code-line"> </span><span class="code-line">            <span class="code-keyword">if</span> (joinInfo.isLeftJoin() &amp;&amp; matches.isEmpty()) {</span><span class="code-line">                result.add(leftRow);</span><span class="code-line">            }</span><span class="code-line">        }</span></code></pre>
           </div>
           <div class="translation-english">
             <span class="translation-label">PLAIN ENGLISH</span>
             <div class="translation-lines">
+              <p class="tl">Sort every product into labelled piles by its id, once.</p>
+              <p class="tl">&nbsp;</p>
               <p class="tl">Pick up each order, one at a time.</p>
-              <p class="tl">So far, no partner found for it.</p>
+              <p class="tl">Go straight to the pile for its product id.</p>
               <p class="tl">&nbsp;</p>
-              <p class="tl">Compare it against <em>every</em> product.</p>
-              <p class="tl">Does this pair satisfy <code>o.productId = p.id</code>?</p>
-              <p class="tl">&nbsp;</p>
-              <p class="tl">Yes: make a combined row containing...</p>
+              <p class="tl">For each product in that pile...</p>
+              <p class="tl">make a combined row containing...</p>
               <p class="tl">...the order's envelope <b>o</b>...</p>
               <p class="tl">...and the product's envelope <b>p</b>,</p>
               <p class="tl">and keep it.</p>
-              <p class="tl">Remember this order found at least one match.</p>
               <p class="tl">&nbsp;</p>
               <p class="tl">&nbsp;</p>
-              <p class="tl">&nbsp;</p>
-              <p class="tl">&nbsp;</p>
-              <p class="tl">For a LEFT JOIN, an order with no matching product still gets kept, just without product details.</p>
-              <p class="tl">&nbsp;</p>
+              <p class="tl">For a LEFT JOIN, an order with no matching product...</p>
+              <p class="tl">...still gets kept, just without product details.</p>
               <p class="tl">&nbsp;</p>
               <p class="tl">&nbsp;</p>
             </div>
@@ -872,8 +869,8 @@
         <div class="callout callout-accent animate-in">
           <div class="callout-icon">💡</div>
           <div class="callout-content">
-            <strong class="callout-title">Simple code, multiplying cost</strong>
-            <p>1,000 orders × 1,000 products = 1,000,000 comparisons. 10,000 × 10,000 = 100 million. This "compare everything with everything" approach is easy to read and always correct, but slows down fast as data grows. Real databases use a <em>hash join</em>: build a lookup table of products by id once, then each order finds its match instantly.</p>
+            <strong class="callout-title">Why the piles matter</strong>
+            <p>Comparing everything with everything is easy to read, but 10,000 orders × 10,000 products is 100 million comparisons. Building the piles once turns that into about 20,000 quick steps. Real databases call this a <em>hash join</em>. In JsonSQL it cut a join of 20,000 rows on each side from 51 seconds to under a second, with identical results.</p>
           </div>
         </div>
       </section>
@@ -971,18 +968,18 @@
 
           <div class="quiz-question-block"
                data-correct="b"
-               data-explanation-right="The join compares every left row against every right row. Asking for a lookup table (a hash map keyed by the join column) turns 100 million comparisons into roughly 20,000 quick lookups, without changing results."
+               data-explanation-right="A nested loop compares every left row against every right row. Asking for a lookup table (a hash map keyed by the join column) turns 100 million comparisons into roughly 20,000 quick lookups, without changing results. This is what JsonSQL's own join does."
                data-explanation-wrong="Caching avoids re-reading files, and indexes skip whole files, but neither changes how the join itself compares rows. The bottleneck is the nested loop: every order checked against every product. The fix is a lookup table keyed by the join column.">
             <div class="scenario-block">
               <div class="scenario-context">
                 <span class="scenario-label">Scenario</span>
-                <p>A join between 10,000 orders and 10,000 products takes far longer than loading either file. The files themselves are small.</p>
+                <p>Another tool's join, written as a nested loop, takes far longer than loading either file when joining 10,000 orders and 10,000 products. The files themselves are small.</p>
               </div>
             </div>
             <h3 class="quiz-question">What is the best thing to ask AI for?</h3>
             <div class="quiz-options">
               <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>"Turn on --enable-cache by default"</span></button>
-              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>"Change performJoin to build a hash map of the right-hand rows by join key, instead of a nested loop"</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>"Change the join to build a hash map of the right-hand rows by join key, instead of a nested loop"</span></button>
               <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>"Move the JOIN station after LIMIT so there are fewer rows to join"</span></button>
             </div>
             <div class="quiz-feedback"></div>
@@ -1546,7 +1543,7 @@
       <!-- SCREEN 6 -->
       <section class="screen animate-in">
         <h2 class="screen-heading">The safety net: tests and docs, every time</h2>
-        <p>This repository contains instructions for Claude in <code>CLAUDE.md</code>. They say that a change is not done until it has thorough tests <em>and</em> updated documentation, and a hook runs the tests automatically. That is why there are 67 test files guarding the behaviour you've learned about.</p>
+        <p>This repository contains instructions for Claude in <code>CLAUDE.md</code>. They say that a change is not done until it has thorough tests <em>and</em> updated documentation, and a hook runs the tests automatically. That is why there are 68 test files guarding the behaviour you've learned about.</p>
 
         <div class="file-tree animate-in">
           <div class="ft-folder open">
@@ -1579,11 +1576,11 @@
         <div class="icon-rows">
           <div class="icon-row">
             <div class="icon-circle" style="background: var(--color-error-light)">😕</div>
-            <div><strong>"Make joins faster"</strong><p>Vague. The AI might add caching, which would not help.</p></div>
+            <div><strong>"Make big files faster"</strong><p>Vague. The AI might add caching, which would not help.</p></div>
           </div>
           <div class="icon-row">
             <div class="icon-circle" style="background: var(--color-success-light)">🎯</div>
-            <div><strong>"Replace the nested loop in performJoin with a hash join on the right-hand rows. Keep NULL keys non-matching and number/string coercion. Add tests in JoinConditionTest."</strong><p>Names the place, the technique, the rules to preserve, and where the tests go.</p></div>
+            <div><strong>"Make DataFileReader stream large files instead of loading them whole. Keep the errors that name the file and the line. Add tests in DataFileReaderTest."</strong><p>Names the place, the technique, the rules to preserve, and where the tests go.</p></div>
           </div>
           <div class="icon-row">
             <div class="icon-circle" style="background: var(--color-success-light)">🎯</div>
