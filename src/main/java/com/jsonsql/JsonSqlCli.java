@@ -195,7 +195,7 @@ public class JsonSqlCli implements Callable<Integer> {
                 return 1;
             }
             CacheManager cacheManager = new CacheManager(dataDirectory);
-            int clearedCount = cacheManager.clearAllCaches(mappingManager, dataDirectory);
+            int clearedCount = cacheManager.clearAllCaches();
             System.out.println("Cache cleared: " + clearedCount + " file(s) removed from " + dataDirectory.getAbsolutePath());
             if (clearedCount == 0) {
                 System.out.println("Note: No cache files found. Make sure --data-dir points to the correct directory.");
@@ -520,9 +520,11 @@ public class JsonSqlCli implements Callable<Integer> {
             String field = dropIndex[1];
             boolean removed = indexManager.dropIndex(table, field);
             indexStore.delete(table, field);
-            System.out.println(removed
-                ? "Index dropped: " + table + "." + field
-                : "No such index: " + table + "." + field);
+            if (!removed) {
+                System.err.println("No such index: " + table + "." + field);
+                return 1;
+            }
+            System.out.println("Index dropped: " + table + "." + field);
             return 0;
         }
 
@@ -720,9 +722,11 @@ public class JsonSqlCli implements Callable<Integer> {
                     new IndexStore(dataDirectory).delete(idx.getTable(), idx.getField());
                 }
             }
-            System.out.println(removed
-                ? "Materialized view dropped: " + dropMaterializedViewName
-                : "No such materialized view: " + dropMaterializedViewName);
+            if (!removed) {
+                System.err.println("No such materialized view: " + dropMaterializedViewName);
+                return 1;
+            }
+            System.out.println("Materialized view dropped: " + dropMaterializedViewName);
             return 0;
         }
 
@@ -732,8 +736,7 @@ public class JsonSqlCli implements Callable<Integer> {
         }
 
         if (showViewName != null) {
-            showMaterializedView(showViewName, viewManager, mappingManager, indexManager);
-            return 0;
+            return showMaterializedView(showViewName, viewManager, mappingManager, indexManager);
         }
 
         if (rebuildViewName != null) {
@@ -801,12 +804,12 @@ public class JsonSqlCli implements Callable<Integer> {
         System.out.println("Total: " + defs.size() + " materialized view(s)");
     }
 
-    private void showMaterializedView(String name, MaterializedViewManager viewManager,
+    private int showMaterializedView(String name, MaterializedViewManager viewManager,
                                       MappingManager mappingManager, IndexManager indexManager) {
         MaterializedViewDefinition def = viewManager.getView(name);
         if (def == null) {
             System.err.println("No materialized view: " + name);
-            return;
+            return 1;
         }
         SourceFingerprint.warnIfDataDirectoryMismatch(def, dataDirectory);
         String status = SourceFingerprint.isFresh(def, mappingManager, dataDirectory) ? "FRESH" : "STALE";
@@ -824,6 +827,7 @@ public class JsonSqlCli implements Callable<Integer> {
                 }
             }
         }
+        return 0;
     }
 
     /**

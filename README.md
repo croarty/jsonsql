@@ -1205,6 +1205,7 @@ How it works:
 - Each summary records, per file, the distinct values (up to a cardinality cap), `min`/`max`, value type, and a freshness fingerprint (last-modified time + size).
 - Pruning is **correctness-preserving**: a file is skipped only when a fresh summary proves no row can satisfy a mandatory `AND` predicate (`=`, `IN`, or a range `>`,`>=`,`<`,`<=`). Anything uncertain (no index, an `OR`, a stale/missing summary, mixed types, a changed mapping) falls back to a full scan, so results are always identical to running without an index.
 - Indexes are used automatically when present, for the **FROM table** of each `SELECT` (main query, CTE bodies, UNION branches) but not for JOINed tables; pass `--no-index` to force a full scan.
+- Index and cache file names changed in this version, so existing cache entries are ignored and existing indexes stop pruning until you run `--rebuild-indexes`. Results stay correct either way.
 - Indexes are not rebuilt automatically when data changes — modified files simply stop being pruned until you `--rebuild-index`/`--rebuild-indexes`.
 
 See [INDEXING.md](INDEXING.md) for the full design, supported predicates, and limitations.
@@ -1309,7 +1310,7 @@ jsonsql --query "SELECT * FROM products"
 
 ### Exit Codes and Output Streams
 
-- Exit code `0` indicates success; exit code `1` indicates an error.
+- Exit code `0` indicates success; exit code `1` indicates an error, including asking to show or drop an index or view that does not exist.
 - Result JSON is written to **stdout**; all informational and error messages go to **stderr**, so piping stdout never mixes in log text.
 
 ### Debug Mode

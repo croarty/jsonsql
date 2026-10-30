@@ -56,7 +56,7 @@ class ErrorHandlingTest {
         Files.writeString(dataDir.toPath().resolve("bad.json"), badJson);
         mappingManager.addMapping("bad", "bad.json:$.items");
 
-        assertThrows(Exception.class, () -> 
+        assertThrows(java.io.IOException.class, () -> 
             queryExecutor.execute("SELECT * FROM bad")
         );
     }
@@ -66,7 +66,7 @@ class ErrorHandlingTest {
         Files.writeString(dataDir.toPath().resolve("cut.json"), "{\"items\": [{\"id\": 1}, {\"id\": 2}, {\"id\"");
         mappingManager.addMapping("cut", "cut.json:$.items");
 
-        assertThrows(Exception.class, () ->
+        assertThrows(java.io.IOException.class, () ->
             queryExecutor.execute("SELECT * FROM cut")
         );
     }
@@ -77,7 +77,7 @@ class ErrorHandlingTest {
             "{\"items\": [{\"id\": 1}]}\n{\"items\": [{\"id\": 2}]}\n");
         mappingManager.addMapping("lines", "lines.json:$.items");
 
-        assertThrows(Exception.class, () ->
+        assertThrows(java.io.IOException.class, () ->
             queryExecutor.execute("SELECT * FROM lines")
         );
     }
@@ -101,9 +101,9 @@ class ErrorHandlingTest {
         Files.writeString(dataDir.toPath().resolve("test.json"), json);
         mappingManager.addMapping("invalid_path", "test.json:$.nonexistent.path");
 
-        // Should handle gracefully when path doesn't exist
-        queryExecutor.execute("SELECT * FROM invalid_path");
-        // May return empty or throw exception - either is acceptable
+        // A path that matches nothing gives no rows, not an error
+        JsonNode rows = objectMapper.readTree(queryExecutor.execute("SELECT * FROM invalid_path"));
+        assertEquals(0, rows.size());
     }
 
     @Test
@@ -127,21 +127,21 @@ class ErrorHandlingTest {
 
     @Test
     void testInvalidSqlSyntax() {
-        assertThrows(Exception.class, () -> 
+        assertThrows(QueryParseException.class, () -> 
             queryExecutor.execute("INVALID SQL QUERY")
         );
     }
 
     @Test
     void testMissingFromClause() {
-        assertThrows(Exception.class, () -> 
+        assertThrows(QueryParseException.class, () -> 
             queryExecutor.execute("SELECT *")
         );
     }
 
     @Test
     void testInvalidJoinSyntax() {
-        assertThrows(Exception.class, () -> 
+        assertThrows(QueryParseException.class, () -> 
             queryExecutor.execute("SELECT * FROM table1 JOIN table2")
         );
         // Should complain about missing ON clause
@@ -224,9 +224,11 @@ class ErrorHandlingTest {
         Files.writeString(dataDir.toPath().resolve("test.json"), json);
         mappingManager.addMapping("test", "test.json:$.items");
 
-        // Invalid operator should be handled gracefully (returns empty or error)
-        queryExecutor.execute("SELECT * FROM test WHERE id <> 1");
-        // <> is valid SQL for != so this should actually work or be rejected by parser
+        // <> is a synonym for !=
+        JsonNode rows = objectMapper.readTree(queryExecutor.execute("SELECT * FROM test WHERE id <> 1"));
+        assertEquals(0, rows.size());
+        rows = objectMapper.readTree(queryExecutor.execute("SELECT * FROM test WHERE id <> 2"));
+        assertEquals(1, rows.size());
     }
 
     @Test

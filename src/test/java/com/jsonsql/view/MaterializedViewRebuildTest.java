@@ -56,7 +56,7 @@ class MaterializedViewRebuildTest {
         MaterializedViewDefinition before = viewManager.getView("v");
         Files.writeString(dataFile.toPath(), "{\"rows\": [{\"id\": 9}");
 
-        assertThrows(Exception.class, () -> builder.rebuild("v", null));
+        assertThrows(java.io.IOException.class, () -> builder.rebuild("v", null));
 
         assertTrue(viewManager.hasView("v"));
         assertEquals(before.getCteSql(), viewManager.getView("v").getCteSql());
@@ -67,7 +67,7 @@ class MaterializedViewRebuildTest {
     void failedRebuildKeepsTheStoredRows() throws Exception {
         Files.writeString(dataFile.toPath(), "{\"rows\": [{\"id\": 9}");
 
-        assertThrows(Exception.class, () -> builder.rebuild("v", null));
+        assertThrows(java.io.IOException.class, () -> builder.rebuild("v", null));
 
         List<JsonNode> rows = viewStore.load("v");
         assertEquals(2, rows.size());
@@ -78,7 +78,7 @@ class MaterializedViewRebuildTest {
     void failedRebuildSurvivesReloadingFromDisk() throws Exception {
         Files.delete(dataFile.toPath());
 
-        assertThrows(Exception.class, () -> builder.rebuild("v", null));
+        assertThrows(java.io.IOException.class, () -> builder.rebuild("v", null));
 
         MaterializedViewManager reloaded = new MaterializedViewManager(new File(tempDir, ".jsonsql-views.json"));
         assertTrue(reloaded.hasView("v"));
@@ -87,7 +87,7 @@ class MaterializedViewRebuildTest {
     @Test
     void aFixedSourceCanBeRebuiltAfterAFailure() throws Exception {
         Files.writeString(dataFile.toPath(), "{\"rows\": [{\"id\": 9}");
-        assertThrows(Exception.class, () -> builder.rebuild("v", null));
+        assertThrows(java.io.IOException.class, () -> builder.rebuild("v", null));
 
         Files.writeString(dataFile.toPath(), "{\"rows\": [{\"id\": 3}]}");
         builder.rebuild("v", null);

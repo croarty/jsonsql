@@ -234,7 +234,7 @@ class CacheManagerTest {
         assertNotNull(cacheManager.getCachedData(file2, jsonPath), "Cache 2 should exist");
         
         // Clear all caches
-        int clearedCount = cacheManager.clearAllCaches(mappingManager, testDir);
+        int clearedCount = cacheManager.clearAllCaches();
         
         // Verify caches are cleared
         assertTrue(clearedCount >= 2, "Should clear at least 2 cache files");
@@ -264,7 +264,7 @@ class CacheManagerTest {
         cacheManager.saveToCache(file2, jsonPath, data);
         
         // Clear all caches
-        int clearedCount = cacheManager.clearAllCaches(mappingManager, testDir);
+        int clearedCount = cacheManager.clearAllCaches();
         
         // Should clear both files
         assertTrue(clearedCount >= 2, "Should clear caches for all files in directory");
@@ -282,7 +282,7 @@ class CacheManagerTest {
         Files.writeString(orphanedCache.toPath(), "[]");
         
         // Clear should remove orphaned files too
-        int clearedCount = cacheManager.clearAllCaches(mappingManager, testDir);
+        int clearedCount = cacheManager.clearAllCaches();
         
         assertTrue(clearedCount >= 1, "Should clear orphaned cache files");
         assertFalse(orphanedCache.exists(), "Orphaned cache should be deleted");

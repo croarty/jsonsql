@@ -144,7 +144,7 @@ class JoinConditionTest {
             {"products": [{"id": 1, "name": "Widget"}]}
             """, "products", "$.products");
 
-        assertThrows(Exception.class, () -> executor.execute(
+        assertThrows(QueryParseException.class, () -> executor.execute(
             "SELECT o.orderId FROM orders o JOIN products p ON o.productId = p.id = 1"));
     }
 
@@ -157,7 +157,7 @@ class JoinConditionTest {
             {"products": [{"id": 1, "name": "Widget", "y": 5}]}
             """, "products", "$.products");
 
-        assertThrows(Exception.class, () -> executor.execute(
+        assertThrows(IllegalArgumentException.class, () -> executor.execute(
             "SELECT o.orderId FROM orders o JOIN products p ON o.productId = p.id AND o.x = p.y"));
     }
 }

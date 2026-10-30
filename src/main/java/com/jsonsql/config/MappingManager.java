@@ -35,7 +35,7 @@ public class MappingManager {
 
         try {
             JsonNode root = objectMapper.readTree(configFile);
-            root.fields().forEachRemaining(entry -> 
+            root.properties().forEach(entry -> 
                 mappings.put(entry.getKey(), entry.getValue().asText())
             );
         } catch (IOException e) {

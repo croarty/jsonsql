@@ -130,13 +130,13 @@ class OperandsAndOrderingTest {
         "NOT (price + 1 > 20)", "id = 1 AND price + 1 > 20", "id = 1 OR LOWER(name) = 'x'",
     })
     void arithmeticAndFunctionsAreRejected(String condition) {
-        Exception e = assertThrows(Exception.class, () -> where(condition));
+        Exception e = assertThrows(QueryParseException.class, () -> where(condition));
         assertTrue(e.getMessage().contains("not supported"), e.getMessage());
     }
 
     @Test
     void unsupportedWhereFailsEvenWithNoMatchingRows() {
-        assertThrows(Exception.class, () -> where("id = 999 AND price + 1 > 20"));
+        assertThrows(QueryParseException.class, () -> where("id = 999 AND price + 1 > 20"));
     }
 
     @Test
@@ -178,7 +178,7 @@ class OperandsAndOrderingTest {
         "SELECT id FROM t ORDER BY price * 2", "SELECT id FROM t ORDER BY LOWER(name)",
     })
     void invalidOrderByIsRejected(String sql) {
-        assertThrows(Exception.class, () -> query(sql));
+        assertThrows(QueryParseException.class, () -> query(sql));
     }
 
     @Test
@@ -190,8 +190,8 @@ class OperandsAndOrderingTest {
 
     @Test
     void unionRejectsExpressionsAndBadPositionsInOrderBy() {
-        assertThrows(Exception.class, () -> query("SELECT id FROM t UNION SELECT id FROM t ORDER BY id * 2"));
-        assertThrows(Exception.class, () -> query("SELECT id FROM t UNION SELECT id FROM t ORDER BY 2"));
+        assertThrows(QueryParseException.class, () -> query("SELECT id FROM t UNION SELECT id FROM t ORDER BY id * 2"));
+        assertThrows(QueryParseException.class, () -> query("SELECT id FROM t UNION SELECT id FROM t ORDER BY 2"));
     }
 
     @Test
@@ -219,7 +219,7 @@ class OperandsAndOrderingTest {
 
     @Test
     void likeEscapeMustBeOneCharacter() {
-        assertThrows(Exception.class, () -> where("name LIKE 'a' ESCAPE 'xy'"));
+        assertThrows(UnsupportedExpressionException.class, () -> where("name LIKE 'a' ESCAPE 'xy'"));
     }
 
     @Test
