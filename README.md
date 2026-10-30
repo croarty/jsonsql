@@ -1458,8 +1458,8 @@ Every pull request is automatically built and tested by the
 
 ## License
 
-[Add your license here]
+JsonSQL is released under the [MIT License](LICENSE). The executable JAR bundles third-party libraries under their own licenses; see [Third-Party Notices](THIRD-PARTY-NOTICES.md).
 
 ## Support
 
-For issues, questions, or feature requests, please [open an issue](link-to-issues).
+For issues, questions, or feature requests, please [open an issue](https://github.com/croarty/jsonsql/issues).
