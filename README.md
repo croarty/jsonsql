@@ -428,7 +428,7 @@ jsonsql --query "SELECT * FROM products WHERE price > \${min_price}" \
 - Optional parameters (with default): Use default value if not provided
 - Parameter names: Any characters except `}` and `:` (keys and values are trimmed); `--param` must be `key=value`
 - Extra `--param` values that don't match a placeholder are ignored
-- Parameter values: Inserted literally into the SQL text before parsing (no SQL escaping is performed). Treat saved queries and parameter values as trusted input — untrusted values can alter the query (SQL-injection style).
+- Parameter values: Values from `--param` can't change the query. Inside single quotes (`'${name}'`), apostrophes are escaped, so `--param name=O'Brien` works. Outside quotes, a value must be a number, a boolean, a single-quoted string or a comma-separated list of those, so use quotes in the query for plain text. Default values are part of the query and are used as written.
 
 #### Delete a Saved Query
 
@@ -1267,7 +1267,9 @@ jsonsql --data-dir /path/to/data --query "SELECT * FROM products"
 
 Each data file must contain one complete JSON document. A file that is cut off, has text after the document, or holds several documents (including newline-delimited JSON) fails with an error instead of returning partial rows.
 
-These non-standard forms are accepted: single quotes, unquoted keys, trailing commas, `//`, `/* */` and `#` comments, leading zeros, a trailing decimal point (`5.`), `NaN`, and unescaped control characters in strings. Bare words such as `True` or `NULL`, leading `+` or `.` on numbers, hexadecimal numbers, and a byte order mark at the start of the file are rejected.
+These non-standard forms are accepted: single quotes, unquoted keys, trailing commas, `//`, `/* */` and `#` comments, leading zeros, a trailing decimal point (`5.`), `NaN`, and unescaped control characters in strings. Bare words such as `True` or `NULL`, leading `+` or `.` on numbers, and hexadecimal numbers are rejected.
+
+Files must be UTF-8, with or without a byte order mark, or UTF-16 with one. Other encodings fail with `File is not valid UTF-8`, so re-save the file as UTF-8. Errors name the file, and for invalid JSON the line and column too.
 
 Decimals are read as doubles, so values with more than about 17 significant digits are rounded.
 
