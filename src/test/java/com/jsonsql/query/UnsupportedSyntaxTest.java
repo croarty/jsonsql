@@ -56,10 +56,7 @@ class UnsupportedSyntaxTest {
     @CsvSource(delimiter = '|', quoteCharacter = '"', value = {
         "SELECT category FROM products GROUP BY category                        | GROUP BY is not supported",
         "SELECT name FROM products HAVING price > 1                             | HAVING is not supported",
-        "SELECT name FROM products LIMIT 10 OFFSET 20                           | OFFSET / FETCH is not supported",
-        "SELECT name FROM products LIMIT 20, 10                                 | OFFSET / FETCH is not supported",
-        "SELECT name FROM products OFFSET 5 ROWS                                | OFFSET / FETCH is not supported",
-        "SELECT name FROM products OFFSET 5 ROWS FETCH NEXT 2 ROWS ONLY         | OFFSET / FETCH is not supported",
+        "SELECT name FROM products OFFSET 5 ROWS FETCH NEXT 2 ROWS ONLY         | FETCH is not supported",
         "SELECT o.orderId FROM orders o RIGHT JOIN products p ON o.productId = p.id      | RIGHT JOIN is not supported",
         "SELECT o.orderId FROM orders o FULL OUTER JOIN products p ON o.productId = p.id | FULL OUTER JOIN is not supported",
         "SELECT o.orderId FROM orders o FULL JOIN products p ON o.productId = p.id       | FULL OUTER JOIN is not supported",
@@ -122,13 +119,6 @@ class UnsupportedSyntaxTest {
     }
 
     @Test
-    void offsetOnWholeUnionIsRejected() {
-        QueryParseException ex = rejected(
-            "SELECT name FROM products UNION ALL SELECT name FROM products ORDER BY name LIMIT 1 OFFSET 1");
-        assertTrue(ex.getMessage().contains("OFFSET"));
-    }
-
-    @Test
     void executorSurfacesParseErrorInsteadOfReturningRows() {
         assertThrows(QueryParseException.class,
             () -> executor.execute("SELECT category FROM products GROUP BY category"));
@@ -139,7 +129,7 @@ class UnsupportedSyntaxTest {
     @Test
     void dryRunAlsoRejects() {
         assertThrows(QueryParseException.class,
-            () -> executor.dryRunValidate("SELECT name FROM products LIMIT 1 OFFSET 1"));
+            () -> executor.dryRunValidate("SELECT name FROM products GROUP BY name"));
     }
 
     // -- forms that must remain accepted ----------------------------------------------

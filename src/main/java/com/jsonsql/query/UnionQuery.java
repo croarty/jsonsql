@@ -13,6 +13,7 @@ public class UnionQuery {
     private List<OrderByInfo> orderBy = new ArrayList<>();
     private Long limit;
     private Long top;
+    private Long offset;
 
     public List<ParsedQuery> getSubQueries() {
         return subQueries;
@@ -48,6 +49,14 @@ public class UnionQuery {
 
     public void setLimit(Long limit) {
         this.limit = limit;
+    }
+
+    public Long getOffset() {
+        return offset;
+    }
+
+    public void setOffset(Long offset) {
+        this.offset = offset;
     }
 
     public Long getTop() {

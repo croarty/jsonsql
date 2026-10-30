@@ -17,6 +17,7 @@ public class ParsedQuery {
     private List<OrderByInfo> orderBy = new ArrayList<>();
     private Long limit;
     private Long top;
+    private Long offset;
     private boolean distinct = false;
     private java.util.Map<String, ParsedQuery> commonTableExpressions = new java.util.LinkedHashMap<>();
 
@@ -73,6 +74,14 @@ public class ParsedQuery {
 
     public void setTop(Long top) {
         this.top = top;
+    }
+
+    public Long getOffset() {
+        return offset;
+    }
+
+    public void setOffset(Long offset) {
+        this.offset = offset;
     }
 
     public Long getEffectiveLimit() {

@@ -93,8 +93,7 @@ with or without an index.
 Everything else is simply not used for pruning (the file is kept):
 
 - `OR` between predicates → the whole table is scanned (an `OR` branch can match anything).
-- `NOT (...)`, `LIKE` / `ILIKE`, `IS NULL`, `!=` / `<>`, `NOT IN`, functions, etc.
-  (`BETWEEN` is rejected by the query engine before pruning matters.)
+- `NOT (...)`, `LIKE` / `ILIKE`, `IS NULL`, `!=` / `<>`, `NOT IN`, `NOT BETWEEN`, etc.
 - Predicates on non-indexed fields.
 
 Because predicates are AND-ed, a single usable conjunct is enough to prune. For example,

@@ -257,11 +257,11 @@ class UnionTest {
         
         JsonNode resultNode = objectMapper.readTree(result);
         assertTrue(resultNode.isArray());
-        // Widget + quantity 5 + quantity 3 = 3 results; each row keeps its branch's column name
+        // Widget + quantity 5 + quantity 3 = 3 results; all rows use the first branch's column name
         assertEquals(3, resultNode.size());
         assertEquals("Widget", resultNode.get(0).get("name").asText());
-        assertEquals(5, resultNode.get(1).get("quantity").asInt());
-        assertEquals(3, resultNode.get(2).get("quantity").asInt());
+        assertEquals(5, resultNode.get(1).get("name").asInt());
+        assertEquals(3, resultNode.get(2).get("name").asInt());
     }
 
     @Test

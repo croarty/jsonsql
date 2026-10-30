@@ -247,11 +247,8 @@ public class QueryExecutor implements FieldAccessor {
             projectedData = applyDistinct(projectedData);
         }
 
-        // Apply TOP/LIMIT last, so it operates on the final ordered/projected/deduped result set
-        if (parsedQuery.getEffectiveLimit() != null) {
-            int limit = parsedQuery.getEffectiveLimit().intValue();
-            projectedData = projectedData.subList(0, Math.min(limit, projectedData.size()));
-        }
+        // Apply OFFSET and TOP/LIMIT last, so they operate on the final ordered/projected/deduped result set
+        projectedData = applyOffsetAndLimit(projectedData, parsedQuery.getOffset(), parsedQuery.getEffectiveLimit());
 
         // Convert to JSON array string
         ArrayNode resultArray = objectMapper.createArrayNode();
@@ -265,7 +262,9 @@ public class QueryExecutor implements FieldAccessor {
      */
     private String executeUnionQuery(UnionQuery unionQuery, QueryExecutionContext context) throws Exception {
         List<JsonNode> finalResults = new ArrayList<>();
-        
+        List<ParsedQuery> branches = unionQuery.getSubQueries();
+        List<String> outputNames = outputNames(branches.get(0));
+
         // Execute each sub-query and combine results. Operators are left-associative, so
         // "A UNION ALL B UNION C" de-duplicates (A + B + C) while "A UNION B UNION ALL C"
         // keeps C's rows even if they repeat earlier ones.
@@ -281,7 +280,7 @@ public class QueryExecutor implements FieldAccessor {
             
             if (resultArray.isArray()) {
                 for (JsonNode node : resultArray) {
-                    finalResults.add(node);
+                    finalResults.add(renameColumns(node, outputNames(subQuery), outputNames));
                 }
             }
 
@@ -292,14 +291,11 @@ public class QueryExecutor implements FieldAccessor {
         
         // Apply ORDER BY if specified (before LIMIT)
         if (unionQuery.hasOrderBy()) {
-            finalResults = applyOrderBy(finalResults, unionQuery.getOrderBy());
+            finalResults = applyOrderBy(finalResults, unionOrderBy(unionQuery, outputNames));
         }
-        
-        // Apply LIMIT/TOP last
-        if (unionQuery.getEffectiveLimit() != null) {
-            int limit = unionQuery.getEffectiveLimit().intValue();
-            finalResults = finalResults.subList(0, Math.min(limit, finalResults.size()));
-        }
+
+        // Apply OFFSET and LIMIT/TOP last
+        finalResults = applyOffsetAndLimit(finalResults, unionQuery.getOffset(), unionQuery.getEffectiveLimit());
         
         // Convert to JSON array string
         ArrayNode resultArray = objectMapper.createArrayNode();
@@ -308,6 +304,64 @@ public class QueryExecutor implements FieldAccessor {
         return objectMapper.writeValueAsString(resultArray);
     }
     
+    private List<JsonNode> applyOffsetAndLimit(List<JsonNode> rows, Long offset, Long limit) {
+        int from = offset == null ? 0 : (int) Math.min(offset, rows.size());
+        int to = limit == null ? rows.size() : (int) Math.min(from + limit, rows.size());
+        return rows.subList(from, to);
+    }
+
+    /**
+     * The column names a query produces, or null for SELECT *, where they depend on the data.
+     */
+    private List<String> outputNames(ParsedQuery query) {
+        List<ColumnInfo> columns = query.getSelectColumns();
+        if (columns.size() == 1 && "*".equals(columns.get(0).getExpression())) {
+            return null;
+        }
+        List<String> names = new ArrayList<>();
+        projectColumns(List.of(objectMapper.createObjectNode()), columns).get(0).fieldNames().forEachRemaining(names::add);
+        return names;
+    }
+
+    /**
+     * As in SQL, a UNION's columns are matched by position and named by its first branch.
+     */
+    private JsonNode renameColumns(JsonNode row, List<String> names, List<String> targetNames) {
+        if (names == null || targetNames == null || names.equals(targetNames) || names.size() != targetNames.size()) {
+            return row;
+        }
+        ObjectNode renamed = objectMapper.createObjectNode();
+        for (int i = 0; i < names.size(); i++) {
+            renamed.set(targetNames.get(i), row.get(names.get(i)));
+        }
+        return renamed;
+    }
+
+    /**
+     * ORDER BY on a UNION can use a column name from any branch, which is then the
+     * first branch's column in the same position.
+     */
+    private List<OrderByInfo> unionOrderBy(UnionQuery unionQuery, List<String> outputNames) {
+        if (outputNames == null) {
+            return unionQuery.getOrderBy();
+        }
+        List<OrderByInfo> orderBy = new ArrayList<>();
+        for (OrderByInfo order : unionQuery.getOrderBy()) {
+            orderBy.add(new OrderByInfo(firstBranchName(order.getColumn(), unionQuery, outputNames), order.isAscending()));
+        }
+        return orderBy;
+    }
+
+    private String firstBranchName(String column, UnionQuery unionQuery, List<String> outputNames) {
+        for (ParsedQuery branch : unionQuery.getSubQueries()) {
+            List<String> names = outputNames(branch);
+            if (names != null && names.contains(column) && names.size() == outputNames.size()) {
+                return outputNames.get(names.indexOf(column));
+            }
+        }
+        return column;
+    }
+
     /**
      * Execute all CTEs and store results in context.
      * Checks cache first if caching is enabled.
@@ -444,9 +498,12 @@ public class QueryExecutor implements FieldAccessor {
             keyBuilder.append(":");
         }
 
-        // Add LIMIT / TOP (row limiting affects the cached result)
+        // Add LIMIT / TOP / OFFSET (row limiting affects the cached result)
         if (cteQuery.getEffectiveLimit() != null) {
             keyBuilder.append("LIMIT:").append(cteQuery.getEffectiveLimit()).append(":");
+        }
+        if (cteQuery.getOffset() != null) {
+            keyBuilder.append("OFFSET:").append(cteQuery.getOffset()).append(":");
         }
 
         // Add DISTINCT flag
@@ -949,10 +1006,12 @@ public class QueryExecutor implements FieldAccessor {
      * Compare two JsonNodes for sorting.
      */
     private int compareNodes(JsonNode node1, JsonNode node2) {
-        // Handle nulls
-        if (node1 == null && node2 == null) return 0;
-        if (node1 == null) return -1;
-        if (node2 == null) return 1;
+        // NULL and missing values sort together, before everything else
+        boolean null1 = node1 == null || node1.isNull();
+        boolean null2 = node2 == null || node2.isNull();
+        if (null1 && null2) return 0;
+        if (null1) return -1;
+        if (null2) return 1;
         
         // Handle numbers
         if (node1.isNumber() && node2.isNumber()) {

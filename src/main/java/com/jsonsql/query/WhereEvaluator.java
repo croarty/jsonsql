@@ -151,6 +151,11 @@ public class WhereEvaluator {
             return evaluateIsNull(row, (IsNullExpression) expression);
         }
         
+        // Handle BETWEEN / NOT BETWEEN
+        if (expression instanceof Between) {
+            return evaluateBetween(row, (Between) expression);
+        }
+
         // Handle IN / NOT IN
         if (expression instanceof InExpression) {
             return evaluateIn(row, (InExpression) expression);
@@ -164,9 +169,21 @@ public class WhereEvaluator {
     }
     
     private Truth evaluateComparison(JsonNode row, ComparisonOperator comparison, String operator) {
-        Operand left = resolve(row, comparison.getLeftExpression());
-        Operand right = resolve(row, comparison.getRightExpression());
+        return compareOperands(resolve(row, comparison.getLeftExpression()), operator,
+            resolve(row, comparison.getRightExpression()));
+    }
 
+    /**
+     * x BETWEEN a AND b means x >= a AND x <= b, including how NULL behaves.
+     */
+    private Truth evaluateBetween(JsonNode row, Between between) {
+        Operand value = resolve(row, between.getLeftExpression());
+        Truth inRange = compareOperands(value, ">=", resolve(row, between.getBetweenExpressionStart()))
+            .and(() -> compareOperands(value, "<=", resolve(row, between.getBetweenExpressionEnd())));
+        return between.isNot() ? inRange.not() : inRange;
+    }
+
+    private Truth compareOperands(Operand left, String operator, Operand right) {
         // In SQL, any comparison with NULL is UNKNOWN, whichever side the NULL is on.
         // This includes both missing fields and present but null fields.
         if (left.value() == null || right.value() == null) {

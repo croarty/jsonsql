@@ -44,10 +44,10 @@ class UnsupportedExpressionTest {
     }
 
     @Test
-    void testBetweenThrowsUnsupported() {
+    void testExistsThrowsUnsupported() {
         UnsupportedExpressionException ex = assertThrows(
             UnsupportedExpressionException.class,
-            () -> executor.execute("SELECT * FROM products WHERE price BETWEEN 10 AND 20"));
+            () -> executor.execute("SELECT * FROM products WHERE EXISTS (SELECT 1 FROM products)"));
         assertTrue(ex.getMessage().toLowerCase().contains("unsupported"));
     }
 

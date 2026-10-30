@@ -529,6 +529,7 @@ jsonsql --query "SELECT * FROM products WHERE ((category = 'Electronics' AND pri
 - **Logical:** `AND`, `OR`, `NOT`
 - **Comparison:** `=`, `!=` (or `<>`), `>`, `<`, `>=`, `<=`
 - **List Matching:** `IN`, `NOT IN` - check if value matches any in a literal list
+- **Range Matching:** `BETWEEN a AND b`, `NOT BETWEEN a AND b` - inclusive at both ends; `WHERE price BETWEEN 10 AND 50` means `price >= 10 AND price <= 50`
 - **Pattern Matching:** `LIKE`, `NOT LIKE` with `%` (any characters) and `_` (single character) wildcards
 - **Case-Insensitive Pattern Matching:** `ILIKE`, `NOT ILIKE` - same as LIKE but case-insensitive
 - **Null Checking:** `IS NULL`, `IS NOT NULL` (treats both missing and explicitly null fields as NULL)
@@ -833,7 +834,7 @@ WHERE status != 'cancelled'
 - String equality is case-sensitive (use `ILIKE` for case-insensitive matching).
 - SQL `NULL` values never satisfy a comparison, including inside `NOT`. Comparing with a literal `NULL` (`price = NULL`) never matches, so use `IS NULL`.
 
-**Unsupported WHERE expressions fail loudly:** WHERE constructs that are not implemented — such as `BETWEEN` and subqueries (`IN (SELECT ...)`, `EXISTS (...)`) — raise a clear `Unsupported ...expression` error instead of silently returning zero rows. The check is on the operator, not its operands: a supported operator with an unsupported operand (`UPPER(name) = 'X'`, `20 < price`, `price > stock`) is evaluated as a field lookup that finds nothing and matches no rows (see [Known Limitations](#known-limitations)).
+**Unsupported WHERE expressions fail loudly:** WHERE constructs that are not implemented — such as subqueries (`IN (SELECT ...)`, `EXISTS (...)`) — raise a clear `Unsupported ...expression` error instead of silently returning zero rows. The check is on the operator, not its operands: a supported operator with an unsupported operand (`UPPER(name) = 'X'`, `20 < price`, `price > stock`) is evaluated as a field lookup that finds nothing and matches no rows (see [Known Limitations](#known-limitations)).
 
 ### JOIN Clause
 
@@ -899,7 +900,7 @@ ORDER BY p.name, o.orderDate DESC
 - Numbers (sorted numerically)
 - Text (sorted alphabetically, case-sensitive). If both values start with a number, they are compared numerically by that leading number (e.g. `"15.6 inch"` sorts after `"9 inch"`).
 - Booleans (false < true)
-- A **missing** field sorts first in ascending order (last with `DESC`). An explicit JSON `null` is compared as the text `"null"`, so it usually lands after numbers and among strings — filter with `IS NOT NULL` if placement matters
+- NULL and missing values sort together: first in ascending order, last with `DESC`.
 - Qualified column names (`p.price`, `o.quantity`) and nested paths (`vipStatus.points`)
 - Sorting is stable: rows that compare equal keep their source order
 
@@ -909,8 +910,16 @@ Sorting runs *before* projection, so `ORDER BY` can use a source field you did n
 
 - `SELECT TOP n` - Limit to first n results
 - `SELECT ... LIMIT n` - Alternative syntax
+- `SELECT ... LIMIT n OFFSET m` - Skip the first m rows, then return up to n. `LIMIT m, n` means the same, and `OFFSET m` works alone
 
-**Note:** `n` must be a non-negative integer; a negative `LIMIT` is rejected with an error. The limit is applied **last** (after WHERE, ORDER BY, projection, and DISTINCT) and does not short-circuit data loading. `OFFSET` (`LIMIT 10 OFFSET 20`, MySQL-style `LIMIT 20, 10`, or `OFFSET ... FETCH ...`) is not supported and is rejected with `OFFSET / FETCH is not supported`.
+Page through results with `OFFSET`, using `ORDER BY` so that pages stay consistent:
+
+```sql
+SELECT name, price FROM products ORDER BY price LIMIT 10 OFFSET 0   -- page 1
+SELECT name, price FROM products ORDER BY price LIMIT 10 OFFSET 10  -- page 2
+```
+
+**Note:** `n` must be a non-negative integer; a negative `LIMIT` or `OFFSET` is rejected with an error. The limit is applied **last** (after WHERE, ORDER BY, projection, and DISTINCT) and does not short-circuit data loading. `OFFSET` (`LIMIT 10 OFFSET 20`, MySQL-style `LIMIT 20, 10`, or `OFFSET ... FETCH ...`) is not supported and is rejected with `OFFSET / FETCH is not supported`.
 
 ### Common Table Expressions (WITH)
 
@@ -980,10 +989,10 @@ UNION ALL
 
 UNION rules:
 
-- Every branch must select the **same number of columns** (checked at parse time). Column *names* are not unified: each row keeps the output names of the branch it came from, so alias the columns identically (`SELECT id AS key ... UNION SELECT orderId AS key ...`) if you want a uniform shape.
+- Every branch must select the **same number of columns** (checked at parse time). Columns are matched by position and named by the first branch, so `SELECT id AS key ... UNION SELECT orderId ...` gives every row a `key` column. With `SELECT *` in any branch, each row keeps its own names, because positions depend on the data.
 - `UNION` de-duplicates whole rows; `UNION ALL` keeps duplicates. When both appear, operators are applied left to right as in standard SQL: `A UNION ALL B UNION C` de-duplicates everything, while `A UNION B UNION ALL C` de-duplicates `A`+`B` and then appends all of `C`.
-- A trailing `ORDER BY` sorts the combined output and therefore refers to **output column names** (aliases) or positions, not qualified source fields. A position uses the first branch's columns.
-- A trailing `LIMIT n` (after the last branch, with or without `ORDER BY`) limits the **whole** result, after de-duplication and sorting. `TOP` and a `LIMIT` inside parentheses apply to their own branch only. `OFFSET` is rejected.
+- A trailing `ORDER BY` sorts the combined output and therefore refers to **output column names** from any branch, or positions, not qualified source fields.
+- A trailing `LIMIT n` (after the last branch, with or without `ORDER BY`) limits the **whole** result, after de-duplication and sorting. A trailing `OFFSET` also applies to the whole result. `TOP` and a `LIMIT` inside parentheses apply to their own branch only.
 - `INTERSECT`, `EXCEPT`, and `MINUS` are rejected (`INTERSECT is not supported`).
 - A `WITH` clause may precede a UNION, and its CTEs are visible to every branch. A UNION cannot be used inside a CTE.
 
@@ -996,10 +1005,10 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 | `GROUP BY`, `HAVING` | `GROUP BY is not supported` / `HAVING is not supported` |
 | Aggregates, functions, arithmetic, literals, `CASE`, `\|\|` in SELECT | `Function or aggregate in SELECT list: COUNT(*) is not supported (...)` |
 | `SELECT t.*` | `SELECT t.* is not supported (use SELECT * or list the columns)` |
-| `OFFSET`, `LIMIT m, n`, `FETCH` | `OFFSET / FETCH is not supported` |
+| `FETCH` | `FETCH is not supported (use LIMIT and OFFSET)` |
 | `RIGHT`, `FULL [OUTER]`, `CROSS` (except with `UNNEST`), `NATURAL` joins | `RIGHT JOIN is not supported`, ... |
 | `INTERSECT`, `EXCEPT`, `MINUS` | `INTERSECT is not supported (only UNION and UNION ALL are supported)` |
-| `BETWEEN`, `IN (SELECT ...)`, `EXISTS` in WHERE | `Unsupported WHERE expression: ...` |
+| `IN (SELECT ...)`, `EXISTS` in WHERE | `Unsupported WHERE expression: ...` |
 | Arithmetic and functions in WHERE | `Expression in WHERE: price + 1 is not supported (...)` |
 | Expressions in `ORDER BY` | `Expression in ORDER BY: price * 2 is not supported (...)` |
 | Derived tables (`FROM (SELECT ...) t`) | `No mapping or materialized view found for table: ...` |
@@ -1346,7 +1355,7 @@ Planned features for future releases, organized by priority:
 
 **WHERE Clause Operators:**
 
-- `BETWEEN` operator - Range checking (e.g., `WHERE price BETWEEN 100 AND 500`). Currently raises a clear "unsupported expression" error rather than being silently ignored.
+- ✅ `BETWEEN` operator - **IMPLEMENTED**
 
 **Aggregation & Grouping:**
 
@@ -1358,7 +1367,7 @@ Planned features for future releases, organized by priority:
 
 - Subqueries (e.g., `WHERE price > (SELECT AVG(price) FROM products)`) and derived tables in `FROM`
 - Calculated fields in SELECT (e.g., `SELECT price * 1.1 AS price_with_tax`)
-- ✅ **Unsupported SQL fails loudly** — `GROUP BY`, `HAVING`, `OFFSET`, `RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`, and non-column SELECT items are rejected at parse time instead of being silently ignored - **IMPLEMENTED**
+- ✅ **Unsupported SQL fails loudly** — `GROUP BY`, `HAVING`, `RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`, and non-column SELECT items are rejected at parse time instead of being silently ignored - **IMPLEMENTED**
 - ✅ `ORDER BY` on a SELECT alias or column position - **IMPLEMENTED**
 
 ### Medium Priority (Advanced Features)
@@ -1383,7 +1392,7 @@ Planned features for future releases, organized by priority:
 
 **Pagination & Limiting:**
 
-- `OFFSET` support for pagination (e.g., `LIMIT 10 OFFSET 20`; currently rejected with an error)
+- ✅ `OFFSET` support for pagination - **IMPLEMENTED**
 - ✅ `LIMIT` applied to a whole `UNION` - **IMPLEMENTED**
 - `INTERSECT` / `EXCEPT` set operations (currently rejected with an error)
 
@@ -1426,7 +1435,6 @@ Planned features for future releases, organized by priority:
 - ✅ `<>` as a synonym for `!=` - **IMPLEMENTED**
 - ✅ Comment support in SQL (`--` and `/* */`) - **IMPLEMENTED**
 - ✅ Comparisons with the literal on the left, and field-to-field comparisons - **IMPLEMENTED**
-- `BETWEEN` (listed above)
 - ✅ `LIKE ... ESCAPE` - **IMPLEMENTED**
 - Case-insensitive table and view names
 - Multi-statement execution

@@ -5,11 +5,11 @@
 JsonSQL is a well-architected SQL-like query engine for JSON data. This document provides a thorough review of existing functionality and prioritized suggestions for new features.
 
 **Current Status:**
-- **Test Coverage**: 997 tests across 66 test classes, all passing ✅
+- **Test Coverage**: 1031 tests across 67 test classes, all passing ✅
 - **Core Features**: Fully functional SQL-like query engine
 - **Recent Additions**: DISTINCT, ILIKE, CTEs, `UNION` / `UNION ALL`, CSV output, schema introspection (`--describe`), dry-run validation (`--dry-run`), declared indexes / file-level pruning (`--add-index`), materialized CTE views (`--materialize-view`)
 - **Architecture**: Clean separation of concerns, well-structured, maintainable
-- **Error handling**: unimplemented SQL (`GROUP BY`, `HAVING`, aggregates/functions in SELECT, `OFFSET`, `RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`) is rejected at parse time, as are arithmetic and functions in WHERE and ORDER BY — see [Part 2.0](#20-unsupported-syntax-handling-high-priority)
+- **Error handling**: unimplemented SQL (`GROUP BY`, `HAVING`, aggregates/functions in SELECT, `RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`) is rejected at parse time, as are arithmetic and functions in WHERE and ORDER BY — see [Part 2.0](#20-unsupported-syntax-handling-high-priority)
 
 ---
 
@@ -61,7 +61,6 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 - **Grouping**: Parentheses `()` for complex conditions
 - **Nested Field Access**: `WHERE profile.level = 'Gold'`
 - **Limitations**:
-  - No `BETWEEN` operator (raises a clear error)
   - No subqueries in WHERE (raises a clear error)
   - Arithmetic and functions in WHERE are rejected
 
@@ -115,7 +114,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - Works with JOINs
   - Works with DISTINCT
 - **Limitations**:
-  - No `OFFSET` support for pagination — `OFFSET` / `FETCH` are rejected with an error
+  - `FETCH` is rejected with an error; use `LIMIT` and `OFFSET`
 
 #### DISTINCT Clause
 - **Status**: ✅ **FULLY IMPLEMENTED**
@@ -157,8 +156,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - Mixed `UNION` / `UNION ALL` evaluated left to right, as in standard SQL
   - CTEs shared across branches
 - **Limitations**:
-  - Column names are not unified to the first branch's names
-  - `INTERSECT` / `EXCEPT` / `MINUS` and `OFFSET` are rejected
+  - `INTERSECT` / `EXCEPT` / `MINUS` are rejected
 - **Test Coverage**: `UnionTest.java`
 
 ### 1.2 Data Management Features ✅
@@ -206,7 +204,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Strengths
 - Clean separation of concerns
 - Well-structured packages
-- Comprehensive test coverage (997 tests, all passing)
+- Comprehensive test coverage (1031 tests, all passing)
 - Good error handling
 - Flexible field accessor pattern
 - Efficient JSONPath integration
@@ -266,7 +264,8 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 |---|---|
 | `GROUP BY`, `HAVING` | Rejected |
 | Aggregates, functions, arithmetic, literals, `CASE`, `t.*` in SELECT | Rejected |
-| `OFFSET` / `LIMIT m, n` / `FETCH` | Rejected |
+| `OFFSET` / `LIMIT m, n` | ✅ Implemented |
+| `FETCH` | Rejected |
 | `RIGHT`, `FULL`, `CROSS` (non-`UNNEST`), `NATURAL` joins | Rejected |
 | `INTERSECT`, `EXCEPT`, `MINUS` | Rejected (previously executed as `UNION`) |
 | `LIMIT` after a `UNION` | ✅ Implemented — limits the whole result |
@@ -350,21 +349,17 @@ SELECT name, COALESCE(description, 'No description') AS desc FROM products
 **Current Status**: Partially Implemented
 
 **Missing Features**:
-- `BETWEEN` operator: `WHERE price BETWEEN 100 AND 500`
 - Subqueries: `WHERE price > (SELECT AVG(price) FROM products)`
 - `EXISTS` / `NOT EXISTS`
 
 **Use Cases**:
 ```sql
--- Range checking
-SELECT * FROM products WHERE price BETWEEN 50 AND 200
-
 -- Subquery
 SELECT * FROM products 
 WHERE price > (SELECT AVG(price) FROM products)
 ```
 
-**Implementation Complexity**: Low-Medium (BETWEEN), Medium-High (Subqueries)
+**Implementation Complexity**: Medium-High
 **Business Value**: Medium-High
 
 ### 2.4 JOIN Enhancements (MEDIUM PRIORITY)
@@ -418,21 +413,9 @@ SELECT name FROM products WHERE category = 'Furniture'
 **Implementation Complexity**: Medium-High
 **Business Value**: Medium
 
-### 2.6 Pagination (LOW PRIORITY)
+### 2.6 Pagination
 
-**Current Status**: Not Implemented (`LIMIT`/`TOP` only; `OFFSET` is rejected with an error)
-
-**Missing Features**:
-- `OFFSET` clause: `LIMIT 10 OFFSET 20`
-
-**Use Cases**:
-```sql
--- Pagination
-SELECT * FROM products ORDER BY price LIMIT 10 OFFSET 20
-```
-
-**Implementation Complexity**: Low
-**Business Value**: Medium
+**Current Status**: ✅ Implemented with `LIMIT` and `OFFSET`
 
 ---
 
@@ -564,16 +547,6 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
    - Medium complexity
    - High value
 
-5. **BETWEEN Operator** ⭐
-   - Easy to implement
-   - Common SQL pattern
-   - Low complexity
-
-6. **Output Formats (TSV/Table)** ⭐⭐
-   - CSV shipped; TSV/table/XML remain
-   - Low-medium complexity
-   - Medium value
-
 ### Phase 3: Advanced Features (Lower Priority)
 7. **RIGHT JOIN & FULL OUTER JOIN** ⭐
    - Less commonly used
@@ -587,11 +560,6 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
    - Complex to implement
    - Medium-high complexity
    - Medium value
-
-10. **OFFSET for Pagination** ⭐
-    - Easy to implement
-    - Low complexity
-    - Medium value
 
 ### Phase 4: Quality of Life
 11. **Developer Tools** (--explain; `--describe` and `--dry-run` shipped) ⭐
@@ -609,8 +577,6 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
 ## Part 5: Implementation Recommendations
 
 ### 5.1 Quick Wins (Low Effort, High Value)
-1. **OFFSET support** - Simple addition to LIMIT (currently rejected)
-2. **BETWEEN operator** - Easy WHERE clause enhancement
 
 Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `LIMIT`, left-associative mixed `UNION`/`UNION ALL`, CTE cache keys that follow CTE chains and materialized views, `--list-indexes` freshness for view indexes, and a single `DEBUG` check (`DebugMode`) shared by the CLI and query engine.
 
@@ -638,7 +604,7 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 - DISTINCT implementation uses canonical JSON string representation
 
 ### 6.2 Testing Strategy
-- Maintain high test coverage (currently 997 tests, all passing)
+- Maintain high test coverage (currently 1031 tests, all passing)
 - Add integration tests for new features
 - Test edge cases (nulls, empty arrays, etc.)
 - Test files organized by feature:
@@ -686,10 +652,8 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 ❌ No aggregation (GROUP BY, COUNT, SUM, etc.)
 ❌ No calculated fields or functions
 ❌ Limited output formats (JSON and CSV only; no TSV/table/XML)
-❌ No BETWEEN operator
 ❌ No subqueries or derived tables
 ❌ No RIGHT JOIN or FULL OUTER JOIN
-❌ No OFFSET for pagination
 
 ### Recommended Next Steps
 1. **Short-term**: Aggregation & GROUP BY (high value)
@@ -702,6 +666,6 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 
 JsonSQL is a solid foundation with excellent core functionality. Recent additions of DISTINCT, ILIKE, CTEs, UNION, indexes, and materialized views demonstrate the system's extensibility. The suggested enhancements would transform it from a good tool into a comprehensive SQL-like query engine for JSON data. The prioritized roadmap focuses on high-impact features that provide the most value to users.
 
-**Current Test Status**: ✅ 997 tests passing
+**Current Test Status**: ✅ 1031 tests passing
 **Code Quality**: ✅ High - Clean architecture, good separation of concerns
 **Documentation**: ✅ Comprehensive - README, examples, saved queries reference
