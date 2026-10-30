@@ -75,6 +75,7 @@ under `.jsonsql-views/<name>.json` inside the data directory.
 
 - A view name cannot match an existing table mapping.
 - Creating a view that already exists fails; use `--rebuild-view` or drop first.
+- A rebuild replaces the view only after its query succeeds. If it fails, for example on a damaged source file, the existing view is kept.
 - The `--materialize-view` name must match a CTE in the query (**case-insensitive**, like SQL identifiers).
 - The view is stored under the exact name passed to `--materialize-view`, and querying it
   is **case-sensitive**: after `--materialize-view Premium`, `FROM Premium` works but

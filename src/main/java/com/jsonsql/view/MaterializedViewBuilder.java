@@ -51,7 +51,15 @@ public class MaterializedViewBuilder {
             throw new IllegalArgumentException(
                 "Materialized view already exists: " + name + ". Drop it first or use --rebuild-view.");
         }
+        return buildAndSave(name, fullSql, indexManager);
+    }
 
+    /**
+     * Run the query, then store the rows and definition, replacing any existing view.
+     * Nothing is stored unless the query succeeds.
+     */
+    private MaterializedViewDefinition buildAndSave(String name, String fullSql,
+                                                     IndexManager indexManager) throws Exception {
         ParsedQuery parsed = queryParser.parse(fullSql);
         if (!parsed.hasCTEs() || !parsed.hasCteNamed(name)) {
             throw new QueryParseException(
@@ -81,14 +89,15 @@ public class MaterializedViewBuilder {
         return def;
     }
 
+    /**
+     * Re-run a view's query and replace its rows. If the query fails, the view is left as it was.
+     */
     public MaterializedViewDefinition rebuild(String name, IndexManager indexManager) throws Exception {
         MaterializedViewDefinition existing = viewManager.getView(name);
         if (existing == null) {
             throw new IllegalArgumentException("No materialized view: " + name);
         }
-        viewManager.dropView(name);
-        viewStore.delete(name);
         String wrapped = "WITH " + name + " AS (" + existing.getCteSql() + ") SELECT * FROM " + name;
-        return materialize(name, wrapped, indexManager);
+        return buildAndSave(name, wrapped, indexManager);
     }
 }

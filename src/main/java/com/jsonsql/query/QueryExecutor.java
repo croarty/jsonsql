@@ -755,7 +755,7 @@ public class QueryExecutor implements FieldAccessor {
         String onCondition = joinInfo.getOnCondition();
 
         // Parse ON condition (e.g., "o.productId = p.id")
-        JoinCondition condition = parseJoinCondition(onCondition);
+        JoinCondition condition = orientJoinCondition(parseJoinCondition(onCondition), joinInfo.getTable());
 
         for (JsonNode leftRow : leftData) {
             boolean matchFound = false;
@@ -806,6 +806,18 @@ public class QueryExecutor implements FieldAccessor {
         }
 
         return new JoinCondition(parts[0].trim(), parts[1].trim());
+    }
+
+    /**
+     * Put the joined table's field on the right, so "p.id = o.productId" and
+     * "o.productId = p.id" behave the same when joining p.
+     */
+    private JoinCondition orientJoinCondition(JoinCondition condition, TableInfo joinedTable) {
+        String prefix = joinedTable.getEffectiveName() + ".";
+        if (condition.leftField().startsWith(prefix) && !condition.rightField().startsWith(prefix)) {
+            return new JoinCondition(condition.rightField(), condition.leftField());
+        }
+        return condition;
     }
 
     /**
