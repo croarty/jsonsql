@@ -9,7 +9,7 @@ mvn test                                  # full suite, about 30 seconds
 mvn test -Dtest=QueryExecutorTest         # one class, while iterating
 mvn verify                                # also checks coverage: 85% line, 75% branch
 mvn package                               # builds target/jsonsql-<version>.jar
-java -jar target/jsonsql-1.6.0.jar --help
+java -jar target/jsonsql-2.0.0.jar --help
 ```
 
 `./mvnw` runs the same commands with the Maven version pinned in `.mvn/wrapper/`. CI runs `./mvnw -B -ntp clean verify` on JDK 21 and 25; the workflows are in `.github/workflows/`.
@@ -61,4 +61,4 @@ A Stop hook runs `mvn test` when `src/` or `pom.xml` has uncommitted changes. It
 
 ## Releasing a new version
 
-The version appears in `pom.xml`, `JsonSqlCli.java` and the docs, so search for the old number and change all of them. The test count appears several times in `COMPREHENSIVE-REVIEW.md`.
+Use the `/release` skill. A change that can alter what an existing query or script does needs a major version.

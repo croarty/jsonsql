@@ -11,7 +11,7 @@ mvn clean package
 
 Create an alias for easier usage:
 ```bash
-alias jsonsql='java -jar target/jsonsql-1.6.0.jar'
+alias jsonsql='java -jar target/jsonsql-2.0.0.jar'
 ```
 
 Run the commands below from the repository root. Mappings are written to `.jsonsql-mappings.json` in the current directory (it is git-ignored, so a fresh clone has none). The `products` and `orders` names used here point at `products.json` / `orders.json`; other guides (e.g. [COMPLEX-QUERY-EXAMPLES.md](COMPLEX-QUERY-EXAMPLES.md)) reuse those names for different files, and re-running `--add-mapping` overwrites an alias. Use `-c <file>` to keep a separate mapping file per guide if you switch between them.
