@@ -1,0 +1,4 @@
+# Shell scripts must stay LF so they run on Linux and in Git Bash
+*.sh text eol=lf
+mvnw text eol=lf
+*.cmd text eol=crlf
