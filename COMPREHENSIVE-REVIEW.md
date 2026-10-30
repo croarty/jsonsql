@@ -250,7 +250,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 - **JUnit 5.11.4**: Testing framework
 
 #### Build & Security Tooling
-- **GitHub Actions CI** (`.github/workflows/ci.yml`): builds and tests every push/PR on JDK 21 and 24
+- **GitHub Actions CI** (`.github/workflows/ci.yml`): builds and tests every push/PR on JDK 21 and 25
 - **Dependabot** (`.github/dependabot.yml`): automated dependency + GitHub Actions updates and security-advisory PRs
 - **Dependency Review** (`.github/workflows/dependency-review.yml`): blocks PRs introducing vulnerable dependencies
 - **CodeQL** (`.github/workflows/codeql.yml`): static security/quality analysis

@@ -65,8 +65,8 @@ test, and continuously monitor dependencies for security issues.
 `.github/workflows/ci.yml` runs on every push and pull request to `master`
 (and can be triggered manually via the **Actions** tab). It:
 
-- Builds and runs the full test suite with `mvn -B -ntp clean verify`
-- Tests against JDK 21 (the project target) and JDK 24 (forward-compat check)
+- Builds and runs the full test suite with `./mvnw -B -ntp clean verify`
+- Tests against JDK 21 (the project target) and JDK 25 (the newest LTS)
 - Caches Maven downloads for faster runs
 - Uploads the Surefire test reports and the packaged JAR as build artifacts
 
