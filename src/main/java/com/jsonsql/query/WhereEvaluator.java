@@ -8,14 +8,57 @@ import net.sf.jsqlparser.expression.operators.relational.*;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 /**
  * Evaluates WHERE clause expressions against JSON data.
  * Supports complex boolean logic (AND, OR, NOT, parentheses) and pattern matching (LIKE).
+ *
+ * Uses SQL three-valued logic: a condition on a NULL or missing value is UNKNOWN rather
+ * than FALSE, NOT UNKNOWN stays UNKNOWN, and a row is returned only when the WHERE
+ * clause as a whole is TRUE.
  */
 public class WhereEvaluator {
-    
+
+    private enum Truth {
+        TRUE, FALSE, UNKNOWN;
+
+        static Truth of(boolean value) {
+            return value ? TRUE : FALSE;
+        }
+
+        Truth and(Supplier<Truth> other) {
+            if (this == FALSE) {
+                return FALSE;
+            }
+            Truth right = other.get();
+            if (right == FALSE) {
+                return FALSE;
+            }
+            return this == TRUE && right == TRUE ? TRUE : UNKNOWN;
+        }
+
+        Truth or(Supplier<Truth> other) {
+            if (this == TRUE) {
+                return TRUE;
+            }
+            Truth right = other.get();
+            if (right == TRUE) {
+                return TRUE;
+            }
+            return this == FALSE && right == FALSE ? FALSE : UNKNOWN;
+        }
+
+        Truth not() {
+            return switch (this) {
+                case TRUE -> FALSE;
+                case FALSE -> TRUE;
+                case UNKNOWN -> UNKNOWN;
+            };
+        }
+    }
+
     private final FieldAccessor fieldAccessor;
     // Cache of compiled LIKE/ILIKE patterns, keyed by regex + case-insensitivity, so the
     // pattern is compiled once per evaluator (one per WHERE filter) instead of once per row.
@@ -26,39 +69,43 @@ public class WhereEvaluator {
     }
     
     /**
-     * Evaluate an expression against a JSON row and return the boolean result.
+     * Evaluate an expression against a JSON row. Returns true only if the expression is
+     * TRUE; both FALSE and UNKNOWN exclude the row.
      */
     public boolean evaluate(JsonNode row, Expression expression) {
         if (expression == null) {
             return true;
         }
-        
+        return test(row, expression) == Truth.TRUE;
+    }
+
+    private Truth test(JsonNode row, Expression expression) {
         // Handle AND
         if (expression instanceof AndExpression) {
             AndExpression andExpr = (AndExpression) expression;
-            return evaluate(row, andExpr.getLeftExpression()) && 
-                   evaluate(row, andExpr.getRightExpression());
+            return test(row, andExpr.getLeftExpression())
+                .and(() -> test(row, andExpr.getRightExpression()));
         }
-        
+
         // Handle OR
         if (expression instanceof OrExpression) {
             OrExpression orExpr = (OrExpression) expression;
-            return evaluate(row, orExpr.getLeftExpression()) || 
-                   evaluate(row, orExpr.getRightExpression());
+            return test(row, orExpr.getLeftExpression())
+                .or(() -> test(row, orExpr.getRightExpression()));
         }
-        
+
         // Handle NOT
         if (expression instanceof NotExpression) {
             NotExpression notExpr = (NotExpression) expression;
-            return !evaluate(row, notExpr.getExpression());
+            return test(row, notExpr.getExpression()).not();
         }
-        
+
         // Handle Parentheses
         if (expression instanceof Parenthesis) {
             Parenthesis paren = (Parenthesis) expression;
-            return evaluate(row, paren.getExpression());
+            return test(row, paren.getExpression());
         }
-        
+
         // Handle comparison operators
         if (expression instanceof EqualsTo) {
             return evaluateComparison(row, (EqualsTo) expression, "=");
@@ -105,21 +152,21 @@ public class WhereEvaluator {
         );
     }
     
-    private boolean evaluateComparison(JsonNode row, ComparisonOperator comparison, String operator) {
+    private Truth evaluateComparison(JsonNode row, ComparisonOperator comparison, String operator) {
         // Get field value
         String fieldPath = comparison.getLeftExpression().toString();
         JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
         
-        // In SQL, any comparison with NULL returns NULL (treated as FALSE in WHERE clauses)
+        // In SQL, any comparison with NULL is UNKNOWN, whichever side the NULL is on.
         // This includes both missing fields (fieldValue == null) and present but null fields (fieldValue.isNull())
-        if (fieldValue == null || fieldValue.isNull()) {
-            return false;
+        if (fieldValue == null || fieldValue.isNull() || comparison.getRightExpression() instanceof NullValue) {
+            return Truth.UNKNOWN;
         }
-        
+
         // Get comparison value
         String compareValue = extractLiteralValue(comparison.getRightExpression());
-        
-        return switch (operator) {
+
+        return Truth.of(switch (operator) {
             case "=" -> compareEquals(fieldValue, compareValue);
             case "!=" -> !compareEquals(fieldValue, compareValue);
             case ">" -> compareGreater(fieldValue, compareValue);
@@ -127,7 +174,7 @@ public class WhereEvaluator {
             case ">=" -> compareGreater(fieldValue, compareValue) || compareEquals(fieldValue, compareValue);
             case "<=" -> compareLess(fieldValue, compareValue) || compareEquals(fieldValue, compareValue);
             default -> false;
-        };
+        });
     }
     
     private String extractLiteralValue(Expression expr) {
@@ -215,15 +262,17 @@ public class WhereEvaluator {
      * Supports SQL wildcards: % (any characters) and _ (single character).
      * @param caseInsensitive If true, performs case-insensitive matching (ILIKE behavior)
      */
-    private boolean evaluateLike(JsonNode row, LikeExpression likeExpr, boolean caseInsensitive) {
+    private Truth evaluateLike(JsonNode row, LikeExpression likeExpr, boolean caseInsensitive) {
         // Get field value
         String fieldPath = likeExpr.getLeftExpression().toString();
         JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
         
-        if (fieldValue == null || !fieldValue.isTextual()) {
-            return false;
+        // LIKE only applies to strings, so anything else is UNKNOWN. That excludes it from
+        // NOT LIKE as well as LIKE, and from NOT (x LIKE ...).
+        if (fieldValue == null || !fieldValue.isTextual() || likeExpr.getRightExpression() instanceof NullValue) {
+            return Truth.UNKNOWN;
         }
-        
+
         String fieldText = fieldValue.asText();
         String pattern = extractLiteralValue(likeExpr.getRightExpression());
         
@@ -243,7 +292,7 @@ public class WhereEvaluator {
         boolean matches = compiled.matcher(fieldText).matches();
         
         // Handle NOT LIKE / NOT ILIKE
-        return likeExpr.isNot() ? !matches : matches;
+        return Truth.of(likeExpr.isNot() ? !matches : matches);
     }
     
     /**
@@ -252,7 +301,7 @@ public class WhereEvaluator {
      * 1. The field is missing from the JSON object (fieldValue == null)
      * 2. The field exists but is explicitly set to null (fieldValue.isNull())
      */
-    private boolean evaluateIsNull(JsonNode row, IsNullExpression isNullExpr) {
+    private Truth evaluateIsNull(JsonNode row, IsNullExpression isNullExpr) {
         // Get field value
         String fieldPath = isNullExpr.getLeftExpression().toString();
         JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
@@ -261,7 +310,7 @@ public class WhereEvaluator {
         boolean isNull = (fieldValue == null || fieldValue.isNull());
         
         // Handle IS NOT NULL
-        return isNullExpr.isNot() ? !isNull : isNull;
+        return Truth.of(isNullExpr.isNot() ? !isNull : isNull);
     }
     
     /**
@@ -269,16 +318,15 @@ public class WhereEvaluator {
      * Checks if a field value matches any value in a list.
      * Example: WHERE category IN ('Electronics', 'Tools', 'Furniture')
      */
-    private boolean evaluateIn(JsonNode row, InExpression inExpr) {
+    private Truth evaluateIn(JsonNode row, InExpression inExpr) {
         // Get field value
         String fieldPath = inExpr.getLeftExpression().toString();
         JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
         
-        // In SQL, NULL IN (...) returns UNKNOWN (treated as FALSE)
-        // NULL NOT IN (...) also returns UNKNOWN (treated as FALSE)
+        // In SQL, NULL IN (...) and NULL NOT IN (...) are both UNKNOWN
         // This means NULL values are ALWAYS excluded from IN/NOT IN results
         if (fieldValue == null || fieldValue.isNull()) {
-            return false;
+            return Truth.UNKNOWN;
         }
         
         // Get the list of values to check against
@@ -289,16 +337,21 @@ public class WhereEvaluator {
             ParenthesedExpressionList<?> expressionList = (ParenthesedExpressionList<?>) rightExpression;
             
             // ExpressionList extends List directly (getExpressions() is deprecated)
+            boolean listHasNull = false;
             for (var expr : expressionList) {
+                if (expr instanceof NullValue) {
+                    listHasNull = true;
+                    continue;
+                }
                 String listValue = extractLiteralValue(expr);
                 if (compareEqualsForIn(fieldValue, listValue)) {
                     // Found a match
-                    return !inExpr.isNot(); // IN returns true, NOT IN returns false
+                    return Truth.of(!inExpr.isNot()); // IN returns true, NOT IN returns false
                 }
             }
-            
-            // No match found
-            return inExpr.isNot(); // IN returns false, NOT IN returns true
+
+            // No match found: a NULL in the list could have matched, so the answer is UNKNOWN
+            return listHasNull ? Truth.UNKNOWN : Truth.of(inExpr.isNot());
         }
         
         // Unsupported right expression type - fail loudly instead of silently excluding all rows

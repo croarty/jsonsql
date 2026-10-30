@@ -5,7 +5,7 @@
 JsonSQL is a well-architected SQL-like query engine for JSON data. This document provides a thorough review of existing functionality and prioritized suggestions for new features.
 
 **Current Status:**
-- **Test Coverage**: 743 tests across 57 test classes, all passing ✅
+- **Test Coverage**: 777 tests across 58 test classes, all passing ✅
 - **Core Features**: Fully functional SQL-like query engine
 - **Recent Additions**: DISTINCT, ILIKE, CTEs, `UNION` / `UNION ALL`, CSV output, schema introspection (`--describe`), dry-run validation (`--dry-run`), declared indexes / file-level pruning (`--add-index`), materialized CTE views (`--materialize-view`)
 - **Architecture**: Clean separation of concerns, well-structured, maintainable
@@ -52,7 +52,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### WHERE Clause
 - **Status**: Fully Implemented with Advanced Features
 - **Comparison Operators**: `=`, `!=` / `<>`, `>`, `<`, `>=`, `<=`
-- **Logical Operators**: `AND`, `OR`, `NOT`
+- **Logical Operators**: `AND`, `OR`, `NOT`, using SQL three-valued logic for NULL and missing values
 - **Pattern Matching**: 
   - `LIKE`, `NOT LIKE` with `%` and `_` wildcards
   - `ILIKE`, `NOT ILIKE` (✅ **IMPLEMENTED** - case-insensitive LIKE)
@@ -64,7 +64,6 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - No `BETWEEN` operator (raises a clear error)
   - No subqueries in WHERE (raises a clear error)
   - Predicates must be *field op literal*; reversed (`20 < price`), field-to-field, and function operands silently match nothing
-  - Two-valued NULL logic: `NOT (price > 20)` includes rows where `price` is missing
   - `LIKE ... ESCAPE` is ignored
 
 #### JOIN Operations
@@ -208,7 +207,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Strengths
 - Clean separation of concerns
 - Well-structured packages
-- Comprehensive test coverage (743 tests, all passing)
+- Comprehensive test coverage (777 tests, all passing)
 - Good error handling
 - Flexible field accessor pattern
 - Efficient JSONPath integration
@@ -647,7 +646,7 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 - DISTINCT implementation uses canonical JSON string representation
 
 ### 6.2 Testing Strategy
-- Maintain high test coverage (currently 743 tests, all passing)
+- Maintain high test coverage (currently 777 tests, all passing)
 - Add integration tests for new features
 - Test edge cases (nulls, empty arrays, etc.)
 - Test files organized by feature:
@@ -713,6 +712,6 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 
 JsonSQL is a solid foundation with excellent core functionality. Recent additions of DISTINCT, ILIKE, CTEs, UNION, indexes, and materialized views demonstrate the system's extensibility. The suggested enhancements would transform it from a good tool into a comprehensive SQL-like query engine for JSON data. The prioritized roadmap focuses on high-impact features that provide the most value to users.
 
-**Current Test Status**: ✅ 743 tests passing
+**Current Test Status**: ✅ 777 tests passing
 **Code Quality**: ✅ High - Clean architecture, good separation of concerns
 **Documentation**: ✅ Comprehensive - README, examples, saved queries reference
