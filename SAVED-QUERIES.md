@@ -117,7 +117,9 @@ jsonsql --save-query premium_customer_orders --query "SELECT c.name, o.orderId, 
 
 ### Parameterized Queries
 
-Use `${name}` (required) or `${name:default}` placeholders and supply values with `--param name=value` at run time. In bash/zsh, escape the `$` inside double quotes (`\${name}`) — otherwise the shell substitutes the variable before JsonSQL sees it:
+Use `${name}` (required) or `${name:default}` placeholders and supply values with `--param name=value` at run time. In bash/zsh, escape the ` inside double quotes (`\${name}`) — otherwise the shell substitutes the variable before JsonSQL sees it:
+
+Values from `--param` can't change the query. Inside single quotes (`'${name}'`), apostrophes are escaped, so `--param name=O'Brien` works. Outside quotes, a value must be a number, a boolean, a single-quoted string or a comma-separated list of those, so use quotes in the query for plain text. After `SELECT`, `FROM`, `JOIN` or `ORDER BY`, a value can also be a field or table name, or a comma-separated list of names. Default values are part of the query and are used as written.
 
 ```bash
 jsonsql --save-query products_above --query "SELECT name, price FROM products WHERE price > \${min_price:50} ORDER BY price DESC"
@@ -125,6 +127,62 @@ jsonsql --run-query products_above --data-dir example-data --param min_price=100
 ```
 
 See [Parameterized Queries](README.md#parameterized-queries) in the README for the full rules.
+
+#### Choosing fields and tables at run time
+
+A parameter can supply a name where the query names something: after `SELECT`, `FROM`, `JOIN` or `ORDER BY`. These examples use the `complex-products.json` fixture:
+
+```bash
+jsonsql --add-mapping products "complex-products.json:\$.products[*]"
+```
+
+Choose the sort field and direction. Each is its own parameter, and defaults apply when you leave them out:
+
+```bash
+jsonsql --save-query sorted_products \
+  --query "SELECT name, price, category FROM products ORDER BY \${sort_by:price} \${direction:DESC} LIMIT 3"
+
+# Uses the defaults: price, highest first
+jsonsql --run-query sorted_products --data-dir example-data
+
+# Sorts by name instead, A to Z
+jsonsql --run-query sorted_products --data-dir example-data \
+  --param sort_by=name --param direction=ASC
+```
+
+Choose the columns. A list of names works here, so quote it if it contains spaces:
+
+```bash
+jsonsql --query "SELECT \${columns:name, price} FROM products LIMIT 2" \
+  --data-dir example-data --param "columns=name, category"
+```
+
+```json
+[{"name":"Wireless Mouses","category":"Electronics"},{"name":"Mechanical Keyboard","category":"Electronics"}]
+```
+
+Choose the table:
+
+```bash
+jsonsql --query "SELECT name FROM \${table} ORDER BY name LIMIT 2" \
+  --data-dir example-data --param table=products
+```
+
+```json
+[{"name":"Desk Lamp"},{"name":"Laptop Stand"}]
+```
+
+A name is a single word or dotted path, so nothing else can be added to the query. In a condition, a name isn't allowed at all, because an unquoted word would be read as a field and forgotten quotes would silently match nothing:
+
+| Parameter | Result |
+|---|---|
+| `--param sort_by=price` in `ORDER BY \${sort_by}` | Works |
+| `--param "sort_by=price DESC"` | Rejected: use a separate parameter for the direction |
+| `--param "sort_by=price; DROP"` | Rejected: `must be a name or a comma-separated list of names here` |
+| `--param min_price=abc` in `WHERE price > \${min_price}` | Rejected: `must be a number, a boolean or a quoted string` |
+| `--param category=Tools` in `WHERE category = '\${category}'` | Works: the quotes make it text |
+
+To choose the field in a `WHERE` condition, save a query for each field.
 
 ## Running Saved Queries
 
