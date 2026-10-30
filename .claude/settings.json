@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn test *)",
+      "Bash(mvn -q test *)",
+      "Bash(mvn package *)",
+      "Bash(mvn -q package *)",
+      "Bash(./mvnw test *)",
+      "Bash(./mvnw package *)",
+      "Bash(java -jar target/*)",
+      "PowerShell(mvn test *)",
+      "PowerShell(mvn -q test *)",
+      "PowerShell(mvn package *)",
+      "PowerShell(mvn -q package *)",
+      "PowerShell(java -jar target/*)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/run-tests-on-stop.sh\"",
+            "timeout": 300,
+            "statusMessage": "Running tests"
+          }
+        ]
+      }
+    ]
+  }
+}
