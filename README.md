@@ -1265,6 +1265,14 @@ jsonsql --add-mapping products "$.data.products"
 jsonsql --data-dir /path/to/data --query "SELECT * FROM products"
 ```
 
+**A data file fails with a JSON parse error**
+
+Each data file must contain one complete JSON document. A file that is cut off, has text after the document, or holds several documents (including newline-delimited JSON) fails with an error instead of returning partial rows.
+
+These non-standard forms are accepted: single quotes, unquoted keys, trailing commas, `//`, `/* */` and `#` comments, leading zeros, a trailing decimal point (`5.`), `NaN`, and unescaped control characters in strings. Bare words such as `True` or `NULL`, leading `+` or `.` on numbers, hexadecimal numbers, and a byte order mark at the start of the file are rejected.
+
+Decimals are read as doubles, so values with more than about 17 significant digits are rounded.
+
 **"Invalid SQL syntax"**
 
 ```bash

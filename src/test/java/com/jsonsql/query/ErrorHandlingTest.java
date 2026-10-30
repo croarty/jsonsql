@@ -62,6 +62,38 @@ class ErrorHandlingTest {
     }
 
     @Test
+    void testFileCutOffMidRecordFailsInsteadOfReturningPartialRows() throws Exception {
+        Files.writeString(dataDir.toPath().resolve("cut.json"), "{\"items\": [{\"id\": 1}, {\"id\": 2}, {\"id\"");
+        mappingManager.addMapping("cut", "cut.json:$.items");
+
+        assertThrows(Exception.class, () ->
+            queryExecutor.execute("SELECT * FROM cut")
+        );
+    }
+
+    @Test
+    void testMultipleDocumentsInOneFileFailInsteadOfReturningTheFirst() throws Exception {
+        Files.writeString(dataDir.toPath().resolve("lines.json"),
+            "{\"items\": [{\"id\": 1}]}\n{\"items\": [{\"id\": 2}]}\n");
+        mappingManager.addMapping("lines", "lines.json:$.items");
+
+        assertThrows(Exception.class, () ->
+            queryExecutor.execute("SELECT * FROM lines")
+        );
+    }
+
+    @Test
+    void testFileWithCommentsIsRead() throws Exception {
+        Files.writeString(dataDir.toPath().resolve("notes.json"), "// notes\n{\"items\": [{\"id\": 1}]}");
+        mappingManager.addMapping("notes", "notes.json:$.items");
+
+        JsonNode rows = objectMapper.readTree(queryExecutor.execute("SELECT * FROM notes"));
+
+        assertEquals(1, rows.size());
+        assertEquals(1, rows.get(0).get("id").asInt());
+    }
+
+    @Test
     void testInvalidJsonPath() throws Exception {
         String json = """
         {"items": [{"id": 1}]}
