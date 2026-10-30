@@ -1,0 +1,300 @@
+<section class="module" id="module-1" style="background: var(--color-bg-warm)">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">01</span>
+      <h1 class="module-title">From Question to Answer</h1>
+      <p class="module-subtitle">What JsonSQL does, and what happens in the half-second after you press Enter</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- SCREEN 1 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">A search engine for your data files</h2>
+        <p>Lots of software stores information in
+          <span class="term" data-definition="JSON (JavaScript Object Notation) is a plain-text format for storing structured data using curly braces {} for records and square brackets [] for lists. Almost every app and API speaks it. When talking to AI you can say 'the API returns JSON'.">JSON</span>
+          files: long, nested text documents full of curly braces. They are easy for computers to write, but painful for humans to ask questions of. "Which products cost more than $20?" usually means writing a custom program.</p>
+        <p>JsonSQL lets you ask that question in
+          <span class="term" data-definition="SQL (Structured Query Language) is the standard language for asking questions of data: SELECT the columns you want, FROM a table, WHERE some condition is true. It has been around since the 1970s, so almost every developer and AI model knows it.">SQL</span>
+          instead, straight from your
+          <span class="term" data-definition="The terminal (also called the command line or shell) is the text window where you type commands instead of clicking buttons. PowerShell on Windows and Terminal on macOS are examples.">terminal</span>.
+          No database to install, no setup of the data's shape ahead of time.</p>
+
+        <div class="flow-steps">
+          <div class="flow-step">
+            <div class="flow-step-num">1</div>
+            <p><strong>A JSON file</strong><br>products, orders, customers, nested any way you like</p>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">
+            <div class="flow-step-num">2</div>
+            <p><strong>A SQL question</strong><br><code>SELECT name, price FROM products WHERE price &gt; 20</code></p>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">
+            <div class="flow-step-num">3</div>
+            <p><strong>An answer</strong><br>clean JSON or a CSV you can open in Excel</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 2 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">What it looks like in practice</h2>
+        <p>Here is a real data file from the project's tests, and a real question you might ask it. Notice the products are buried two levels deep, inside <code>data</code> and then <code>products</code>.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">src/test/resources/products.json</span>
+            <pre><code><span class="code-line">{</span><span class="code-line">  <span class="code-property">"data"</span>: {</span><span class="code-line">    <span class="code-property">"products"</span>: [</span><span class="code-line">      {</span><span class="code-line">        <span class="code-property">"id"</span>: <span class="code-number">1</span>,</span><span class="code-line">        <span class="code-property">"name"</span>: <span class="code-string">"Widget"</span>,</span><span class="code-line">        <span class="code-property">"price"</span>: <span class="code-number">19.99</span>,</span><span class="code-line">        <span class="code-property">"category"</span>: <span class="code-string">"Tools"</span>,</span><span class="code-line">        <span class="code-property">"inStock"</span>: <span class="code-keyword">true</span></span><span class="code-line">      },</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">The whole file is one big object (the outer curly braces).</p>
+              <p class="tl">Inside it is a section called "data"...</p>
+              <p class="tl">...which holds a <em>list</em> (square bracket) of products.</p>
+              <p class="tl">Each product is its own little record in curly braces.</p>
+              <p class="tl">It has an id number,</p>
+              <p class="tl">a name (text goes in quotes),</p>
+              <p class="tl">a price (numbers do not need quotes),</p>
+              <p class="tl">a category,</p>
+              <p class="tl">and a true/false flag for whether it is in stock.</p>
+              <p class="tl">More products follow, same shape.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">TERMINAL</span>
+            <pre><code><span class="code-line"><span class="code-comment"># one-time: tell JsonSQL where "products" lives</span></span><span class="code-line"><span class="code-function">jsonsql</span> <span class="code-keyword">--add-mapping</span> products <span class="code-string">"$.data.products"</span></span><span class="code-line"> </span><span class="code-line"><span class="code-comment"># then ask questions</span></span><span class="code-line"><span class="code-function">jsonsql</span> <span class="code-keyword">--query</span> <span class="code-string">"SELECT name, price FROM products WHERE price &gt; 20"</span> <span class="code-keyword">--pretty</span></span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">First, a one-time setup step.</p>
+              <p class="tl">"When I say <em>products</em>, I mean the list found at data → products." This is saved to a small settings file.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">From now on you can just ask questions.</p>
+              <p class="tl">"Give me the name and price of every product over 20, nicely formatted." Out comes <code>[{"name":"Gadget","price":29.99}]</code>.</p>
+            </div>
+          </div>
+        </div>
+
+        <p>Each <code>--something</code> is a
+          <span class="term" data-definition="A flag is an option you add to a command to change its behavior, like --pretty for nicely indented output. When talking to AI you would say 'add a --verbose flag that prints extra detail'.">flag</span>.
+          JsonSQL is a
+          <span class="term" data-definition="A CLI (Command-Line Interface) is a program you control by typing commands and flags in a terminal, rather than clicking on a graphical window. git and npm are famous CLIs.">CLI</span>
+          tool: it has no windows or buttons, just flags.</p>
+      </section>
+
+      <!-- SCREEN 3 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The journey of one question</h2>
+        <p>Pressing Enter sets off a relay race between four parts of the program. Step through it to watch your question become an answer.</p>
+
+        <div class="flow-animation" data-steps='[
+          {"highlight":"flow-m1-you","label":"You type a jsonsql command with a --query flag and press Enter"},
+          {"highlight":"flow-m1-cli","label":"The front door (JsonSqlCli) reads your flags and checks they make sense together","packet":true,"from":"m1-you","to":"m1-cli"},
+          {"highlight":"flow-m1-parser","label":"The translator (QueryParser) turns your SQL text into a structured plan the computer can follow","packet":true,"from":"m1-cli","to":"m1-parser"},
+          {"highlight":"flow-m1-exec","label":"The engine (QueryExecutor) opens the JSON file, finds the products list, and filters, sorts and trims it","packet":true,"from":"m1-parser","to":"m1-exec"},
+          {"highlight":"flow-m1-out","label":"The printer (OutputHandler) formats the rows as JSON or CSV","packet":true,"from":"m1-exec","to":"m1-out"},
+          {"highlight":"flow-m1-you","label":"The answer lands on your screen, a file, or your clipboard. Exit code 0 means success.","packet":true,"from":"m1-out","to":"m1-you"}
+        ]'>
+          <div class="flow-actors">
+            <div class="flow-actor" id="flow-m1-you">
+              <div class="flow-actor-icon">⌨️</div>
+              <span>You</span>
+            </div>
+            <div class="flow-actor" id="flow-m1-cli">
+              <div class="flow-actor-icon">🚪</div>
+              <span>JsonSqlCli</span>
+            </div>
+            <div class="flow-actor" id="flow-m1-parser">
+              <div class="flow-actor-icon">📖</div>
+              <span>QueryParser</span>
+            </div>
+            <div class="flow-actor" id="flow-m1-exec">
+              <div class="flow-actor-icon">⚙️</div>
+              <span>QueryExecutor</span>
+            </div>
+            <div class="flow-actor" id="flow-m1-out">
+              <div class="flow-actor-icon">🖨️</div>
+              <span>OutputHandler</span>
+            </div>
+          </div>
+
+          <div class="flow-packet"></div>
+          <div class="flow-step-label">Click "Next Step" to begin</div>
+
+          <div class="flow-controls">
+            <button class="btn flow-next-btn">Next Step</button>
+            <button class="btn flow-reset-btn">Restart</button>
+            <span class="flow-progress"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 4 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Where it all begins: three lines</h2>
+        <p>Every
+          <span class="term" data-definition="Java is a popular programming language, especially for business software. Java programs are compiled into a .jar file and run on the Java Virtual Machine (JVM), which is why you start this tool with 'java -jar'.">Java</span>
+          program has a starting point called <code>main</code>, the
+          <span class="term" data-definition="The entry point is the very first piece of code that runs when a program starts. Knowing where it is tells you where to begin reading any codebase.">entry point</span>.
+          JsonSQL's is tiny, because it hands almost all the work to a helper
+          <span class="term" data-definition="A library is pre-written code from someone else that you plug into your project so you do not reinvent the wheel. JsonSQL uses libraries for reading flags, parsing JSON and understanding SQL.">library</span>
+          called Picocli.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">JsonSqlCli.java</span>
+            <pre><code><span class="code-line">    <span class="code-keyword">public static void</span> <span class="code-function">main</span>(String[] args) {</span><span class="code-line">        <span class="code-keyword">int</span> exitCode = <span class="code-keyword">new</span> <span class="code-function">CommandLine</span>(<span class="code-keyword">new</span> <span class="code-function">JsonSqlCli</span>()).<span class="code-function">execute</span>(args);</span><span class="code-line">        System.<span class="code-function">exit</span>(exitCode);</span><span class="code-line">    }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">"Start here." <code>args</code> is everything you typed after <code>jsonsql</code>, chopped into words.</p>
+              <p class="tl">Hand those words to Picocli. It matches each flag to a setting, then runs the tool and gets back a result number.</p>
+              <p class="tl">Quit, reporting that number to whoever launched us: 0 for "worked", 1 for "something went wrong".</p>
+              <p class="tl">Done.</p>
+            </div>
+          </div>
+        </div>
+
+        <p>How does Picocli know what <code>--query</code> means? Each flag is declared right next to the
+          <span class="term" data-definition="A variable is a named box that holds a value while the program runs. Here the box called 'query' will hold whatever SQL text you typed.">variable</span>
+          that will hold its value, using a label called an
+          <span class="term" data-definition="An annotation is a tag starting with @ that you attach to code to give it extra meaning, like a sticky note for a library to read. @Option tells Picocli 'this variable is a command-line flag'.">annotation</span>:</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">JsonSqlCli.java</span>
+            <pre><code><span class="code-line">    <span class="code-keyword">@Option</span>(names = {<span class="code-string">"-q"</span>, <span class="code-string">"--query"</span>}, description = <span class="code-string">"SQL query to execute"</span>)</span><span class="code-line">    <span class="code-keyword">private</span> String query;</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">"This is a flag. Users may type <code>-q</code> or <code>--query</code>. Show this description in the help text."</p>
+              <p class="tl">Whatever text follows the flag gets stored in a variable named <code>query</code>.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-accent animate-in">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">Declare, don't parse</strong>
+            <p>Nobody wrote code to split your command into words and hunt for <code>--query</code>. The project just <em>declares</em> what flags exist, and a library does the tedious work. When you ask AI to "add a flag", the right answer here is one new <code>@Option</code> line, not a hand-written parser.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 5 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The handoff to the engine</h2>
+        <p>Once the front door has checked your flags, it gathers the optional helpers (a cache, indexes, saved views), builds the engine, and asks it one question: <code>execute(query)</code>.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">JsonSqlCli.java</span>
+            <pre><code><span class="code-line">                CacheManager cacheManager = enableCache ? <span class="code-keyword">new</span> <span class="code-function">CacheManager</span>(dataDirectory) : <span class="code-keyword">null</span>;</span><span class="code-line">                IndexManager indexManager = noIndex ? <span class="code-keyword">null</span> : <span class="code-function">loadIndexManagerQuietly</span>();</span><span class="code-line">                MaterializedViewManager viewManager = <span class="code-function">loadViewManagerQuietly</span>();</span><span class="code-line">                QueryExecutor executor = <span class="code-keyword">new</span> <span class="code-function">QueryExecutor</span>(mappingManager, dataDirectory, cacheManager,</span><span class="code-line">                    indexManager, viewManager);</span><span class="code-line">                <span class="code-keyword">if</span> (dryRun) {</span><span class="code-line">                    System.out.<span class="code-function">println</span>(DryRunReporter.<span class="code-function">format</span>(executor.<span class="code-function">dryRunValidate</span>(query), mappingManager));</span><span class="code-line">                    <span class="code-keyword">return</span> <span class="code-number">0</span>;</span><span class="code-line">                }</span><span class="code-line">                result = executor.<span class="code-function">execute</span>(query);</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">If you said <code>--enable-cache</code>, set up a cache. Otherwise use <code>null</code>, which means "nothing here".</p>
+              <p class="tl">Load any indexes, unless you said <code>--no-index</code>.</p>
+              <p class="tl">Load any saved "materialized views" (more on these in Module 4).</p>
+              <p class="tl">Build the engine, handing it the address book of tables, the data folder, and the optional helpers...</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">If you only asked for a <code>--dry-run</code>...</p>
+              <p class="tl">...just check the query is valid and print a report,</p>
+              <p class="tl">and stop without touching any data.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Otherwise, run the real thing and keep the result.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-info animate-in">
+          <div class="callout-icon">🔌</div>
+          <div class="callout-content">
+            <strong class="callout-title">Optional helpers are plugged in, not baked in</strong>
+            <p>The engine works fine with <code>null</code> for the cache, indexes and views. Each speed-up is an add-on you can switch off. That is why turning off caching can never change your answers, only how fast they arrive.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- QUIZ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Check your understanding</h2>
+        <div class="quiz-container" id="quiz-module1">
+
+          <div class="quiz-question-block"
+               data-correct="b"
+               data-explanation-right="JsonSQL does not guess where a table lives inside a file. A mapping like --add-mapping products &quot;$.store.inventory.items&quot; is the missing link between the name you use in SQL and the location in the JSON."
+               data-explanation-wrong="The data and the SQL are both fine. What is missing is the link between the word &quot;products&quot; in your SQL and the spot deep inside the file where the list actually lives. That link is called a mapping.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>A colleague's file keeps products at <code>store → inventory → items</code>. They run <code>SELECT * FROM products</code> and get "No mapping or materialized view found for table: products".</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">What is the fix?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Rewrite the JSON file so products sit at the top level</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Add a mapping telling JsonSQL that "products" means that nested path</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Change the SQL to <code>SELECT * FROM store.inventory.items</code></span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="c"
+               data-explanation-right="The parser only works out what you meant. It never opens a file. All the real work of loading, filtering and sorting happens in the executor, so that is where a wrong result usually comes from."
+               data-explanation-wrong="Close, but think about who actually touches the data. The front door reads flags, the translator only understands the SQL text, and the printer only formats rows it was given. Only the engine loads and filters rows.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>A query with <code>WHERE price &gt; 20</code> returns a product that costs $15. The SQL itself is valid; no error appears.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">Which part of the relay race would you ask AI to investigate first?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The front door (JsonSqlCli)</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The translator (QueryParser)</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The engine (QueryExecutor and its helpers)</span></button>
+              <button class="quiz-option" data-value="d" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The printer (OutputHandler)</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="a"
+               data-explanation-right="New output formats only change the last leg of the race. The query and the rows it produces stay the same; only how they are written out changes. Keeping the change at the edge keeps it small and safe."
+               data-explanation-wrong="Think about which leg of the race changes. The rows the query produces are exactly the same whether you print them as JSON or as a spreadsheet. Only the final formatting step (plus a new value for the --format flag) needs to change.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>You want to ask AI to add a <code>--format tsv</code> option (tab-separated output for spreadsheets).</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">Where should you tell the AI the change belongs?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>In the output stage, plus accepting the new value for the <code>--format</code> flag</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>In the SQL parser, so it understands tabs</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>In the engine, so it produces tab-separated rows directly</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module1')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module1')">Try Again</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</section>

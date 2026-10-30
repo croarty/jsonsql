@@ -1,0 +1,311 @@
+<section class="module" id="module-3" style="background: var(--color-bg-warm)">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">03</span>
+      <h1 class="module-title">The Assembly Line</h1>
+      <p class="module-subtitle">How the engine turns a pile of rows into your answer, one station at a time</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- SCREEN 1 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Eight stations, always in the same order</h2>
+        <p>Picture a car factory. The chassis rolls past welding, then painting, then wheels. You never paint before welding. QueryExecutor works the same way: every query rides the same conveyor belt, and each station does one job to the list of
+          <span class="term" data-definition="A row is one record in a table: one product, one order, one customer. In JsonSQL each row is one JSON object (one pair of curly braces) from the list your mapping points at.">rows</span>
+          it receives.</p>
+
+        <div class="step-cards stagger-children">
+          <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Load</strong><p>Open the backing JSON file(s), follow the mapping, collect the rows</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong><span class="term" data-definition="UNNEST takes a field that holds a list, like tags: [&quot;wireless&quot;, &quot;mouse&quot;], and turns one row into several: one per list item. Written as FROM products, UNNEST(tags) AS t(tag).">UNNEST</span></strong><p>Explode list fields (like <code>tags</code>) into one row per item</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong><span class="term" data-definition="A JOIN combines rows from two tables that share a value, like matching each order to its product using productId = id. A LEFT JOIN also keeps rows that found no partner.">JOIN</span></strong><p>Glue matching rows from other tables onto each row</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">4</div><div class="step-body"><strong>WHERE</strong><p>Throw away rows that fail the condition</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">5</div><div class="step-body"><strong>ORDER BY</strong><p>Sort the survivors</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">6</div><div class="step-body"><strong><span class="term" data-definition="Projection means keeping only some columns of each row, the ones named in your SELECT list. Think of cropping a photo: same rows, less in each one.">Project</span> (SELECT list)</strong><p>Keep only the columns you asked for</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">7</div><div class="step-body"><strong>DISTINCT</strong><p>Remove duplicate rows</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">8</div><div class="step-body"><strong>LIMIT / TOP</strong><p>Cut the list to the first N rows</p></div></div>
+        </div>
+      </section>
+
+      <!-- SCREEN 2 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The last five stations, in code</h2>
+        <p>Each station takes a list and hands a (usually smaller) list to the next. Notice that the
+          <span class="term" data-definition="A comment is a note for humans written inside code (in Java, after //). The computer ignores it. Good comments explain why the code does something, not what it does.">comments</span>
+          (grey lines starting with <code>//</code>) explain <em>why</em> the order matters.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">QueryExecutor.java</span>
+            <pre><code><span class="code-line">        <span class="code-comment">// Apply WHERE clause</span></span><span class="code-line">        List&lt;JsonNode&gt; filteredData = joinedData;</span><span class="code-line">        <span class="code-keyword">if</span> (parsedQuery.<span class="code-function">hasWhere</span>()) {</span><span class="code-line">            filteredData = <span class="code-function">applyWhere</span>(joinedData, parsedQuery.<span class="code-function">getWhereExpression</span>());</span><span class="code-line">        }</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Apply ORDER BY before projection so sort keys not present in the SELECT list</span></span><span class="code-line">        <span class="code-comment">// (e.g. ORDER BY id while selecting only name) remain available.</span></span><span class="code-line">        <span class="code-keyword">if</span> (parsedQuery.<span class="code-function">hasOrderBy</span>()) {</span><span class="code-line">            filteredData = <span class="code-function">applyOrderBy</span>(filteredData, parsedQuery.<span class="code-function">getOrderBy</span>());</span><span class="code-line">        }</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Project SELECT columns</span></span><span class="code-line">        List&lt;JsonNode&gt; projectedData = <span class="code-function">projectColumns</span>(filteredData, parsedQuery.<span class="code-function">getSelectColumns</span>());</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Apply DISTINCT after projection (dedupe the projected rows, preserving sorted order)</span></span><span class="code-line">        <span class="code-keyword">if</span> (parsedQuery.<span class="code-function">isDistinct</span>()) {</span><span class="code-line">            projectedData = <span class="code-function">applyDistinct</span>(projectedData);</span><span class="code-line">        }</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Apply TOP/LIMIT last, so it operates on the final ordered/projected/deduped result set</span></span><span class="code-line">        <span class="code-keyword">if</span> (parsedQuery.<span class="code-function">getEffectiveLimit</span>() != <span class="code-keyword">null</span>) {</span><span class="code-line">            <span class="code-keyword">int</span> limit = parsedQuery.<span class="code-function">getEffectiveLimit</span>().<span class="code-function">intValue</span>();</span><span class="code-line">            projectedData = projectedData.<span class="code-function">subList</span>(<span class="code-number">0</span>, Math.<span class="code-function">min</span>(limit, projectedData.<span class="code-function">size</span>()));</span><span class="code-line">        }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl"><strong>WHERE:</strong> start by assuming every joined row survives.</p>
+              <p class="tl">If there is a condition, keep only the rows that pass it.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl"><strong>ORDER BY</strong> happens while rows still have <em>all</em> their fields. That way you can sort by price even if you only asked to see names.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl"><strong>Project:</strong> now cut each row down to just the columns in your SELECT list.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl"><strong>DISTINCT</strong> runs on the trimmed rows, because "duplicate" should mean "looks the same in your answer".</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl"><strong>LIMIT</strong> comes dead last. Take the first N rows of the finished list, or all of them if there are fewer than N.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 3 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Watch five rows ride the belt</h2>
+        <p>Five products: Desk and Chair (Furniture), Laptop, Phone and Monitor (Electronics). The query is <code>SELECT DISTINCT category FROM products ORDER BY category LIMIT 1</code>.</p>
+
+        <div class="flow-animation" data-steps='[
+          {"highlight":"flow-m3-load","label":"Load: 5 full product rows come off the file"},
+          {"highlight":"flow-m3-where","label":"WHERE: there is no condition, so all 5 rows pass straight through","packet":true,"from":"m3-load","to":"m3-where"},
+          {"highlight":"flow-m3-sort","label":"ORDER BY category: Electronics, Electronics, Electronics, Furniture, Furniture","packet":true,"from":"m3-where","to":"m3-sort"},
+          {"highlight":"flow-m3-proj","label":"Project: each row shrinks to just its category. Still 5 rows.","packet":true,"from":"m3-sort","to":"m3-proj"},
+          {"highlight":"flow-m3-dist","label":"DISTINCT: duplicates collapse. 2 rows left: Electronics, Furniture","packet":true,"from":"m3-proj","to":"m3-dist"},
+          {"highlight":"flow-m3-limit","label":"LIMIT 1: keep the first. The answer is Electronics.","packet":true,"from":"m3-dist","to":"m3-limit"}
+        ]'>
+          <div class="flow-actors">
+            <div class="flow-actor" id="flow-m3-load"><div class="flow-actor-icon">📂</div><span>Load</span></div>
+            <div class="flow-actor" id="flow-m3-where"><div class="flow-actor-icon">⚖️</div><span>WHERE</span></div>
+            <div class="flow-actor" id="flow-m3-sort"><div class="flow-actor-icon">↕️</div><span>ORDER BY</span></div>
+            <div class="flow-actor" id="flow-m3-proj"><div class="flow-actor-icon">✂️</div><span>Project</span></div>
+            <div class="flow-actor" id="flow-m3-dist"><div class="flow-actor-icon">🧹</div><span>DISTINCT</span></div>
+            <div class="flow-actor" id="flow-m3-limit"><div class="flow-actor-icon">🔟</div><span>LIMIT</span></div>
+          </div>
+
+          <div class="flow-packet"></div>
+          <div class="flow-step-label">Click "Next Step" to begin</div>
+
+          <div class="flow-controls">
+            <button class="btn flow-next-btn">Next Step</button>
+            <button class="btn flow-reset-btn">Restart</button>
+            <span class="flow-progress"></span>
+          </div>
+        </div>
+
+        <p>This exact scenario is pinned down by an automated
+          <span class="term" data-definition="A unit test is a small automatic check that runs a piece of code with known input and confirms the output is what you expect. If someone breaks the behavior later, the test fails and tells them. Run them here with 'mvn test'.">unit test</span>
+          in <code>QueryPipelineOrderTest.java</code>, so nobody can quietly reorder the stations.</p>
+      </section>
+
+      <!-- SCREEN 4 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Luggage tags: how rows remember where they came from</h2>
+        <p>When orders and products are joined, both have an <code>id</code>. Which is which? At the airport, every suitcase gets a tag before it joins the shared conveyor. The engine does the same: as each row is loaded, it is wrapped inside an outer object labelled with the table's
+          <span class="term" data-definition="A table alias is a short nickname you give a table in SQL, like the o in FROM orders o. You then write o.id to mean 'the id from orders'. Without one, the table name itself is used.">alias</span>
+          (nickname).</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">QueryExecutor.java</span>
+            <pre><code><span class="code-line">            <span class="code-comment">// Wrap each row with table name for qualified column access</span></span><span class="code-line">            <span class="code-keyword">for</span> (JsonNode node : fileData) {</span><span class="code-line">                <span class="code-keyword">if</span> (node.<span class="code-function">isObject</span>()) {</span><span class="code-line">                    ObjectNode wrappedNode = objectMapper.<span class="code-function">createObjectNode</span>();</span><span class="code-line">                    wrappedNode.<span class="code-function">set</span>(tableInfo.<span class="code-function">getEffectiveName</span>(), (ObjectNode) node);</span><span class="code-line">                    dataList.<span class="code-function">add</span>(wrappedNode);</span><span class="code-line">                } <span class="code-keyword">else</span> {</span><span class="code-line">                    dataList.<span class="code-function">add</span>(node);</span><span class="code-line">                }</span><span class="code-line">            }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Go through every row we read from this file.</p>
+              <p class="tl">If it is a proper record (curly braces)...</p>
+              <p class="tl">...make a new, empty outer envelope,</p>
+              <p class="tl">put the row inside it under the table's nickname, so <code>{"id":7}</code> becomes <code>{"o": {"id":7}}</code>,</p>
+              <p class="tl">and add the envelope to our list.</p>
+              <p class="tl">Anything odd (not a record)...</p>
+              <p class="tl">...is passed along untouched.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+
+        <p>Now <code>o.id</code> means "open envelope <b>o</b>, read <b>id</b>". If you write just <code>id</code>, the engine peeks inside each envelope until it finds one. And for <code>SELECT *</code>, the envelopes are unpacked again so you never see them.</p>
+      </section>
+
+      <!-- SCREEN 5 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">JOIN: matching socks from two baskets</h2>
+        <p>Emptying a laundry basket, you pick up one sock and compare it against every sock in the other basket. That is exactly how the join works: a
+          <span class="term" data-definition="A loop repeats the same block of code once for each item in a list. A nested loop is a loop inside another loop, so the inner one runs completely for every single step of the outer one.">nested loop</span>.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">QueryExecutor.java</span>
+            <pre><code><span class="code-line">        <span class="code-keyword">for</span> (JsonNode leftRow : leftData) {</span><span class="code-line">            <span class="code-keyword">boolean</span> matchFound = <span class="code-keyword">false</span>;</span><span class="code-line"> </span><span class="code-line">            <span class="code-keyword">for</span> (JsonNode rightRow : rightData) {</span><span class="code-line">                <span class="code-keyword">if</span> (<span class="code-function">matchesJoinCondition</span>(leftRow, rightRow, condition)) {</span><span class="code-line">                    <span class="code-comment">// Merge left and right rows</span></span><span class="code-line">                    ObjectNode mergedRow = objectMapper.<span class="code-function">createObjectNode</span>();</span><span class="code-line">                    mergedRow.<span class="code-function">setAll</span>((ObjectNode) leftRow);</span><span class="code-line">                    mergedRow.<span class="code-function">setAll</span>((ObjectNode) rightRow);</span><span class="code-line">                    result.<span class="code-function">add</span>(mergedRow);</span><span class="code-line">                    matchFound = <span class="code-keyword">true</span>;</span><span class="code-line">                }</span><span class="code-line">            }</span><span class="code-line"> </span><span class="code-line">            <span class="code-comment">// For LEFT JOIN, include left row even if no match found</span></span><span class="code-line">            <span class="code-keyword">if</span> (joinInfo.<span class="code-function">isLeftJoin</span>() &amp;&amp; !matchFound) {</span><span class="code-line">                result.<span class="code-function">add</span>(leftRow);</span><span class="code-line">            }</span><span class="code-line">        }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Pick up each order, one at a time.</p>
+              <p class="tl">So far, no partner found for it.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Compare it against <em>every</em> product.</p>
+              <p class="tl">Does this pair satisfy <code>o.productId = p.id</code>?</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Yes: make a combined row containing...</p>
+              <p class="tl">...the order's envelope <b>o</b>...</p>
+              <p class="tl">...and the product's envelope <b>p</b>,</p>
+              <p class="tl">and keep it.</p>
+              <p class="tl">Remember this order found at least one match.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">For a LEFT JOIN, an order with no matching product still gets kept, just without product details.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-accent animate-in">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">Simple code, multiplying cost</strong>
+            <p>1,000 orders × 1,000 products = 1,000,000 comparisons. 10,000 × 10,000 = 100 million. This "compare everything with everything" approach is easy to read and always correct, but slows down fast as data grows. Real databases use a <em>hash join</em>: build a lookup table of products by id once, then each order finds its match instantly.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 6 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The judge: a function that calls itself</h2>
+        <p>A WHERE clause like <code>(category = 'Tools' AND price &gt; 10) OR inStock = true</code> is stored as a tree: OR at the top, with an AND underneath. WhereEvaluator handles it with
+          <span class="term" data-definition="Recursion is when a function solves a problem by calling itself on a smaller piece of it, like Russian nesting dolls. Each AND or OR asks the same evaluate function to judge its two halves.">recursion</span>:
+          to judge an AND, it judges each half using itself.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">WhereEvaluator.java</span>
+            <pre><code><span class="code-line">        <span class="code-comment">// Handle AND</span></span><span class="code-line">        <span class="code-keyword">if</span> (expression <span class="code-keyword">instanceof</span> AndExpression) {</span><span class="code-line">            AndExpression andExpr = (AndExpression) expression;</span><span class="code-line">            <span class="code-keyword">return</span> <span class="code-function">evaluate</span>(row, andExpr.<span class="code-function">getLeftExpression</span>()) &amp;&amp; </span><span class="code-line">                   <span class="code-function">evaluate</span>(row, andExpr.<span class="code-function">getRightExpression</span>());</span><span class="code-line">        }</span><span class="code-line">        </span><span class="code-line">        <span class="code-comment">// Handle OR</span></span><span class="code-line">        <span class="code-keyword">if</span> (expression <span class="code-keyword">instanceof</span> OrExpression) {</span><span class="code-line">            OrExpression orExpr = (OrExpression) expression;</span><span class="code-line">            <span class="code-keyword">return</span> <span class="code-function">evaluate</span>(row, orExpr.<span class="code-function">getLeftExpression</span>()) || </span><span class="code-line">                   <span class="code-function">evaluate</span>(row, orExpr.<span class="code-function">getRightExpression</span>());</span><span class="code-line">        }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Is this piece of the tree an AND?</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Then the row passes only if the left half passes <em>and</em>...</p>
+              <p class="tl">...the right half passes. If the left fails, Java does not even bother checking the right.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Is it an OR?</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Then passing either half is enough...</p>
+              <p class="tl">...and if the left half passes, the right is skipped.</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="badge-list animate-in">
+          <div class="badge-item"><code class="badge-code">LIKE 'Lap%'</code><span class="badge-desc">Translated into a pattern where <code>%</code> means "anything" and <code>_</code> means "any one character"</span></div>
+          <div class="badge-item"><code class="badge-code">ILIKE 'lap%'</code><span class="badge-desc">Same, but lowercases both sides first, so "Laptop" matches</span></div>
+          <div class="badge-item"><code class="badge-code">IN ('A','B')</code><span class="badge-desc">Passes if the value equals any item in the list</span></div>
+          <div class="badge-item"><code class="badge-code">IS NULL</code><span class="badge-desc">Passes if the field is missing <em>or</em> explicitly <code>null</code></span></div>
+        </div>
+      </section>
+
+      <!-- SCREEN 7: SPOT THE BUG -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Spot the bug</h2>
+        <p>Imagine an AI "tidied up" the pipeline and produced this order. One line is in the wrong place. With products sorted by price (Laptop, Phone, Monitor, Desk, Chair), <code>SELECT DISTINCT category FROM products ORDER BY price DESC LIMIT 2</code> now returns only <em>one</em> category. Click the culprit.</p>
+
+        <div class="bug-challenge">
+          <div class="bug-code">
+            <div class="bug-line" onclick="checkBugLine(this, false)" data-hint="Filtering first is right: it shrinks the list before any expensive work.">
+              <span class="line-num">1</span><code>rows = applyWhere(rows, where);</code>
+            </div>
+            <div class="bug-line" onclick="checkBugLine(this, false)" data-hint="Sorting before projection is deliberate, so you can sort by a column you did not select.">
+              <span class="line-num">2</span><code>rows = applyOrderBy(rows, orderBy);</code>
+            </div>
+            <div class="bug-line" onclick="checkBugLine(this, true)" data-explanation="LIMIT ran before DISTINCT. It kept the first 2 rows (Laptop and Phone, both Electronics), and only then removed duplicates, leaving 1. LIMIT must always come last so it counts finished answer rows.">
+              <span class="line-num">3</span><code>rows = rows.subList(0, limit);</code>
+            </div>
+            <div class="bug-line" onclick="checkBugLine(this, false)" data-hint="Projecting before DISTINCT is correct: duplicates should be judged on what you will actually see.">
+              <span class="line-num">4</span><code>rows = projectColumns(rows, columns);</code>
+            </div>
+            <div class="bug-line" onclick="checkBugLine(this, false)" data-hint="DISTINCT itself is fine here. Ask yourself: how many rows did it receive?">
+              <span class="line-num">5</span><code>rows = applyDistinct(rows);</code>
+            </div>
+          </div>
+          <div class="bug-feedback"></div>
+        </div>
+      </section>
+
+      <!-- QUIZ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Check your understanding</h2>
+        <div class="quiz-container" id="quiz-module3">
+
+          <div class="quiz-question-block"
+               data-correct="a"
+               data-explanation-right="Sorting happens at station 5, while every row still has all its fields. Projection (station 6) only removes price afterwards, so the sort works fine."
+               data-explanation-wrong="Look at the order of the stations again. ORDER BY runs before the SELECT list trims columns away, so price is still available when sorting happens.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>You run <code>SELECT name FROM products ORDER BY price DESC</code>. Price is not in your SELECT list.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">What happens?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It works: names come back sorted by price, and price is not shown</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Error: you cannot sort by a column you did not select</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It runs, but the sort is ignored because price is gone</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="b"
+               data-explanation-right="The join compares every left row against every right row. Asking for a lookup table (a hash map keyed by the join column) turns 100 million comparisons into roughly 20,000 quick lookups, without changing results."
+               data-explanation-wrong="Caching avoids re-reading files, and indexes skip whole files, but neither changes how the join itself compares rows. The bottleneck is the nested loop: every order checked against every product. The fix is a lookup table keyed by the join column.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>A join between 10,000 orders and 10,000 products takes far longer than loading either file. The files themselves are small.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">What is the best thing to ask AI for?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>"Turn on --enable-cache by default"</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>"Change performJoin to build a hash map of the right-hand rows by join key, instead of a nested loop"</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>"Move the JOIN station after LIMIT so there are fewer rows to join"</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="c"
+               data-explanation-right="UNNEST runs before JOIN on purpose (the git history even says &quot;UNNEST before JOIN so we can actually join on those properties&quot;). Each array element becomes its own row first, so the join can match on it."
+               data-explanation-wrong="Think about what the join needs. To match on an individual tag, each tag must already be its own row. That only works because UNNEST is station 2 and JOIN is station 3.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>Each product has a <code>tags</code> list. You want to join each individual tag against a separate "tag descriptions" table.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">Why is this possible in JsonSQL?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>JOIN automatically looks inside lists</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>WHERE can compare against list items</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>UNNEST runs before JOIN, so each tag is already its own row</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module3')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module3')">Try Again</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</section>

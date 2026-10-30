@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.Option;
+import com.jsonsql.DebugMode;
 import com.jsonsql.config.CacheManager;
 import com.jsonsql.config.MappingManager;
 import com.jsonsql.index.IndexManager;
@@ -107,11 +108,11 @@ public class QueryExecutor implements FieldAccessor {
         
         // Execute CTEs first if present
         if (parsedQuery.hasCTEs()) {
-            if (System.getenv("DEBUG") != null) {
+            if (DebugMode.isEnabled()) {
                 System.err.println("DEBUG: Query has CTEs, count: " + parsedQuery.getCommonTableExpressions().size());
             }
             executeCTEs(parsedQuery, context);
-        } else if (System.getenv("DEBUG") != null) {
+        } else if (DebugMode.isEnabled()) {
             System.err.println("DEBUG: Query has no CTEs");
         }
         
@@ -270,13 +271,15 @@ public class QueryExecutor implements FieldAccessor {
      * Execute a UNION query and return the combined results.
      */
     private String executeUnionQuery(UnionQuery unionQuery, QueryExecutionContext context) throws Exception {
-        List<JsonNode> allResults = new ArrayList<>();
+        List<JsonNode> finalResults = new ArrayList<>();
         
-        // Execute each sub-query and combine results
+        // Execute each sub-query and combine results. Operators are left-associative, so
+        // "A UNION ALL B UNION C" de-duplicates (A + B + C) while "A UNION B UNION ALL C"
+        // keeps C's rows even if they repeat earlier ones.
         for (int i = 0; i < unionQuery.getSubQueries().size(); i++) {
             ParsedQuery subQuery = unionQuery.getSubQueries().get(i);
             
-            if (System.getenv("DEBUG") != null) {
+            if (DebugMode.isEnabled()) {
                 System.err.println("DEBUG: Executing UNION query part " + (i + 1));
             }
             
@@ -284,14 +287,14 @@ public class QueryExecutor implements FieldAccessor {
             JsonNode resultArray = objectMapper.readTree(resultJson);
             
             if (resultArray.isArray()) {
-                resultArray.forEach(node -> allResults.add((JsonNode) objectMapper.valueToTree(node)));
+                for (JsonNode node : resultArray) {
+                    finalResults.add(node);
+                }
             }
-        }
-        
-        // Apply UNION deduplication if not UNION ALL
-        List<JsonNode> finalResults = allResults;
-        if (!unionQuery.isAll() && !allResults.isEmpty()) {
-            finalResults = applyDistinct(allResults);
+
+            if (i > 0 && !unionQuery.isAllAt(i - 1)) {
+                finalResults = applyDistinct(finalResults);
+            }
         }
         
         // Apply ORDER BY if specified (before LIMIT)
@@ -317,22 +320,27 @@ public class QueryExecutor implements FieldAccessor {
      * Checks cache first if caching is enabled.
      */
     private void executeCTEs(ParsedQuery parsedQuery, QueryExecutionContext context) throws Exception {
-        if (System.getenv("DEBUG") != null) {
+        if (DebugMode.isEnabled()) {
             System.err.println("DEBUG: executeCTEs called, CTE count: " + parsedQuery.getCommonTableExpressions().size());
         }
+        // Cache keys of the CTEs computed so far, so a CTE reading an earlier CTE inherits its
+        // source fingerprint (and is invalidated when that CTE's sources change).
+        Map<String, String> cteCacheKeys = new LinkedHashMap<>();
         for (Map.Entry<String, ParsedQuery> cteEntry : parsedQuery.getCommonTableExpressions().entrySet()) {
             String cteName = cteEntry.getKey();
             ParsedQuery cteQuery = cteEntry.getValue();
             
-            if (System.getenv("DEBUG") != null) {
+            if (DebugMode.isEnabled()) {
                 System.err.println("DEBUG: Processing CTE: " + cteName);
             }
             
             List<JsonNode> cteData = null;
+            String cteCacheKey = null;
             
             // Check cache first if enabled
             if (cacheManager != null) {
-                String cteCacheKey = generateCTECacheKey(cteName, cteQuery);
+                cteCacheKey = generateCTECacheKey(cteName, cteQuery, cteCacheKeys);
+                cteCacheKeys.put(cteName, cteCacheKey);
                 cteData = cacheManager.getCachedCTE(cteCacheKey);
                 
                 if (cteData != null) {
@@ -355,24 +363,23 @@ public class QueryExecutor implements FieldAccessor {
             // Save to cache if enabled
             if (cacheManager != null && cteData != null && !cteData.isEmpty()) {
                 try {
-                    String cteCacheKey = generateCTECacheKey(cteName, cteQuery);
-                    if (System.getenv("DEBUG") != null) {
+                    if (DebugMode.isEnabled()) {
                         System.err.println("DEBUG: Caching CTE " + cteName + " with key: " + cteCacheKey + ", data size: " + cteData.size());
                     }
                     cacheManager.saveCTEToCache(cteCacheKey, cteData);
-                    if (System.getenv("DEBUG") != null) {
+                    if (DebugMode.isEnabled()) {
                         System.err.println("DEBUG: CTE cache saved successfully");
                     }
                 } catch (Exception e) {
                     // If cache save fails, continue without caching
                     // This shouldn't break the query execution
                     // Log error in debug mode
-                    if (System.getenv("DEBUG") != null) {
+                    if (DebugMode.isEnabled()) {
                         System.err.println("Failed to cache CTE " + cteName + ": " + e.getMessage());
                         e.printStackTrace();
                     }
                 }
-            } else if (System.getenv("DEBUG") != null) {
+            } else if (DebugMode.isEnabled()) {
                 System.err.println("DEBUG: Not caching CTE " + cteName + " - cacheManager=" + (cacheManager != null) + ", cteData=" + (cteData != null) + ", isEmpty=" + (cteData == null ? "N/A" : cteData.isEmpty()));
             }
             
@@ -384,8 +391,11 @@ public class QueryExecutor implements FieldAccessor {
     /**
      * Generate a deterministic cache key for a CTE based on its query structure.
      * The key includes: CTE name, table name, WHERE clause, and other relevant parts.
+     *
+     * @param upstreamCteKeys cache keys of CTEs defined earlier in the same WITH list
      */
-    private String generateCTECacheKey(String cteName, ParsedQuery cteQuery) {
+    private String generateCTECacheKey(String cteName, ParsedQuery cteQuery,
+                                       Map<String, String> upstreamCteKeys) {
         StringBuilder keyBuilder = new StringBuilder();
         keyBuilder.append("CTE:").append(cteName).append(":");
         
@@ -452,20 +462,29 @@ public class QueryExecutor implements FieldAccessor {
         }
 
         // Add source freshness fingerprint so editing the underlying JSON invalidates the CTE cache
-        String fromFingerprint = sourceFingerprint(cteQuery.getFromTable());
-        if (!fromFingerprint.isEmpty()) {
-            keyBuilder.append("SRC:").append(fromFingerprint).append(":");
-        }
+        appendSourceFingerprint(keyBuilder, "SRC", cteQuery.getFromTable(), upstreamCteKeys);
         if (cteQuery.hasJoins()) {
             for (var join : cteQuery.getJoins()) {
-                String joinFingerprint = sourceFingerprint(join.getTable());
-                if (!joinFingerprint.isEmpty()) {
-                    keyBuilder.append("JOINSRC:").append(joinFingerprint).append(":");
-                }
+                appendSourceFingerprint(keyBuilder, "JOINSRC", join.getTable(), upstreamCteKeys);
             }
         }
 
         return keyBuilder.toString();
+    }
+
+    private void appendSourceFingerprint(StringBuilder keyBuilder, String label, TableInfo tableInfo,
+                                         Map<String, String> upstreamCteKeys) {
+        if (tableInfo == null || tableInfo.getTableName() == null) {
+            return;
+        }
+        // CTE references shadow mappings/views, mirroring loadTableData's resolution order.
+        String upstream = CteNames.resolveKey(upstreamCteKeys, tableInfo.getTableName());
+        String fingerprint = upstream != null
+            ? "CTE[" + upstreamCteKeys.get(upstream) + "]"
+            : sourceFingerprint(tableInfo);
+        if (!fingerprint.isEmpty()) {
+            keyBuilder.append(label).append(":").append(fingerprint).append(":");
+        }
     }
 
     /**
@@ -640,12 +659,18 @@ public class QueryExecutor implements FieldAccessor {
 
     /**
      * Build a freshness fingerprint (path + last-modified + size) for a table's backing
-     * file(s). Returns an empty string for unmapped tables (e.g. CTE references), which
-     * have no source file. Used to make CTE cache keys sensitive to source changes.
+     * file(s), or for a materialized view's stored row file. Returns an empty string for
+     * names with no backing file. Used to make CTE cache keys sensitive to source changes.
      */
     private String sourceFingerprint(TableInfo tableInfo) {
         if (tableInfo == null || tableInfo.getTableName() == null) {
             return "";
+        }
+        if (isMaterializedView(tableInfo.getTableName())) {
+            File storeFile = viewStore.storeFile(tableInfo.getTableName());
+            return storeFile.exists()
+                ? "view:" + tableInfo.getTableName() + "@" + storeFile.lastModified() + ":" + storeFile.length()
+                : "";
         }
         try {
             ParsedQuery probe = new ParsedQuery();

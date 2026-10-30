@@ -1,0 +1,354 @@
+<section class="module" id="module-2" style="background: var(--color-bg)">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">02</span>
+      <h1 class="module-title">Meet the Cast</h1>
+      <p class="module-subtitle">Who does what inside JsonSQL, so you can tell AI exactly where a change belongs</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- SCREEN 1 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">A map of the whole building</h2>
+        <p>The code is split into
+          <span class="term" data-definition="In Java, a package is a folder of related code files with a dotted name like com.jsonsql.query. It is how big projects stay organized. You might tell AI 'put this in the index package'.">packages</span>,
+          each one a department with a clear job. Each file inside usually holds one
+          <span class="term" data-definition="A class is a blueprint for a kind of thing in the code, bundling data with the actions (methods) that work on it. QueryParser is a class; so is MappingManager.">class</span>.
+          Click any box to see what it does.</p>
+
+        <div class="arch-diagram animate-in">
+          <div class="arch-zone">
+            <h4 class="arch-zone-label">Front door · com.jsonsql</h4>
+            <div class="arch-component" data-desc="JsonSqlCli: reads your flags, refuses confusing combinations (like --query plus --list-tables), routes you to the right job, and turns any failure into a friendly message plus exit code 1.">
+              <div class="arch-icon">🚪</div><span>JsonSqlCli</span>
+            </div>
+          </div>
+          <div class="arch-zone">
+            <h4 class="arch-zone-label">Things it remembers · config/</h4>
+            <div class="arch-component" data-desc="MappingManager: the address book. Remembers that the table name 'products' means a particular list inside a particular JSON file. Stored in .jsonsql-mappings.json.">
+              <div class="arch-icon">📒</div><span>MappingManager</span>
+            </div>
+            <div class="arch-component" data-desc="QueryManager: your saved queries, stored by name in .jsonsql-queries.json so you can re-run them with --run-query.">
+              <div class="arch-icon">🔖</div><span>QueryManager</span>
+            </div>
+            <div class="arch-component" data-desc="QueryParameterReplacer: fills in ${placeholders} in saved queries with the values you pass via --param, or with a default value.">
+              <div class="arch-icon">🧩</div><span>QueryParameterReplacer</span>
+            </div>
+            <div class="arch-component" data-desc="CacheManager: optional. Saves already-processed data to disk so the next run can skip re-reading big files.">
+              <div class="arch-icon">🧊</div><span>CacheManager</span>
+            </div>
+          </div>
+          <div class="arch-zone">
+            <h4 class="arch-zone-label">The query engine · query/</h4>
+            <div class="arch-component" data-desc="QueryParser: turns SQL text into a ParsedQuery, a tidy structured description of what you asked for. Uses the JSqlParser library to do the hard grammar work.">
+              <div class="arch-icon">📖</div><span>QueryParser</span>
+            </div>
+            <div class="arch-component" data-desc="QueryExecutor: the engine room. Loads the data, then runs the steps in order: unnest, join, filter, sort, pick columns, dedupe, limit.">
+              <div class="arch-icon">⚙️</div><span>QueryExecutor</span>
+            </div>
+            <div class="arch-component" data-desc="WhereEvaluator: the judge. Given one row and the WHERE condition, answers yes or no. Handles AND, OR, NOT, LIKE, IN, IS NULL and comparisons.">
+              <div class="arch-icon">⚖️</div><span>WhereEvaluator</span>
+            </div>
+            <div class="arch-component" data-desc="TableFileResolver: works out which actual files on disk back a table, including walking whole folders of JSON files.">
+              <div class="arch-icon">🗂️</div><span>TableFileResolver</span>
+            </div>
+          </div>
+          <div class="arch-zone">
+            <h4 class="arch-zone-label">Speed-ups · index/ and view/</h4>
+            <div class="arch-component" data-desc="IndexBuilder and IndexPlanner: build small summaries of each file, then use them to skip files that cannot possibly contain a match.">
+              <div class="arch-icon">🔎</div><span>Index*</span>
+            </div>
+            <div class="arch-component" data-desc="MaterializedView*: save the result of an expensive sub-query to disk under a name, so later queries can read it like a table.">
+              <div class="arch-icon">🏛️</div><span>MaterializedView*</span>
+            </div>
+          </div>
+          <div class="arch-zone">
+            <h4 class="arch-zone-label">Showing results · output/ and introspection/</h4>
+            <div class="arch-component" data-desc="OutputHandler and CsvFormatter: turn result rows into pretty JSON or CSV and send them to the screen, a file, or the clipboard.">
+              <div class="arch-icon">🖨️</div><span>OutputHandler</span>
+            </div>
+            <div class="arch-component" data-desc="TableDescriber: powers --describe. Peeks at up to 200 rows and reports every field, its type, and a sample value.">
+              <div class="arch-icon">🔬</div><span>TableDescriber</span>
+            </div>
+          </div>
+          <div class="arch-description">Click any component to learn what it does</div>
+        </div>
+      </section>
+
+      <!-- SCREEN 2 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The address book: MappingManager</h2>
+        <p>Think of the "saved places" in a maps app. You save "Home" once, and from then on you never type the full street address. A mapping does the same for data: the short name <code>products</code> stands in for "the list at this
+          <span class="term" data-definition="JSONPath is a mini-language for pointing at a spot inside a JSON document, like a street address. $ means 'the top of the file' and each .name steps one level deeper, so $.data.products means 'go into data, then products'.">JSONPath</span>,
+          inside this file".</p>
+
+        <div class="badge-list animate-in">
+          <div class="badge-item">
+            <code class="badge-code">$.products</code>
+            <span class="badge-desc">Path only. Read it from <code>products.json</code> in the data folder.</span>
+          </div>
+          <div class="badge-item">
+            <code class="badge-code">orders.json:$.orders</code>
+            <span class="badge-desc">A specific file, then a path inside it.</span>
+          </div>
+          <div class="badge-item">
+            <code class="badge-code">products-multi:$.products</code>
+            <span class="badge-desc">A whole folder. Every <code>.json</code> file inside (even in sub-folders) is combined into one table.</span>
+          </div>
+          <div class="badge-item">
+            <code class="badge-code">C:\data\items.json:$.items</code>
+            <span class="badge-desc">A full Windows path. Note the extra colon after <code>C</code>.</span>
+          </div>
+        </div>
+
+        <p>That last one is a trap. If the code split the text at the <em>first</em> colon, <code>C:\data...</code> would be cut in half. Here is how the code avoids it:</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">MappingManager.java</span>
+            <pre><code><span class="code-line">    <span class="code-keyword">private int</span> <span class="code-function">filenameDelimiterIndex</span>(String mapping) {</span><span class="code-line">        <span class="code-keyword">if</span> (mapping == <span class="code-keyword">null</span> || mapping.<span class="code-function">startsWith</span>(<span class="code-string">"$"</span>)) {</span><span class="code-line">            <span class="code-keyword">return</span> -<span class="code-number">1</span>;</span><span class="code-line">        }</span><span class="code-line">        <span class="code-keyword">int</span> idx = mapping.<span class="code-function">indexOf</span>(<span class="code-string">":$"</span>);</span><span class="code-line">        <span class="code-keyword">return</span> idx &gt; <span class="code-number">0</span> ? idx : -<span class="code-number">1</span>;</span><span class="code-line">    }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">"Where does the file name end and the JSONPath begin?"</p>
+              <p class="tl">If the mapping starts with <code>$</code>, there is no file name at all...</p>
+              <p class="tl">...so answer -1, meaning "not found".</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Otherwise, look for a colon <em>immediately followed by</em> a dollar sign. A drive letter like <code>C:\</code> never matches that.</p>
+              <p class="tl">Return where that split point is, or -1 if there isn't one.</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 3 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The translator: QueryParser</h2>
+        <p>Remember diagramming sentences at school, labelling the subject, verb and object? That is what
+          <span class="term" data-definition="To parse is to read raw text and work out its structure, the way you read a sentence and identify its subject and verb. A parser is the code that does this.">parsing</span>
+          is. JsonSQL hands your SQL to a library called JSqlParser, which builds a structured tree. QueryParser then copies the parts it cares about into its own simpler
+          <span class="term" data-definition="An object is a bundle of data in memory built from a class blueprint. A ParsedQuery object holds one specific query's details: its table, its columns, its WHERE condition, and so on.">object</span>,
+          a <code>ParsedQuery</code>.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">QueryParser.java</span>
+            <pre><code><span class="code-line">        <span class="code-comment">// Parse DISTINCT</span></span><span class="code-line">        <span class="code-keyword">if</span> (plainSelect.<span class="code-function">getDistinct</span>() != <span class="code-keyword">null</span>) {</span><span class="code-line">            query.<span class="code-function">setDistinct</span>(<span class="code-keyword">true</span>);</span><span class="code-line">        }</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Parse SELECT clause</span></span><span class="code-line">        <span class="code-function">parseSelectItems</span>(plainSelect, query);</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Parse FROM clause</span></span><span class="code-line">        <span class="code-function">parseFromClause</span>(plainSelect, query);</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Parse JOINs</span></span><span class="code-line">        <span class="code-function">parseJoins</span>(plainSelect, query);</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Parse WHERE clause</span></span><span class="code-line">        <span class="code-keyword">if</span> (plainSelect.<span class="code-function">getWhere</span>() != <span class="code-keyword">null</span>) {</span><span class="code-line">            query.<span class="code-function">setWhereExpression</span>(plainSelect.<span class="code-function">getWhere</span>());</span><span class="code-line">        }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Did you write <code>SELECT DISTINCT</code>?</p>
+              <p class="tl">Then tick the "remove duplicates" box on our plan.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Write down which columns you asked for.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Write down which table you are reading from (and its nickname).</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Write down any tables to join on.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">If there is a WHERE condition...</p>
+              <p class="tl">...keep it as-is, still in tree form. The judge will read it later, row by row.</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-accent animate-in">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">Understanding is separate from doing</strong>
+            <p>The parser never opens a file; the executor never reads raw SQL text. This split is called <em>separation of concerns</em>. It means a test can check "did we understand the SQL correctly?" without any data at all, and the <code>--dry-run</code> flag can validate a query without running it.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 4 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Overheard in the group chat</h2>
+        <p>Here is what the cast says to each other while answering a join query:<br>
+          <code>SELECT p.name, o.quantity FROM orders o JOIN products p ON o.productId = p.id WHERE o.status = 'active'</code></p>
+
+        <div class="chat-window animate-in" id="chat-module2">
+          <div class="chat-messages">
+            <div class="chat-message" data-msg="0" data-sender="cli" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-1)">C</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-1)">JsonSqlCli</span>
+                <p>New query from the terminal. Only one action requested, data folder exists. QueryExecutor, over to you.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="1" data-sender="exec" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">E</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">QueryExecutor</span>
+                <p>QueryParser, can you read this SQL for me? I only speak "plan".</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="2" data-sender="parser" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-3)">P</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-3)">QueryParser</span>
+                <p>Here you go: FROM <b>orders</b> nicknamed <b>o</b>. JOIN <b>products</b> nicknamed <b>p</b> where o.productId = p.id. Keep rows where o.status = 'active'. Output p.name and o.quantity.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="3" data-sender="exec" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">E</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">QueryExecutor</span>
+                <p>MappingManager, where do "orders" and "products" live?</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="4" data-sender="map" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-4)">M</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-4)">MappingManager</span>
+                <p>orders → <code>complex-orders.json</code> at <code>$.orders[*]</code>. products → <code>complex-products.json</code> at <code>$.products[*]</code>.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="5" data-sender="exec" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">E</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">QueryExecutor</span>
+                <p>Loaded both. I've put every order in an envelope labelled <b>o</b> and every product in one labelled <b>p</b>, so nobody confuses whose <code>id</code> is whose. Joined them up.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="6" data-sender="where" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-5)">W</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-5)">WhereEvaluator</span>
+                <p>Row 1: o.status is "active". Keep. Row 2: "cancelled". Drop. Row 3: no status field at all, so that counts as NULL. Drop.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="7" data-sender="exec" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">E</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">QueryExecutor</span>
+                <p>Trimmed the survivors down to just name and quantity. OutputHandler, they're yours.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="8" data-sender="out" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-text-secondary)">O</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-text-secondary)">OutputHandler</span>
+                <p>Printed the rows to stdout. Any status messages from me go to stderr, so if someone pipes the output into another tool it stays clean JSON.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="chat-typing" style="display:none">
+            <div class="chat-avatar" id="chat-module2-typing-avatar">?</div>
+            <div class="chat-typing-dots">
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+            </div>
+          </div>
+
+          <div class="chat-controls">
+            <button class="btn chat-next-btn">Next Message</button>
+            <button class="btn chat-all-btn">Play All</button>
+            <button class="btn chat-reset-btn">Replay</button>
+            <span class="chat-progress"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 5 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The borrowed tools</h2>
+        <p>JsonSQL's own code is mostly glue. The heavy lifting is done by well-known libraries, listed in the project's
+          <span class="term" data-definition="Maven is Java's build tool. It downloads the libraries a project needs, compiles the code, runs the tests (mvn test), and packages everything into a runnable .jar file (mvn package). Its settings live in pom.xml.">Maven</span>
+          settings file, <code>pom.xml</code>.</p>
+
+        <div class="pattern-cards stagger-children">
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-1)">
+            <div class="pattern-icon" style="background: var(--color-actor-1)">🎛️</div>
+            <h4 class="pattern-title">Picocli</h4>
+            <p class="pattern-desc">Turns <code>--flags</code> into variables and writes the <code>--help</code> page for free.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)">
+            <div class="pattern-icon" style="background: var(--color-actor-2)">🫘</div>
+            <h4 class="pattern-title">Jackson</h4>
+            <p class="pattern-desc">Reads and writes JSON. Every row in the engine is a Jackson <code>JsonNode</code>, a shape-agnostic container.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)">
+            <div class="pattern-icon" style="background: var(--color-actor-3)">🧭</div>
+            <h4 class="pattern-title">Jayway JSONPath</h4>
+            <p class="pattern-desc">Follows a mapping like <code>$.data.products</code> to find the right list inside a file.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-4)">
+            <div class="pattern-icon" style="background: var(--color-actor-4)">🌳</div>
+            <h4 class="pattern-title">JSqlParser</h4>
+            <p class="pattern-desc">Understands SQL grammar. Pinned to version 4.9 on purpose, because 5.x changed its structure.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-5)">
+            <div class="pattern-icon" style="background: var(--color-actor-5)">✅</div>
+            <h4 class="pattern-title">JUnit 5</h4>
+            <p class="pattern-desc">Runs the 50+ automated test files that prove each feature still works.</p>
+          </div>
+        </div>
+
+        <div class="callout callout-info animate-in">
+          <div class="callout-icon">📌</div>
+          <div class="callout-content">
+            <strong class="callout-title">Why "pinned" matters</strong>
+            <p>If an AI tool suggests "upgrade JSqlParser to the latest version", that is not a free win here. The <code>pom.xml</code> comment warns that 5.x has breaking changes. A
+              <span class="term" data-definition="A breaking change is an update to a library that changes how it works in a way that stops existing code from compiling or behaving correctly. Upgrading past one usually means rewriting the code that uses it.">breaking change</span>
+              would ripple through the parser and the WHERE evaluator.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- QUIZ: DRAG AND DROP -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Who should handle it?</h2>
+        <p>Drag each cast member to the change request they should own.</p>
+
+        <div class="dnd-container" id="dnd-module2">
+          <div class="dnd-chips">
+            <div class="dnd-chip" draggable="true" data-answer="cli">JsonSqlCli</div>
+            <div class="dnd-chip" draggable="true" data-answer="map">MappingManager</div>
+            <div class="dnd-chip" draggable="true" data-answer="parser">QueryParser</div>
+            <div class="dnd-chip" draggable="true" data-answer="where">WhereEvaluator</div>
+            <div class="dnd-chip" draggable="true" data-answer="out">OutputHandler</div>
+          </div>
+          <div class="dnd-zones">
+            <div class="dnd-zone" data-correct="where">
+              <p class="dnd-zone-label">Support <code>WHERE price BETWEEN 10 AND 50</code></p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+            <div class="dnd-zone" data-correct="cli">
+              <p class="dnd-zone-label">Stop people combining <code>--describe</code> with <code>--query</code></p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+            <div class="dnd-zone" data-correct="parser">
+              <p class="dnd-zone-label">Give a clear error when someone types a <code>DELETE</code> statement</p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+            <div class="dnd-zone" data-correct="out">
+              <p class="dnd-zone-label">Add a pretty ASCII-table output format</p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+            <div class="dnd-zone" data-correct="map">
+              <p class="dnd-zone-label">Reject a new mapping that has no <code>$</code> in it</p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+          </div>
+          <button class="btn" onclick="checkDnD('dnd-module2')">Check Matches</button>
+          <button class="btn" onclick="resetDnD('dnd-module2')">Reset</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</section>

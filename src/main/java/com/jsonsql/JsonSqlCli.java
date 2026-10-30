@@ -32,7 +32,7 @@ import java.util.concurrent.Callable;
 @Command(
     name = "jsonsql",
     mixinStandardHelpOptions = true,
-    version = "JsonSQL 1.5.0",
+    version = "JsonSQL 1.6.0",
     description = "Query JSON files using SQL-like syntax"
 )
 public class JsonSqlCli implements Callable<Integer> {
@@ -374,16 +374,9 @@ public class JsonSqlCli implements Callable<Integer> {
 
     /**
      * Determine whether DEBUG diagnostics (stack traces) should be printed.
-     * Enabled only when the DEBUG env var holds a truthy value; values like
-     * "", "0", "false", "no", "off" are treated as disabled.
      */
     static boolean isDebugEnabled() {
-        String debug = System.getenv("DEBUG");
-        if (debug == null) {
-            return false;
-        }
-        String v = debug.trim().toLowerCase();
-        return !(v.isEmpty() || v.equals("0") || v.equals("false") || v.equals("no") || v.equals("off"));
+        return DebugMode.isEnabled();
     }
 
     /**
@@ -534,7 +527,7 @@ public class JsonSqlCli implements Callable<Integer> {
         }
 
         if (listIndexes) {
-            listDeclaredIndexes(indexManager, indexStore, mappingManager);
+            listDeclaredIndexes(indexManager, indexStore, mappingManager, viewManager, viewStore);
             return 0;
         }
 
@@ -590,7 +583,9 @@ public class JsonSqlCli implements Callable<Integer> {
     }
 
     private void listDeclaredIndexes(IndexManager indexManager, IndexStore indexStore,
-                                     MappingManager mappingManager) {
+                                     MappingManager mappingManager,
+                                     MaterializedViewManager viewManager,
+                                     MaterializedViewStore viewStore) {
         List<IndexDefinition> defs = indexManager.getAllIndexes();
         if (defs.isEmpty()) {
             System.out.println("No declared indexes.");
@@ -601,7 +596,11 @@ public class JsonSqlCli implements Callable<Integer> {
         System.out.println("─".repeat(72));
         for (IndexDefinition def : defs) {
             TableIndex idx = indexStore.load(def.getTable(), def.getField());
-            String status = indexFreshness(def, idx, mappingManager);
+            boolean isView = viewManager != null && viewManager.hasView(def.getTable())
+                && !mappingManager.hasMapping(def.getTable());
+            String status = isView
+                ? viewIndexFreshness(idx, viewStore.storeFile(def.getTable()))
+                : indexFreshness(def, idx, mappingManager);
             String detail = idx == null
                 ? "(not built)"
                 : idx.getKind() + ", " + idx.getFiles().size() + " file(s)";
@@ -609,6 +608,20 @@ public class JsonSqlCli implements Callable<Integer> {
         }
         System.out.println("─".repeat(72));
         System.out.println("Total: " + defs.size() + " index(es)");
+    }
+
+    /**
+     * An index on a materialized view summarizes the view's single row file; it is fresh
+     * while that file is unchanged since the index was built.
+     */
+    private String viewIndexFreshness(TableIndex idx, File storeFile) {
+        if (idx == null || !MaterializedViewBuilder.INDEX_JSON_PATH_MARKER.equals(idx.getJsonPath())
+            || idx.getFiles().size() != 1 || !storeFile.exists()) {
+            return "STALE";
+        }
+        FileSummary summary = idx.getFiles().get(0);
+        return summary.getMtime() == storeFile.lastModified() && summary.getSize() == storeFile.length()
+            ? "FRESH" : "STALE";
     }
 
     /**

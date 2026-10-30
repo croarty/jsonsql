@@ -1,0 +1,293 @@
+<section class="module" id="module-4" style="background: var(--color-bg)">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">04</span>
+      <h1 class="module-title">Working Smarter, Not Harder</h1>
+      <p class="module-subtitle">Three optional tricks that make repeat questions fast, and the rule that keeps them from ever giving wrong answers</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- SCREEN 1 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The expensive part: reading the whole file</h2>
+        <p>Before any filtering happens, every backing file is read into
+          <span class="term" data-definition="Memory (RAM) is the computer's short-term workspace: very fast, but limited and wiped when the program ends. Loading a 500 MB file means holding roughly that much (often more) in memory at once.">memory</span>
+          in one gulp. There is no
+          <span class="term" data-definition="Streaming means processing data a little at a time as it arrives, like drinking through a straw instead of pouring the whole glass in your mouth. It keeps memory use small for huge files.">streaming</span>.
+          Even <code>LIMIT 1</code> loads everything first, because LIMIT is the last station on the belt.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">QueryExecutor.java</span>
+            <pre><code><span class="code-line">    <span class="code-keyword">private</span> List&lt;JsonNode&gt; <span class="code-function">loadFromFile</span>(File jsonFile, String jsonPathExpression) <span class="code-keyword">throws</span> IOException {</span><span class="code-line">        <span class="code-comment">// Read JSON file</span></span><span class="code-line">        String jsonContent = Files.<span class="code-function">readString</span>(jsonFile.<span class="code-function">toPath</span>());</span><span class="code-line">        </span><span class="code-line">        <span class="code-comment">// Apply JSONPath</span></span><span class="code-line">        Object result = JsonPath.<span class="code-function">using</span>(jsonPathConfig).<span class="code-function">parse</span>(jsonContent).<span class="code-function">read</span>(jsonPathExpression);</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">"Load the rows from this file, using this mapping path."</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Read the <em>entire</em> file into one giant piece of text.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Parse all of it, then walk the path (e.g. <code>$.data.products</code>) to find the list we want.</p>
+            </div>
+          </div>
+        </div>
+
+        <p>So the three speed-ups all attack the same cost from different angles:</p>
+
+        <div class="pattern-cards stagger-children">
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)">
+            <div class="pattern-icon" style="background: var(--color-actor-2)">🧊</div>
+            <h4 class="pattern-title">Cache</h4>
+            <p class="pattern-desc">Read the same file <em>faster</em> next time. <code>--enable-cache</code></p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)">
+            <div class="pattern-icon" style="background: var(--color-actor-3)">🔎</div>
+            <h4 class="pattern-title">Index</h4>
+            <p class="pattern-desc">Don't read files that <em>can't</em> contain a match. <code>--add-index</code></p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-4)">
+            <div class="pattern-icon" style="background: var(--color-actor-4)">🏛️</div>
+            <h4 class="pattern-title">Materialized view</h4>
+            <p class="pattern-desc">Save a heavy query's <em>answer</em> and reuse it as a table. <code>--materialize-view</code></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 2 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The cache: photocopies stamped with an edition number</h2>
+        <p>Imagine photocopying a chapter so you don't have to fetch the heavy book again. The danger: the book gets a new edition and your copy is now wrong. JsonSQL's fix is to write the book's "edition" (its last-saved time and size) into the name of every copy. A
+          <span class="term" data-definition="A cache is a stash of already-computed results kept somewhere fast, so the next request can skip the slow work. Browsers cache images; JsonSQL caches parsed JSON on disk in .jsonsql-cache/.">cache</span>
+          entry for an old edition simply never gets asked for again.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CacheManager.java</span>
+            <pre><code><span class="code-line">        <span class="code-keyword">long</span> lastModified = jsonFile.<span class="code-function">lastModified</span>();</span><span class="code-line">        <span class="code-keyword">long</span> length = jsonFile.<span class="code-function">length</span>();</span><span class="code-line">        <span class="code-keyword">try</span> {</span><span class="code-line">            String absolutePath = jsonFile.<span class="code-function">getAbsolutePath</span>();</span><span class="code-line">            <span class="code-comment">// Combine file path, JSONPath, mtime and size for a freshness-sensitive cache key</span></span><span class="code-line">            String cacheKey = absolutePath + <span class="code-string">"|"</span> + jsonPathExpression + <span class="code-string">"|"</span> + lastModified + <span class="code-string">"|"</span> + length;</span><span class="code-line">            String hash = <span class="code-function">hashPath</span>(cacheKey);</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">When was this data file last saved?</p>
+              <p class="tl">How many bytes is it?</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Where exactly is it on disk?</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Glue together: location + which list inside it + save time + size. Change any one and you get a different
+                <span class="term" data-definition="A cache key is the label used to look something up in a cache. Two requests with the same key get the same stored answer, so everything that could change the answer must be part of the key.">cache key</span>.</p>
+              <p class="tl">Squash that long label into a short fixed-length code (a
+                <span class="term" data-definition="A hash is a short 'fingerprint' computed from any amount of text. The same input always gives the same hash; a tiny change gives a completely different one. Here it is used to make a safe file name.">hash</span>) to use as the cache file's name.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-accent animate-in">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">Put freshness in the key, not in a cleanup job</strong>
+            <p>Programmers joke that <em>cache invalidation</em> (knowing when stored copies are out of date) is one of the two hardest problems in computing. Folding "what could change the answer" into the key side-steps it entirely. When you ask AI to cache something, ask: "what goes into the cache key?" If anything that affects the result is missing, you will get stale answers.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 3 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Indexes: reading the labels on the binders</h2>
+        <p>Picture a shelf of binders, one per data file. Each spine has a sticky label: "contains categories: Tools, Office · prices 5 to 240". Looking for something over $500? You can skip that binder without opening it. JsonSQL's
+          <span class="term" data-definition="An index is a small summary built ahead of time that lets you find things without scanning everything, like the index at the back of a book. JsonSQL's indexes summarize each file, so whole files can be skipped.">index</span>
+          builds exactly these labels, called file summaries.</p>
+
+        <p><strong>Query:</strong> <code>SELECT * FROM catalog WHERE category = 'Tools' AND price &gt; 500</code> (illustrative summaries)</p>
+
+        <div class="pattern-cards stagger-children">
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-success)">
+            <h4 class="pattern-title">tools/2024.json · KEEP</h4>
+            <p class="pattern-desc">categories: Tools<br>price: 12 to 899<br>Could hold a match, so it must be read.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-error); opacity: 0.6">
+            <h4 class="pattern-title">tools/2021.json · SKIP</h4>
+            <p class="pattern-desc">categories: Tools<br>price: 4 to 310<br>Max price 310 is not over 500. Nothing here can match.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-error); opacity: 0.6">
+            <h4 class="pattern-title">office/2024.json · SKIP</h4>
+            <p class="pattern-desc">categories: Office<br>price: 3 to 1,200<br>No "Tools" anywhere in it.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-success)">
+            <h4 class="pattern-title">misc.json · KEEP</h4>
+            <p class="pattern-desc">No fresh summary (file edited since the index was built). Can't prove anything, so read it.</p>
+          </div>
+        </div>
+
+        <p>Here is the check for a "greater than" style condition on numbers. It only needs the label's min and max:</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">IndexPlanner.java</span>
+            <pre><code><span class="code-line">        <span class="code-keyword">if</span> (<span class="code-string">"number"</span>.<span class="code-function">equals</span>(type)) {</span><span class="code-line">            <span class="code-keyword">double</span> v;</span><span class="code-line">            <span class="code-keyword">try</span> {</span><span class="code-line">                v = Double.<span class="code-function">parseDouble</span>(value);</span><span class="code-line">            } <span class="code-keyword">catch</span> (NumberFormatException e) {</span><span class="code-line">                <span class="code-keyword">return true</span>;</span><span class="code-line">            }</span><span class="code-line">            <span class="code-keyword">switch</span> (op) {</span><span class="code-line">                <span class="code-keyword">case</span> <span class="code-string">"&gt;"</span>:  <span class="code-keyword">return</span> max.<span class="code-function">asDouble</span>() &gt; v;</span><span class="code-line">                <span class="code-keyword">case</span> <span class="code-string">"&gt;="</span>: <span class="code-keyword">return</span> max.<span class="code-function">asDouble</span>() &gt;= v;</span><span class="code-line">                <span class="code-keyword">case</span> <span class="code-string">"&lt;"</span>:  <span class="code-keyword">return</span> min.<span class="code-function">asDouble</span>() &lt; v;</span><span class="code-line">                <span class="code-keyword">case</span> <span class="code-string">"&lt;="</span>: <span class="code-keyword">return</span> min.<span class="code-function">asDouble</span>() &lt;= v;</span><span class="code-line">                <span class="code-keyword">default</span>:   <span class="code-keyword">return true</span>;</span><span class="code-line">            }</span><span class="code-line">        }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">If this field holds numbers in this file...</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">try to read the query's value (e.g. 500) as a number.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">If it isn't a number...</p>
+              <p class="tl">...answer "maybe it matches". Never skip on a guess.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Otherwise, depending on the comparison:</p>
+              <p class="tl"><code>price &gt; 500</code> can only match if the biggest price here is over 500.</p>
+              <p class="tl">Same idea for "at least".</p>
+              <p class="tl"><code>price &lt; 10</code> can only match if the smallest price here is under 10.</p>
+              <p class="tl">Same idea for "at most".</p>
+              <p class="tl">Anything unexpected: "maybe", keep the file.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 4 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The golden rule: when in doubt, read the file</h2>
+        <p>Skipping a file that <em>did</em> contain a match would silently give you a wrong answer, which is far worse than a slow one. So the whole index system is wrapped in a safety net:</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">IndexPlanner.java</span>
+            <pre><code><span class="code-line">    <span class="code-keyword">public</span> List&lt;File&gt; <span class="code-function">prune</span>(TableInfo fromTable, ParsedQuery query, List&lt;File&gt; currentFiles) {</span><span class="code-line">        <span class="code-keyword">try</span> {</span><span class="code-line">            <span class="code-keyword">return</span> <span class="code-function">doPrune</span>(fromTable, query, currentFiles);</span><span class="code-line">        } <span class="code-keyword">catch</span> (RuntimeException e) {</span><span class="code-line">            <span class="code-keyword">return</span> currentFiles;</span><span class="code-line">        }</span><span class="code-line">    }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">"Given these files, which ones do we actually need to read?"</p>
+              <p class="tl">Try the clever pruning logic...</p>
+              <p class="tl">...and return the shorter list if it works.</p>
+              <p class="tl">If <em>anything</em> goes wrong in there (an
+                <span class="term" data-definition="An exception is Java's way of signalling 'something went wrong' mid-task. It jumps out of the current code until a 'catch' block handles it. Uncaught, it crashes the program.">exception</span>)...</p>
+              <p class="tl">...give back the full, original list. Slower, but always right.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="icon-rows">
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-success-light)">✅</div>
+            <div><strong>Can be used to skip files</strong><p>Conditions every row must meet (joined by AND) using <code>=</code>, <code>IN</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>, backed by a fresh summary</p></div>
+          </div>
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-error-light)">🚫</div>
+            <div><strong>Never used to skip</strong><p>OR groups, NOT IN, LIKE, missing or stale summaries, a changed mapping. Other AND conditions can still help; if none are usable, every file is read.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 5 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Materialized views: the printed monthly report</h2>
+        <p>Your finance team doesn't recompute last month's totals every time someone asks; they print a report, date it, and file it. A materialized view does that for a heavy
+          <span class="term" data-definition="A CTE (Common Table Expression) is a named sub-query written with WITH name AS (SELECT ...). It lets you build a temporary table and then query it, like naming an intermediate step in a recipe.">CTE</span>.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">TERMINAL (from MATERIALIZED-VIEWS.md)</span>
+            <pre><code><span class="code-line"><span class="code-function">jsonsql</span> <span class="code-keyword">--materialize-view</span> expensive \</span><span class="code-line">  <span class="code-keyword">--query</span> <span class="code-string">"WITH expensive AS (SELECT id, category, price FROM catalog_large WHERE price &gt; 100) SELECT * FROM expensive"</span> \</span><span class="code-line">  <span class="code-keyword">--data-dir</span> example-data</span><span class="code-line"> </span><span class="code-line"><span class="code-comment"># later, as if it were an ordinary table:</span></span><span class="code-line"><span class="code-function">jsonsql</span> -q <span class="code-string">"SELECT id, category FROM expensive WHERE category = 'Electronics'"</span> <span class="code-keyword">--data-dir</span> example-data</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">"Save a report called <em>expensive</em>..."</p>
+              <p class="tl">"...made of every catalog item over $100." The rows are written to <code>.jsonsql-views/expensive.json</code>, and a fingerprint of the source files is recorded in <code>.jsonsql-views.json</code>.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Later queries read the small saved report instead of rescanning the whole catalog.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-info animate-in">
+          <div class="callout-icon">🗓️</div>
+          <div class="callout-content">
+            <strong class="callout-title">Stale, but honest</strong>
+            <p>If the source files change after the view was built, the view is marked <strong>STALE</strong>. It still returns the stored rows (that is the point of a saved report) but prints a warning telling you to run <code>--rebuild-view</code>. This is a deliberate trade-off between speed and freshness, and the tool tells you which one you are getting.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- QUIZ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Check your understanding</h2>
+        <div class="quiz-container" id="quiz-module4">
+
+          <div class="quiz-question-block"
+               data-correct="b"
+               data-explanation-right="Saving the file changes its last-modified time (and usually its size). Those are part of the cache key, so JsonSQL looks for a cache entry that does not exist yet, re-reads the file, and stores a fresh copy."
+               data-explanation-wrong="Remember the edition-number trick: the file's save time and size are baked into the cache key. Editing the file produces a new key, which is automatically a cache miss. No manual clearing is needed.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>You run a query with <code>--enable-cache</code>, then fix a typo in <code>products.json</code> by hand and run the same query again.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">What do you get?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The old, cached data with the typo, until you run <code>--clear-cache</code></span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The corrected data, because the edit changed the cache key</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>An error saying the cache is out of date</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="c"
+               data-explanation-right="An OR means a row could match through either side, so no single summary can prove a file is empty of matches. The planner only uses conditions that every result row must satisfy (AND), so it reads every file and the answer stays correct."
+               data-explanation-wrong="With OR, a file with no Tools could still contain a product over 500, and vice versa. The planner cannot safely rule a file out, so it falls back to reading every file. Correctness first, speed second.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>You have indexes on both <code>category</code> and <code>price</code>. You run <code>WHERE category = 'Tools' OR price &gt; 500</code> over 16 files.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">How many files does the index let JsonSQL skip?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Every file that has neither Tools nor any price over 500</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only files with no Tools</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>None. OR conditions are not used for skipping, so all 16 are read</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="a"
+               data-explanation-right="A missing summary means &quot;we know nothing about this file&quot;. Skipping it could drop real matches and silently return a wrong answer. The system's rule is to skip only when a fresh summary proves a file cannot match."
+               data-explanation-wrong="Think about what a missing summary tells you: nothing. Skipping a file you know nothing about could silently drop real results. A wrong answer that looks right is the worst kind of bug, which is why the planner always keeps files it cannot rule out.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>An AI suggests: "To speed things up, if a file has no index summary yet, just skip it."</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">How should you respond?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Reject it. A file with no summary might hold matches; only skip what a summary proves is empty</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Accept it. New files are rare, so the risk is small</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Accept it, but print a warning</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module4')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module4')">Try Again</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</section>

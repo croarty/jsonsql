@@ -66,7 +66,9 @@ class JsonSqlCliTest {
         String[] base = {
             "-d", dataDir.toString(),
             "-c", mappingFile.toString(),
-            "--queries-file", queriesFile.toString()
+            "--queries-file", queriesFile.toString(),
+            "--indexes-file", tempDir.resolve(".jsonsql-indexes.json").toString(),
+            "--views-file", tempDir.resolve(".jsonsql-views.json").toString()
         };
         String[] all = new String[base.length + args.length];
         System.arraycopy(base, 0, all, 0, base.length);
@@ -249,5 +251,40 @@ class JsonSqlCliTest {
         CliResult r = runCli(withConfig("--run-query", "names", "--dry-run"));
         assertEquals(0, r.exitCode());
         assertTrue(r.out().contains("Dry run OK"));
+    }
+
+    @Test
+    void testUnsupportedGroupByFailsWithClearErrorAndNoOutput() {
+        CliResult r = runCli(withConfig("-q", "SELECT name FROM products GROUP BY name"));
+        assertEquals(1, r.exitCode());
+        assertTrue(r.err().contains("GROUP BY is not supported"), r.err());
+        assertEquals("", r.out(), "no partial result may be written to stdout");
+    }
+
+    @Test
+    void testUnsupportedAggregateFailsWithClearError() {
+        CliResult r = runCli(withConfig("-q", "SELECT COUNT(*) FROM products"));
+        assertEquals(1, r.exitCode());
+        assertTrue(r.err().contains("COUNT(*)"), r.err());
+        assertTrue(r.err().contains("is not supported"), r.err());
+    }
+
+    @Test
+    void testDryRunRejectsUnsupportedSyntax() {
+        CliResult r = runCli(withConfig("-q", "SELECT name FROM products LIMIT 1 OFFSET 1", "--dry-run"));
+        assertEquals(1, r.exitCode());
+        assertTrue(r.err().contains("OFFSET / FETCH is not supported"), r.err());
+        assertFalse(r.out().contains("Dry run OK"));
+    }
+
+    @Test
+    void testSavedQueryWithUnsupportedSyntaxFailsWhenRun() {
+        // Saving does not validate SQL; running it must still fail loudly.
+        CliResult save = runCli(withConfig("--save-query", "bad", "-q",
+            "SELECT p.name FROM products p RIGHT JOIN products q ON p.id = q.id"));
+        assertEquals(0, save.exitCode());
+        CliResult run = runCli(withConfig("--run-query", "bad"));
+        assertEquals(1, run.exitCode());
+        assertTrue(run.err().contains("RIGHT JOIN is not supported"), run.err());
     }
 }

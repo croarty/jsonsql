@@ -1,0 +1,1695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How JsonSQL Works</title>
+
+  <!-- Google Fonts: Bricolage Grotesque · DM Sans · JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400;1,9..40,500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+
+  <!--
+    CUSTOMIZE PER COURSE — change only the three accent variables below.
+    Options:
+      vermillion  #D94F30 / #C4432A / #FDEEE9 / #E8836C  (default)
+      coral       #E06B56 / #C85A47 / #FDECEA / #E89585
+      teal        #2A7B9B / #1F6280 / #E4F2F7 / #5A9DB8
+      amber       #D4A843 / #BF9530 / #FDF5E0 / #E0C070
+      forest      #2D8B55 / #226B41 / #E8F5EE / #5AAD7A
+  -->
+  <style>
+    :root {
+      --color-accent:       #D94F30;
+      --color-accent-hover: #C4432A;
+      --color-accent-light: #FDEEE9;
+      --color-accent-muted: #E8836C;
+    }
+  </style>
+
+  <script src="main.js" defer></script>
+</head>
+<body>
+
+  <nav class="nav" id="nav">
+    <div class="progress-bar" id="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+    <div class="nav-inner">
+      <span class="nav-title">How JsonSQL Works</span>
+      <div class="nav-dots" id="nav-dots" role="tablist">
+        <button class="nav-dot" data-target="module-1" data-tooltip="From Question to Answer" role="tab" aria-label="Module 1: From Question to Answer"></button>
+        <button class="nav-dot" data-target="module-2" data-tooltip="Meet the Cast" role="tab" aria-label="Module 2: Meet the Cast"></button>
+        <button class="nav-dot" data-target="module-3" data-tooltip="The Assembly Line" role="tab" aria-label="Module 3: The Assembly Line"></button>
+        <button class="nav-dot" data-target="module-4" data-tooltip="Working Smarter" role="tab" aria-label="Module 4: Working Smarter"></button>
+        <button class="nav-dot" data-target="module-5" data-tooltip="When Things Go Wrong" role="tab" aria-label="Module 5: When Things Go Wrong"></button>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main">
+    <!-- modules/*.html content is assembled here by build.sh -->
+<section class="module" id="module-1" style="background: var(--color-bg-warm)">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">01</span>
+      <h1 class="module-title">From Question to Answer</h1>
+      <p class="module-subtitle">What JsonSQL does, and what happens in the half-second after you press Enter</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- SCREEN 1 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">A search engine for your data files</h2>
+        <p>Lots of software stores information in
+          <span class="term" data-definition="JSON (JavaScript Object Notation) is a plain-text format for storing structured data using curly braces {} for records and square brackets [] for lists. Almost every app and API speaks it. When talking to AI you can say 'the API returns JSON'.">JSON</span>
+          files: long, nested text documents full of curly braces. They are easy for computers to write, but painful for humans to ask questions of. "Which products cost more than $20?" usually means writing a custom program.</p>
+        <p>JsonSQL lets you ask that question in
+          <span class="term" data-definition="SQL (Structured Query Language) is the standard language for asking questions of data: SELECT the columns you want, FROM a table, WHERE some condition is true. It has been around since the 1970s, so almost every developer and AI model knows it.">SQL</span>
+          instead, straight from your
+          <span class="term" data-definition="The terminal (also called the command line or shell) is the text window where you type commands instead of clicking buttons. PowerShell on Windows and Terminal on macOS are examples.">terminal</span>.
+          No database to install, no setup of the data's shape ahead of time.</p>
+
+        <div class="flow-steps">
+          <div class="flow-step">
+            <div class="flow-step-num">1</div>
+            <p><strong>A JSON file</strong><br>products, orders, customers, nested any way you like</p>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">
+            <div class="flow-step-num">2</div>
+            <p><strong>A SQL question</strong><br><code>SELECT name, price FROM products WHERE price &gt; 20</code></p>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">
+            <div class="flow-step-num">3</div>
+            <p><strong>An answer</strong><br>clean JSON or a CSV you can open in Excel</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 2 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">What it looks like in practice</h2>
+        <p>Here is a real data file from the project's tests, and a real question you might ask it. Notice the products are buried two levels deep, inside <code>data</code> and then <code>products</code>.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">src/test/resources/products.json</span>
+            <pre><code><span class="code-line">{</span><span class="code-line">  <span class="code-property">"data"</span>: {</span><span class="code-line">    <span class="code-property">"products"</span>: [</span><span class="code-line">      {</span><span class="code-line">        <span class="code-property">"id"</span>: <span class="code-number">1</span>,</span><span class="code-line">        <span class="code-property">"name"</span>: <span class="code-string">"Widget"</span>,</span><span class="code-line">        <span class="code-property">"price"</span>: <span class="code-number">19.99</span>,</span><span class="code-line">        <span class="code-property">"category"</span>: <span class="code-string">"Tools"</span>,</span><span class="code-line">        <span class="code-property">"inStock"</span>: <span class="code-keyword">true</span></span><span class="code-line">      },</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">The whole file is one big object (the outer curly braces).</p>
+              <p class="tl">Inside it is a section called "data"...</p>
+              <p class="tl">...which holds a <em>list</em> (square bracket) of products.</p>
+              <p class="tl">Each product is its own little record in curly braces.</p>
+              <p class="tl">It has an id number,</p>
+              <p class="tl">a name (text goes in quotes),</p>
+              <p class="tl">a price (numbers do not need quotes),</p>
+              <p class="tl">a category,</p>
+              <p class="tl">and a true/false flag for whether it is in stock.</p>
+              <p class="tl">More products follow, same shape.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">TERMINAL</span>
+            <pre><code><span class="code-line"><span class="code-comment"># one-time: tell JsonSQL where "products" lives</span></span><span class="code-line"><span class="code-function">jsonsql</span> <span class="code-keyword">--add-mapping</span> products <span class="code-string">"$.data.products"</span></span><span class="code-line"> </span><span class="code-line"><span class="code-comment"># then ask questions</span></span><span class="code-line"><span class="code-function">jsonsql</span> <span class="code-keyword">--query</span> <span class="code-string">"SELECT name, price FROM products WHERE price &gt; 20"</span> <span class="code-keyword">--pretty</span></span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">First, a one-time setup step.</p>
+              <p class="tl">"When I say <em>products</em>, I mean the list found at data → products." This is saved to a small settings file.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">From now on you can just ask questions.</p>
+              <p class="tl">"Give me the name and price of every product over 20, nicely formatted." Out comes <code>[{"name":"Gadget","price":29.99}]</code>.</p>
+            </div>
+          </div>
+        </div>
+
+        <p>Each <code>--something</code> is a
+          <span class="term" data-definition="A flag is an option you add to a command to change its behavior, like --pretty for nicely indented output. When talking to AI you would say 'add a --verbose flag that prints extra detail'.">flag</span>.
+          JsonSQL is a
+          <span class="term" data-definition="A CLI (Command-Line Interface) is a program you control by typing commands and flags in a terminal, rather than clicking on a graphical window. git and npm are famous CLIs.">CLI</span>
+          tool: it has no windows or buttons, just flags.</p>
+      </section>
+
+      <!-- SCREEN 3 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The journey of one question</h2>
+        <p>Pressing Enter sets off a relay race between four parts of the program. Step through it to watch your question become an answer.</p>
+
+        <div class="flow-animation" data-steps='[
+          {"highlight":"flow-m1-you","label":"You type a jsonsql command with a --query flag and press Enter"},
+          {"highlight":"flow-m1-cli","label":"The front door (JsonSqlCli) reads your flags and checks they make sense together","packet":true,"from":"m1-you","to":"m1-cli"},
+          {"highlight":"flow-m1-parser","label":"The translator (QueryParser) turns your SQL text into a structured plan the computer can follow","packet":true,"from":"m1-cli","to":"m1-parser"},
+          {"highlight":"flow-m1-exec","label":"The engine (QueryExecutor) opens the JSON file, finds the products list, and filters, sorts and trims it","packet":true,"from":"m1-parser","to":"m1-exec"},
+          {"highlight":"flow-m1-out","label":"The printer (OutputHandler) formats the rows as JSON or CSV","packet":true,"from":"m1-exec","to":"m1-out"},
+          {"highlight":"flow-m1-you","label":"The answer lands on your screen, a file, or your clipboard. Exit code 0 means success.","packet":true,"from":"m1-out","to":"m1-you"}
+        ]'>
+          <div class="flow-actors">
+            <div class="flow-actor" id="flow-m1-you">
+              <div class="flow-actor-icon">⌨️</div>
+              <span>You</span>
+            </div>
+            <div class="flow-actor" id="flow-m1-cli">
+              <div class="flow-actor-icon">🚪</div>
+              <span>JsonSqlCli</span>
+            </div>
+            <div class="flow-actor" id="flow-m1-parser">
+              <div class="flow-actor-icon">📖</div>
+              <span>QueryParser</span>
+            </div>
+            <div class="flow-actor" id="flow-m1-exec">
+              <div class="flow-actor-icon">⚙️</div>
+              <span>QueryExecutor</span>
+            </div>
+            <div class="flow-actor" id="flow-m1-out">
+              <div class="flow-actor-icon">🖨️</div>
+              <span>OutputHandler</span>
+            </div>
+          </div>
+
+          <div class="flow-packet"></div>
+          <div class="flow-step-label">Click "Next Step" to begin</div>
+
+          <div class="flow-controls">
+            <button class="btn flow-next-btn">Next Step</button>
+            <button class="btn flow-reset-btn">Restart</button>
+            <span class="flow-progress"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 4 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Where it all begins: three lines</h2>
+        <p>Every
+          <span class="term" data-definition="Java is a popular programming language, especially for business software. Java programs are compiled into a .jar file and run on the Java Virtual Machine (JVM), which is why you start this tool with 'java -jar'.">Java</span>
+          program has a starting point called <code>main</code>, the
+          <span class="term" data-definition="The entry point is the very first piece of code that runs when a program starts. Knowing where it is tells you where to begin reading any codebase.">entry point</span>.
+          JsonSQL's is tiny, because it hands almost all the work to a helper
+          <span class="term" data-definition="A library is pre-written code from someone else that you plug into your project so you do not reinvent the wheel. JsonSQL uses libraries for reading flags, parsing JSON and understanding SQL.">library</span>
+          called Picocli.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">JsonSqlCli.java</span>
+            <pre><code><span class="code-line">    <span class="code-keyword">public static void</span> <span class="code-function">main</span>(String[] args) {</span><span class="code-line">        <span class="code-keyword">int</span> exitCode = <span class="code-keyword">new</span> <span class="code-function">CommandLine</span>(<span class="code-keyword">new</span> <span class="code-function">JsonSqlCli</span>()).<span class="code-function">execute</span>(args);</span><span class="code-line">        System.<span class="code-function">exit</span>(exitCode);</span><span class="code-line">    }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">"Start here." <code>args</code> is everything you typed after <code>jsonsql</code>, chopped into words.</p>
+              <p class="tl">Hand those words to Picocli. It matches each flag to a setting, then runs the tool and gets back a result number.</p>
+              <p class="tl">Quit, reporting that number to whoever launched us: 0 for "worked", 1 for "something went wrong".</p>
+              <p class="tl">Done.</p>
+            </div>
+          </div>
+        </div>
+
+        <p>How does Picocli know what <code>--query</code> means? Each flag is declared right next to the
+          <span class="term" data-definition="A variable is a named box that holds a value while the program runs. Here the box called 'query' will hold whatever SQL text you typed.">variable</span>
+          that will hold its value, using a label called an
+          <span class="term" data-definition="An annotation is a tag starting with @ that you attach to code to give it extra meaning, like a sticky note for a library to read. @Option tells Picocli 'this variable is a command-line flag'.">annotation</span>:</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">JsonSqlCli.java</span>
+            <pre><code><span class="code-line">    <span class="code-keyword">@Option</span>(names = {<span class="code-string">"-q"</span>, <span class="code-string">"--query"</span>}, description = <span class="code-string">"SQL query to execute"</span>)</span><span class="code-line">    <span class="code-keyword">private</span> String query;</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">"This is a flag. Users may type <code>-q</code> or <code>--query</code>. Show this description in the help text."</p>
+              <p class="tl">Whatever text follows the flag gets stored in a variable named <code>query</code>.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-accent animate-in">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">Declare, don't parse</strong>
+            <p>Nobody wrote code to split your command into words and hunt for <code>--query</code>. The project just <em>declares</em> what flags exist, and a library does the tedious work. When you ask AI to "add a flag", the right answer here is one new <code>@Option</code> line, not a hand-written parser.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 5 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The handoff to the engine</h2>
+        <p>Once the front door has checked your flags, it gathers the optional helpers (a cache, indexes, saved views), builds the engine, and asks it one question: <code>execute(query)</code>.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">JsonSqlCli.java</span>
+            <pre><code><span class="code-line">                CacheManager cacheManager = enableCache ? <span class="code-keyword">new</span> <span class="code-function">CacheManager</span>(dataDirectory) : <span class="code-keyword">null</span>;</span><span class="code-line">                IndexManager indexManager = noIndex ? <span class="code-keyword">null</span> : <span class="code-function">loadIndexManagerQuietly</span>();</span><span class="code-line">                MaterializedViewManager viewManager = <span class="code-function">loadViewManagerQuietly</span>();</span><span class="code-line">                QueryExecutor executor = <span class="code-keyword">new</span> <span class="code-function">QueryExecutor</span>(mappingManager, dataDirectory, cacheManager,</span><span class="code-line">                    indexManager, viewManager);</span><span class="code-line">                <span class="code-keyword">if</span> (dryRun) {</span><span class="code-line">                    System.out.<span class="code-function">println</span>(DryRunReporter.<span class="code-function">format</span>(executor.<span class="code-function">dryRunValidate</span>(query), mappingManager));</span><span class="code-line">                    <span class="code-keyword">return</span> <span class="code-number">0</span>;</span><span class="code-line">                }</span><span class="code-line">                result = executor.<span class="code-function">execute</span>(query);</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">If you said <code>--enable-cache</code>, set up a cache. Otherwise use <code>null</code>, which means "nothing here".</p>
+              <p class="tl">Load any indexes, unless you said <code>--no-index</code>.</p>
+              <p class="tl">Load any saved "materialized views" (more on these in Module 4).</p>
+              <p class="tl">Build the engine, handing it the address book of tables, the data folder, and the optional helpers...</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">If you only asked for a <code>--dry-run</code>...</p>
+              <p class="tl">...just check the query is valid and print a report,</p>
+              <p class="tl">and stop without touching any data.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Otherwise, run the real thing and keep the result.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-info animate-in">
+          <div class="callout-icon">🔌</div>
+          <div class="callout-content">
+            <strong class="callout-title">Optional helpers are plugged in, not baked in</strong>
+            <p>The engine works fine with <code>null</code> for the cache, indexes and views. Each speed-up is an add-on you can switch off. That is why turning off caching can never change your answers, only how fast they arrive.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- QUIZ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Check your understanding</h2>
+        <div class="quiz-container" id="quiz-module1">
+
+          <div class="quiz-question-block"
+               data-correct="b"
+               data-explanation-right="JsonSQL does not guess where a table lives inside a file. A mapping like --add-mapping products &quot;$.store.inventory.items&quot; is the missing link between the name you use in SQL and the location in the JSON."
+               data-explanation-wrong="The data and the SQL are both fine. What is missing is the link between the word &quot;products&quot; in your SQL and the spot deep inside the file where the list actually lives. That link is called a mapping.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>A colleague's file keeps products at <code>store → inventory → items</code>. They run <code>SELECT * FROM products</code> and get "No mapping or materialized view found for table: products".</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">What is the fix?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Rewrite the JSON file so products sit at the top level</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Add a mapping telling JsonSQL that "products" means that nested path</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Change the SQL to <code>SELECT * FROM store.inventory.items</code></span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="c"
+               data-explanation-right="The parser only works out what you meant. It never opens a file. All the real work of loading, filtering and sorting happens in the executor, so that is where a wrong result usually comes from."
+               data-explanation-wrong="Close, but think about who actually touches the data. The front door reads flags, the translator only understands the SQL text, and the printer only formats rows it was given. Only the engine loads and filters rows.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>A query with <code>WHERE price &gt; 20</code> returns a product that costs $15. The SQL itself is valid; no error appears.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">Which part of the relay race would you ask AI to investigate first?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The front door (JsonSqlCli)</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The translator (QueryParser)</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The engine (QueryExecutor and its helpers)</span></button>
+              <button class="quiz-option" data-value="d" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The printer (OutputHandler)</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="a"
+               data-explanation-right="New output formats only change the last leg of the race. The query and the rows it produces stay the same; only how they are written out changes. Keeping the change at the edge keeps it small and safe."
+               data-explanation-wrong="Think about which leg of the race changes. The rows the query produces are exactly the same whether you print them as JSON or as a spreadsheet. Only the final formatting step (plus a new value for the --format flag) needs to change.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>You want to ask AI to add a <code>--format tsv</code> option (tab-separated output for spreadsheets).</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">Where should you tell the AI the change belongs?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>In the output stage, plus accepting the new value for the <code>--format</code> flag</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>In the SQL parser, so it understands tabs</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>In the engine, so it produces tab-separated rows directly</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module1')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module1')">Try Again</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</section>
+<section class="module" id="module-2" style="background: var(--color-bg)">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">02</span>
+      <h1 class="module-title">Meet the Cast</h1>
+      <p class="module-subtitle">Who does what inside JsonSQL, so you can tell AI exactly where a change belongs</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- SCREEN 1 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">A map of the whole building</h2>
+        <p>The code is split into
+          <span class="term" data-definition="In Java, a package is a folder of related code files with a dotted name like com.jsonsql.query. It is how big projects stay organized. You might tell AI 'put this in the index package'.">packages</span>,
+          each one a department with a clear job. Each file inside usually holds one
+          <span class="term" data-definition="A class is a blueprint for a kind of thing in the code, bundling data with the actions (methods) that work on it. QueryParser is a class; so is MappingManager.">class</span>.
+          Click any box to see what it does.</p>
+
+        <div class="arch-diagram animate-in">
+          <div class="arch-zone">
+            <h4 class="arch-zone-label">Front door · com.jsonsql</h4>
+            <div class="arch-component" data-desc="JsonSqlCli: reads your flags, refuses confusing combinations (like --query plus --list-tables), routes you to the right job, and turns any failure into a friendly message plus exit code 1.">
+              <div class="arch-icon">🚪</div><span>JsonSqlCli</span>
+            </div>
+          </div>
+          <div class="arch-zone">
+            <h4 class="arch-zone-label">Things it remembers · config/</h4>
+            <div class="arch-component" data-desc="MappingManager: the address book. Remembers that the table name 'products' means a particular list inside a particular JSON file. Stored in .jsonsql-mappings.json.">
+              <div class="arch-icon">📒</div><span>MappingManager</span>
+            </div>
+            <div class="arch-component" data-desc="QueryManager: your saved queries, stored by name in .jsonsql-queries.json so you can re-run them with --run-query.">
+              <div class="arch-icon">🔖</div><span>QueryManager</span>
+            </div>
+            <div class="arch-component" data-desc="QueryParameterReplacer: fills in ${placeholders} in saved queries with the values you pass via --param, or with a default value.">
+              <div class="arch-icon">🧩</div><span>QueryParameterReplacer</span>
+            </div>
+            <div class="arch-component" data-desc="CacheManager: optional. Saves already-processed data to disk so the next run can skip re-reading big files.">
+              <div class="arch-icon">🧊</div><span>CacheManager</span>
+            </div>
+          </div>
+          <div class="arch-zone">
+            <h4 class="arch-zone-label">The query engine · query/</h4>
+            <div class="arch-component" data-desc="QueryParser: turns SQL text into a ParsedQuery, a tidy structured description of what you asked for. Uses the JSqlParser library to do the hard grammar work.">
+              <div class="arch-icon">📖</div><span>QueryParser</span>
+            </div>
+            <div class="arch-component" data-desc="QueryExecutor: the engine room. Loads the data, then runs the steps in order: unnest, join, filter, sort, pick columns, dedupe, limit.">
+              <div class="arch-icon">⚙️</div><span>QueryExecutor</span>
+            </div>
+            <div class="arch-component" data-desc="WhereEvaluator: the judge. Given one row and the WHERE condition, answers yes or no. Handles AND, OR, NOT, LIKE, IN, IS NULL and comparisons.">
+              <div class="arch-icon">⚖️</div><span>WhereEvaluator</span>
+            </div>
+            <div class="arch-component" data-desc="TableFileResolver: works out which actual files on disk back a table, including walking whole folders of JSON files.">
+              <div class="arch-icon">🗂️</div><span>TableFileResolver</span>
+            </div>
+          </div>
+          <div class="arch-zone">
+            <h4 class="arch-zone-label">Speed-ups · index/ and view/</h4>
+            <div class="arch-component" data-desc="IndexBuilder and IndexPlanner: build small summaries of each file, then use them to skip files that cannot possibly contain a match.">
+              <div class="arch-icon">🔎</div><span>Index*</span>
+            </div>
+            <div class="arch-component" data-desc="MaterializedView*: save the result of an expensive sub-query to disk under a name, so later queries can read it like a table.">
+              <div class="arch-icon">🏛️</div><span>MaterializedView*</span>
+            </div>
+          </div>
+          <div class="arch-zone">
+            <h4 class="arch-zone-label">Showing results · output/ and introspection/</h4>
+            <div class="arch-component" data-desc="OutputHandler and CsvFormatter: turn result rows into pretty JSON or CSV and send them to the screen, a file, or the clipboard.">
+              <div class="arch-icon">🖨️</div><span>OutputHandler</span>
+            </div>
+            <div class="arch-component" data-desc="TableDescriber: powers --describe. Peeks at up to 200 rows and reports every field, its type, and a sample value.">
+              <div class="arch-icon">🔬</div><span>TableDescriber</span>
+            </div>
+          </div>
+          <div class="arch-description">Click any component to learn what it does</div>
+        </div>
+      </section>
+
+      <!-- SCREEN 2 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The address book: MappingManager</h2>
+        <p>Think of the "saved places" in a maps app. You save "Home" once, and from then on you never type the full street address. A mapping does the same for data: the short name <code>products</code> stands in for "the list at this
+          <span class="term" data-definition="JSONPath is a mini-language for pointing at a spot inside a JSON document, like a street address. $ means 'the top of the file' and each .name steps one level deeper, so $.data.products means 'go into data, then products'.">JSONPath</span>,
+          inside this file".</p>
+
+        <div class="badge-list animate-in">
+          <div class="badge-item">
+            <code class="badge-code">$.products</code>
+            <span class="badge-desc">Path only. Read it from <code>products.json</code> in the data folder.</span>
+          </div>
+          <div class="badge-item">
+            <code class="badge-code">orders.json:$.orders</code>
+            <span class="badge-desc">A specific file, then a path inside it.</span>
+          </div>
+          <div class="badge-item">
+            <code class="badge-code">products-multi:$.products</code>
+            <span class="badge-desc">A whole folder. Every <code>.json</code> file inside (even in sub-folders) is combined into one table.</span>
+          </div>
+          <div class="badge-item">
+            <code class="badge-code">C:\data\items.json:$.items</code>
+            <span class="badge-desc">A full Windows path. Note the extra colon after <code>C</code>.</span>
+          </div>
+        </div>
+
+        <p>That last one is a trap. If the code split the text at the <em>first</em> colon, <code>C:\data...</code> would be cut in half. Here is how the code avoids it:</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">MappingManager.java</span>
+            <pre><code><span class="code-line">    <span class="code-keyword">private int</span> <span class="code-function">filenameDelimiterIndex</span>(String mapping) {</span><span class="code-line">        <span class="code-keyword">if</span> (mapping == <span class="code-keyword">null</span> || mapping.<span class="code-function">startsWith</span>(<span class="code-string">"$"</span>)) {</span><span class="code-line">            <span class="code-keyword">return</span> -<span class="code-number">1</span>;</span><span class="code-line">        }</span><span class="code-line">        <span class="code-keyword">int</span> idx = mapping.<span class="code-function">indexOf</span>(<span class="code-string">":$"</span>);</span><span class="code-line">        <span class="code-keyword">return</span> idx &gt; <span class="code-number">0</span> ? idx : -<span class="code-number">1</span>;</span><span class="code-line">    }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">"Where does the file name end and the JSONPath begin?"</p>
+              <p class="tl">If the mapping starts with <code>$</code>, there is no file name at all...</p>
+              <p class="tl">...so answer -1, meaning "not found".</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Otherwise, look for a colon <em>immediately followed by</em> a dollar sign. A drive letter like <code>C:\</code> never matches that.</p>
+              <p class="tl">Return where that split point is, or -1 if there isn't one.</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 3 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The translator: QueryParser</h2>
+        <p>Remember diagramming sentences at school, labelling the subject, verb and object? That is what
+          <span class="term" data-definition="To parse is to read raw text and work out its structure, the way you read a sentence and identify its subject and verb. A parser is the code that does this.">parsing</span>
+          is. JsonSQL hands your SQL to a library called JSqlParser, which builds a structured tree. QueryParser then copies the parts it cares about into its own simpler
+          <span class="term" data-definition="An object is a bundle of data in memory built from a class blueprint. A ParsedQuery object holds one specific query's details: its table, its columns, its WHERE condition, and so on.">object</span>,
+          a <code>ParsedQuery</code>.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">QueryParser.java</span>
+            <pre><code><span class="code-line">        <span class="code-comment">// Parse DISTINCT</span></span><span class="code-line">        <span class="code-keyword">if</span> (plainSelect.<span class="code-function">getDistinct</span>() != <span class="code-keyword">null</span>) {</span><span class="code-line">            query.<span class="code-function">setDistinct</span>(<span class="code-keyword">true</span>);</span><span class="code-line">        }</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Parse SELECT clause</span></span><span class="code-line">        <span class="code-function">parseSelectItems</span>(plainSelect, query);</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Parse FROM clause</span></span><span class="code-line">        <span class="code-function">parseFromClause</span>(plainSelect, query);</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Parse JOINs</span></span><span class="code-line">        <span class="code-function">parseJoins</span>(plainSelect, query);</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Parse WHERE clause</span></span><span class="code-line">        <span class="code-keyword">if</span> (plainSelect.<span class="code-function">getWhere</span>() != <span class="code-keyword">null</span>) {</span><span class="code-line">            query.<span class="code-function">setWhereExpression</span>(plainSelect.<span class="code-function">getWhere</span>());</span><span class="code-line">        }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Did you write <code>SELECT DISTINCT</code>?</p>
+              <p class="tl">Then tick the "remove duplicates" box on our plan.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Write down which columns you asked for.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Write down which table you are reading from (and its nickname).</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Write down any tables to join on.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">If there is a WHERE condition...</p>
+              <p class="tl">...keep it as-is, still in tree form. The judge will read it later, row by row.</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-accent animate-in">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">Understanding is separate from doing</strong>
+            <p>The parser never opens a file; the executor never reads raw SQL text. This split is called <em>separation of concerns</em>. It means a test can check "did we understand the SQL correctly?" without any data at all, and the <code>--dry-run</code> flag can validate a query without running it.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 4 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Overheard in the group chat</h2>
+        <p>Here is what the cast says to each other while answering a join query:<br>
+          <code>SELECT p.name, o.quantity FROM orders o JOIN products p ON o.productId = p.id WHERE o.status = 'active'</code></p>
+
+        <div class="chat-window animate-in" id="chat-module2">
+          <div class="chat-messages">
+            <div class="chat-message" data-msg="0" data-sender="cli" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-1)">C</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-1)">JsonSqlCli</span>
+                <p>New query from the terminal. Only one action requested, data folder exists. QueryExecutor, over to you.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="1" data-sender="exec" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">E</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">QueryExecutor</span>
+                <p>QueryParser, can you read this SQL for me? I only speak "plan".</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="2" data-sender="parser" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-3)">P</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-3)">QueryParser</span>
+                <p>Here you go: FROM <b>orders</b> nicknamed <b>o</b>. JOIN <b>products</b> nicknamed <b>p</b> where o.productId = p.id. Keep rows where o.status = 'active'. Output p.name and o.quantity.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="3" data-sender="exec" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">E</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">QueryExecutor</span>
+                <p>MappingManager, where do "orders" and "products" live?</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="4" data-sender="map" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-4)">M</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-4)">MappingManager</span>
+                <p>orders → <code>complex-orders.json</code> at <code>$.orders[*]</code>. products → <code>complex-products.json</code> at <code>$.products[*]</code>.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="5" data-sender="exec" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">E</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">QueryExecutor</span>
+                <p>Loaded both. I've put every order in an envelope labelled <b>o</b> and every product in one labelled <b>p</b>, so nobody confuses whose <code>id</code> is whose. Joined them up.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="6" data-sender="where" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-5)">W</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-5)">WhereEvaluator</span>
+                <p>Row 1: o.status is "active". Keep. Row 2: "cancelled". Drop. Row 3: no status field at all, so that counts as NULL. Drop.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="7" data-sender="exec" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">E</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">QueryExecutor</span>
+                <p>Trimmed the survivors down to just name and quantity. OutputHandler, they're yours.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="8" data-sender="out" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-text-secondary)">O</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-text-secondary)">OutputHandler</span>
+                <p>Printed the rows to stdout. Any status messages from me go to stderr, so if someone pipes the output into another tool it stays clean JSON.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="chat-typing" style="display:none">
+            <div class="chat-avatar" id="chat-module2-typing-avatar">?</div>
+            <div class="chat-typing-dots">
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+            </div>
+          </div>
+
+          <div class="chat-controls">
+            <button class="btn chat-next-btn">Next Message</button>
+            <button class="btn chat-all-btn">Play All</button>
+            <button class="btn chat-reset-btn">Replay</button>
+            <span class="chat-progress"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 5 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The borrowed tools</h2>
+        <p>JsonSQL's own code is mostly glue. The heavy lifting is done by well-known libraries, listed in the project's
+          <span class="term" data-definition="Maven is Java's build tool. It downloads the libraries a project needs, compiles the code, runs the tests (mvn test), and packages everything into a runnable .jar file (mvn package). Its settings live in pom.xml.">Maven</span>
+          settings file, <code>pom.xml</code>.</p>
+
+        <div class="pattern-cards stagger-children">
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-1)">
+            <div class="pattern-icon" style="background: var(--color-actor-1)">🎛️</div>
+            <h4 class="pattern-title">Picocli</h4>
+            <p class="pattern-desc">Turns <code>--flags</code> into variables and writes the <code>--help</code> page for free.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)">
+            <div class="pattern-icon" style="background: var(--color-actor-2)">🫘</div>
+            <h4 class="pattern-title">Jackson</h4>
+            <p class="pattern-desc">Reads and writes JSON. Every row in the engine is a Jackson <code>JsonNode</code>, a shape-agnostic container.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)">
+            <div class="pattern-icon" style="background: var(--color-actor-3)">🧭</div>
+            <h4 class="pattern-title">Jayway JSONPath</h4>
+            <p class="pattern-desc">Follows a mapping like <code>$.data.products</code> to find the right list inside a file.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-4)">
+            <div class="pattern-icon" style="background: var(--color-actor-4)">🌳</div>
+            <h4 class="pattern-title">JSqlParser</h4>
+            <p class="pattern-desc">Understands SQL grammar. Pinned to version 4.9 on purpose, because 5.x changed its structure.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-5)">
+            <div class="pattern-icon" style="background: var(--color-actor-5)">✅</div>
+            <h4 class="pattern-title">JUnit 5</h4>
+            <p class="pattern-desc">Runs the 50+ automated test files that prove each feature still works.</p>
+          </div>
+        </div>
+
+        <div class="callout callout-info animate-in">
+          <div class="callout-icon">📌</div>
+          <div class="callout-content">
+            <strong class="callout-title">Why "pinned" matters</strong>
+            <p>If an AI tool suggests "upgrade JSqlParser to the latest version", that is not a free win here. The <code>pom.xml</code> comment warns that 5.x has breaking changes. A
+              <span class="term" data-definition="A breaking change is an update to a library that changes how it works in a way that stops existing code from compiling or behaving correctly. Upgrading past one usually means rewriting the code that uses it.">breaking change</span>
+              would ripple through the parser and the WHERE evaluator.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- QUIZ: DRAG AND DROP -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Who should handle it?</h2>
+        <p>Drag each cast member to the change request they should own.</p>
+
+        <div class="dnd-container" id="dnd-module2">
+          <div class="dnd-chips">
+            <div class="dnd-chip" draggable="true" data-answer="cli">JsonSqlCli</div>
+            <div class="dnd-chip" draggable="true" data-answer="map">MappingManager</div>
+            <div class="dnd-chip" draggable="true" data-answer="parser">QueryParser</div>
+            <div class="dnd-chip" draggable="true" data-answer="where">WhereEvaluator</div>
+            <div class="dnd-chip" draggable="true" data-answer="out">OutputHandler</div>
+          </div>
+          <div class="dnd-zones">
+            <div class="dnd-zone" data-correct="where">
+              <p class="dnd-zone-label">Support <code>WHERE price BETWEEN 10 AND 50</code></p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+            <div class="dnd-zone" data-correct="cli">
+              <p class="dnd-zone-label">Stop people combining <code>--describe</code> with <code>--query</code></p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+            <div class="dnd-zone" data-correct="parser">
+              <p class="dnd-zone-label">Give a clear error when someone types a <code>DELETE</code> statement</p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+            <div class="dnd-zone" data-correct="out">
+              <p class="dnd-zone-label">Add a pretty ASCII-table output format</p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+            <div class="dnd-zone" data-correct="map">
+              <p class="dnd-zone-label">Reject a new mapping that has no <code>$</code> in it</p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+          </div>
+          <button class="btn" onclick="checkDnD('dnd-module2')">Check Matches</button>
+          <button class="btn" onclick="resetDnD('dnd-module2')">Reset</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</section>
+<section class="module" id="module-3" style="background: var(--color-bg-warm)">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">03</span>
+      <h1 class="module-title">The Assembly Line</h1>
+      <p class="module-subtitle">How the engine turns a pile of rows into your answer, one station at a time</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- SCREEN 1 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Eight stations, always in the same order</h2>
+        <p>Picture a car factory. The chassis rolls past welding, then painting, then wheels. You never paint before welding. QueryExecutor works the same way: every query rides the same conveyor belt, and each station does one job to the list of
+          <span class="term" data-definition="A row is one record in a table: one product, one order, one customer. In JsonSQL each row is one JSON object (one pair of curly braces) from the list your mapping points at.">rows</span>
+          it receives.</p>
+
+        <div class="step-cards stagger-children">
+          <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Load</strong><p>Open the backing JSON file(s), follow the mapping, collect the rows</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong><span class="term" data-definition="UNNEST takes a field that holds a list, like tags: [&quot;wireless&quot;, &quot;mouse&quot;], and turns one row into several: one per list item. Written as FROM products, UNNEST(tags) AS t(tag).">UNNEST</span></strong><p>Explode list fields (like <code>tags</code>) into one row per item</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong><span class="term" data-definition="A JOIN combines rows from two tables that share a value, like matching each order to its product using productId = id. A LEFT JOIN also keeps rows that found no partner.">JOIN</span></strong><p>Glue matching rows from other tables onto each row</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">4</div><div class="step-body"><strong>WHERE</strong><p>Throw away rows that fail the condition</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">5</div><div class="step-body"><strong>ORDER BY</strong><p>Sort the survivors</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">6</div><div class="step-body"><strong><span class="term" data-definition="Projection means keeping only some columns of each row, the ones named in your SELECT list. Think of cropping a photo: same rows, less in each one.">Project</span> (SELECT list)</strong><p>Keep only the columns you asked for</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">7</div><div class="step-body"><strong>DISTINCT</strong><p>Remove duplicate rows</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">8</div><div class="step-body"><strong>LIMIT / TOP</strong><p>Cut the list to the first N rows</p></div></div>
+        </div>
+      </section>
+
+      <!-- SCREEN 2 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The last five stations, in code</h2>
+        <p>Each station takes a list and hands a (usually smaller) list to the next. Notice that the
+          <span class="term" data-definition="A comment is a note for humans written inside code (in Java, after //). The computer ignores it. Good comments explain why the code does something, not what it does.">comments</span>
+          (grey lines starting with <code>//</code>) explain <em>why</em> the order matters.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">QueryExecutor.java</span>
+            <pre><code><span class="code-line">        <span class="code-comment">// Apply WHERE clause</span></span><span class="code-line">        List&lt;JsonNode&gt; filteredData = joinedData;</span><span class="code-line">        <span class="code-keyword">if</span> (parsedQuery.<span class="code-function">hasWhere</span>()) {</span><span class="code-line">            filteredData = <span class="code-function">applyWhere</span>(joinedData, parsedQuery.<span class="code-function">getWhereExpression</span>());</span><span class="code-line">        }</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Apply ORDER BY before projection so sort keys not present in the SELECT list</span></span><span class="code-line">        <span class="code-comment">// (e.g. ORDER BY id while selecting only name) remain available.</span></span><span class="code-line">        <span class="code-keyword">if</span> (parsedQuery.<span class="code-function">hasOrderBy</span>()) {</span><span class="code-line">            filteredData = <span class="code-function">applyOrderBy</span>(filteredData, parsedQuery.<span class="code-function">getOrderBy</span>());</span><span class="code-line">        }</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Project SELECT columns</span></span><span class="code-line">        List&lt;JsonNode&gt; projectedData = <span class="code-function">projectColumns</span>(filteredData, parsedQuery.<span class="code-function">getSelectColumns</span>());</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Apply DISTINCT after projection (dedupe the projected rows, preserving sorted order)</span></span><span class="code-line">        <span class="code-keyword">if</span> (parsedQuery.<span class="code-function">isDistinct</span>()) {</span><span class="code-line">            projectedData = <span class="code-function">applyDistinct</span>(projectedData);</span><span class="code-line">        }</span><span class="code-line"> </span><span class="code-line">        <span class="code-comment">// Apply TOP/LIMIT last, so it operates on the final ordered/projected/deduped result set</span></span><span class="code-line">        <span class="code-keyword">if</span> (parsedQuery.<span class="code-function">getEffectiveLimit</span>() != <span class="code-keyword">null</span>) {</span><span class="code-line">            <span class="code-keyword">int</span> limit = parsedQuery.<span class="code-function">getEffectiveLimit</span>().<span class="code-function">intValue</span>();</span><span class="code-line">            projectedData = projectedData.<span class="code-function">subList</span>(<span class="code-number">0</span>, Math.<span class="code-function">min</span>(limit, projectedData.<span class="code-function">size</span>()));</span><span class="code-line">        }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl"><strong>WHERE:</strong> start by assuming every joined row survives.</p>
+              <p class="tl">If there is a condition, keep only the rows that pass it.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl"><strong>ORDER BY</strong> happens while rows still have <em>all</em> their fields. That way you can sort by price even if you only asked to see names.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl"><strong>Project:</strong> now cut each row down to just the columns in your SELECT list.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl"><strong>DISTINCT</strong> runs on the trimmed rows, because "duplicate" should mean "looks the same in your answer".</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl"><strong>LIMIT</strong> comes dead last. Take the first N rows of the finished list, or all of them if there are fewer than N.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 3 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Watch five rows ride the belt</h2>
+        <p>Five products: Desk and Chair (Furniture), Laptop, Phone and Monitor (Electronics). The query is <code>SELECT DISTINCT category FROM products ORDER BY category LIMIT 1</code>.</p>
+
+        <div class="flow-animation" data-steps='[
+          {"highlight":"flow-m3-load","label":"Load: 5 full product rows come off the file"},
+          {"highlight":"flow-m3-where","label":"WHERE: there is no condition, so all 5 rows pass straight through","packet":true,"from":"m3-load","to":"m3-where"},
+          {"highlight":"flow-m3-sort","label":"ORDER BY category: Electronics, Electronics, Electronics, Furniture, Furniture","packet":true,"from":"m3-where","to":"m3-sort"},
+          {"highlight":"flow-m3-proj","label":"Project: each row shrinks to just its category. Still 5 rows.","packet":true,"from":"m3-sort","to":"m3-proj"},
+          {"highlight":"flow-m3-dist","label":"DISTINCT: duplicates collapse. 2 rows left: Electronics, Furniture","packet":true,"from":"m3-proj","to":"m3-dist"},
+          {"highlight":"flow-m3-limit","label":"LIMIT 1: keep the first. The answer is Electronics.","packet":true,"from":"m3-dist","to":"m3-limit"}
+        ]'>
+          <div class="flow-actors">
+            <div class="flow-actor" id="flow-m3-load"><div class="flow-actor-icon">📂</div><span>Load</span></div>
+            <div class="flow-actor" id="flow-m3-where"><div class="flow-actor-icon">⚖️</div><span>WHERE</span></div>
+            <div class="flow-actor" id="flow-m3-sort"><div class="flow-actor-icon">↕️</div><span>ORDER BY</span></div>
+            <div class="flow-actor" id="flow-m3-proj"><div class="flow-actor-icon">✂️</div><span>Project</span></div>
+            <div class="flow-actor" id="flow-m3-dist"><div class="flow-actor-icon">🧹</div><span>DISTINCT</span></div>
+            <div class="flow-actor" id="flow-m3-limit"><div class="flow-actor-icon">🔟</div><span>LIMIT</span></div>
+          </div>
+
+          <div class="flow-packet"></div>
+          <div class="flow-step-label">Click "Next Step" to begin</div>
+
+          <div class="flow-controls">
+            <button class="btn flow-next-btn">Next Step</button>
+            <button class="btn flow-reset-btn">Restart</button>
+            <span class="flow-progress"></span>
+          </div>
+        </div>
+
+        <p>This exact scenario is pinned down by an automated
+          <span class="term" data-definition="A unit test is a small automatic check that runs a piece of code with known input and confirms the output is what you expect. If someone breaks the behavior later, the test fails and tells them. Run them here with 'mvn test'.">unit test</span>
+          in <code>QueryPipelineOrderTest.java</code>, so nobody can quietly reorder the stations.</p>
+      </section>
+
+      <!-- SCREEN 4 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Luggage tags: how rows remember where they came from</h2>
+        <p>When orders and products are joined, both have an <code>id</code>. Which is which? At the airport, every suitcase gets a tag before it joins the shared conveyor. The engine does the same: as each row is loaded, it is wrapped inside an outer object labelled with the table's
+          <span class="term" data-definition="A table alias is a short nickname you give a table in SQL, like the o in FROM orders o. You then write o.id to mean 'the id from orders'. Without one, the table name itself is used.">alias</span>
+          (nickname).</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">QueryExecutor.java</span>
+            <pre><code><span class="code-line">            <span class="code-comment">// Wrap each row with table name for qualified column access</span></span><span class="code-line">            <span class="code-keyword">for</span> (JsonNode node : fileData) {</span><span class="code-line">                <span class="code-keyword">if</span> (node.<span class="code-function">isObject</span>()) {</span><span class="code-line">                    ObjectNode wrappedNode = objectMapper.<span class="code-function">createObjectNode</span>();</span><span class="code-line">                    wrappedNode.<span class="code-function">set</span>(tableInfo.<span class="code-function">getEffectiveName</span>(), (ObjectNode) node);</span><span class="code-line">                    dataList.<span class="code-function">add</span>(wrappedNode);</span><span class="code-line">                } <span class="code-keyword">else</span> {</span><span class="code-line">                    dataList.<span class="code-function">add</span>(node);</span><span class="code-line">                }</span><span class="code-line">            }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Go through every row we read from this file.</p>
+              <p class="tl">If it is a proper record (curly braces)...</p>
+              <p class="tl">...make a new, empty outer envelope,</p>
+              <p class="tl">put the row inside it under the table's nickname, so <code>{"id":7}</code> becomes <code>{"o": {"id":7}}</code>,</p>
+              <p class="tl">and add the envelope to our list.</p>
+              <p class="tl">Anything odd (not a record)...</p>
+              <p class="tl">...is passed along untouched.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+
+        <p>Now <code>o.id</code> means "open envelope <b>o</b>, read <b>id</b>". If you write just <code>id</code>, the engine peeks inside each envelope until it finds one. And for <code>SELECT *</code>, the envelopes are unpacked again so you never see them.</p>
+      </section>
+
+      <!-- SCREEN 5 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">JOIN: matching socks from two baskets</h2>
+        <p>Emptying a laundry basket, you pick up one sock and compare it against every sock in the other basket. That is exactly how the join works: a
+          <span class="term" data-definition="A loop repeats the same block of code once for each item in a list. A nested loop is a loop inside another loop, so the inner one runs completely for every single step of the outer one.">nested loop</span>.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">QueryExecutor.java</span>
+            <pre><code><span class="code-line">        <span class="code-keyword">for</span> (JsonNode leftRow : leftData) {</span><span class="code-line">            <span class="code-keyword">boolean</span> matchFound = <span class="code-keyword">false</span>;</span><span class="code-line"> </span><span class="code-line">            <span class="code-keyword">for</span> (JsonNode rightRow : rightData) {</span><span class="code-line">                <span class="code-keyword">if</span> (<span class="code-function">matchesJoinCondition</span>(leftRow, rightRow, condition)) {</span><span class="code-line">                    <span class="code-comment">// Merge left and right rows</span></span><span class="code-line">                    ObjectNode mergedRow = objectMapper.<span class="code-function">createObjectNode</span>();</span><span class="code-line">                    mergedRow.<span class="code-function">setAll</span>((ObjectNode) leftRow);</span><span class="code-line">                    mergedRow.<span class="code-function">setAll</span>((ObjectNode) rightRow);</span><span class="code-line">                    result.<span class="code-function">add</span>(mergedRow);</span><span class="code-line">                    matchFound = <span class="code-keyword">true</span>;</span><span class="code-line">                }</span><span class="code-line">            }</span><span class="code-line"> </span><span class="code-line">            <span class="code-comment">// For LEFT JOIN, include left row even if no match found</span></span><span class="code-line">            <span class="code-keyword">if</span> (joinInfo.<span class="code-function">isLeftJoin</span>() &amp;&amp; !matchFound) {</span><span class="code-line">                result.<span class="code-function">add</span>(leftRow);</span><span class="code-line">            }</span><span class="code-line">        }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Pick up each order, one at a time.</p>
+              <p class="tl">So far, no partner found for it.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Compare it against <em>every</em> product.</p>
+              <p class="tl">Does this pair satisfy <code>o.productId = p.id</code>?</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Yes: make a combined row containing...</p>
+              <p class="tl">...the order's envelope <b>o</b>...</p>
+              <p class="tl">...and the product's envelope <b>p</b>,</p>
+              <p class="tl">and keep it.</p>
+              <p class="tl">Remember this order found at least one match.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">For a LEFT JOIN, an order with no matching product still gets kept, just without product details.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-accent animate-in">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">Simple code, multiplying cost</strong>
+            <p>1,000 orders × 1,000 products = 1,000,000 comparisons. 10,000 × 10,000 = 100 million. This "compare everything with everything" approach is easy to read and always correct, but slows down fast as data grows. Real databases use a <em>hash join</em>: build a lookup table of products by id once, then each order finds its match instantly.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 6 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The judge: a function that calls itself</h2>
+        <p>A WHERE clause like <code>(category = 'Tools' AND price &gt; 10) OR inStock = true</code> is stored as a tree: OR at the top, with an AND underneath. WhereEvaluator handles it with
+          <span class="term" data-definition="Recursion is when a function solves a problem by calling itself on a smaller piece of it, like Russian nesting dolls. Each AND or OR asks the same evaluate function to judge its two halves.">recursion</span>:
+          to judge an AND, it judges each half using itself.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">WhereEvaluator.java</span>
+            <pre><code><span class="code-line">        <span class="code-comment">// Handle AND</span></span><span class="code-line">        <span class="code-keyword">if</span> (expression <span class="code-keyword">instanceof</span> AndExpression) {</span><span class="code-line">            AndExpression andExpr = (AndExpression) expression;</span><span class="code-line">            <span class="code-keyword">return</span> <span class="code-function">evaluate</span>(row, andExpr.<span class="code-function">getLeftExpression</span>()) &amp;&amp; </span><span class="code-line">                   <span class="code-function">evaluate</span>(row, andExpr.<span class="code-function">getRightExpression</span>());</span><span class="code-line">        }</span><span class="code-line">        </span><span class="code-line">        <span class="code-comment">// Handle OR</span></span><span class="code-line">        <span class="code-keyword">if</span> (expression <span class="code-keyword">instanceof</span> OrExpression) {</span><span class="code-line">            OrExpression orExpr = (OrExpression) expression;</span><span class="code-line">            <span class="code-keyword">return</span> <span class="code-function">evaluate</span>(row, orExpr.<span class="code-function">getLeftExpression</span>()) || </span><span class="code-line">                   <span class="code-function">evaluate</span>(row, orExpr.<span class="code-function">getRightExpression</span>());</span><span class="code-line">        }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Is this piece of the tree an AND?</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Then the row passes only if the left half passes <em>and</em>...</p>
+              <p class="tl">...the right half passes. If the left fails, Java does not even bother checking the right.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Is it an OR?</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Then passing either half is enough...</p>
+              <p class="tl">...and if the left half passes, the right is skipped.</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="badge-list animate-in">
+          <div class="badge-item"><code class="badge-code">LIKE 'Lap%'</code><span class="badge-desc">Translated into a pattern where <code>%</code> means "anything" and <code>_</code> means "any one character"</span></div>
+          <div class="badge-item"><code class="badge-code">ILIKE 'lap%'</code><span class="badge-desc">Same, but lowercases both sides first, so "Laptop" matches</span></div>
+          <div class="badge-item"><code class="badge-code">IN ('A','B')</code><span class="badge-desc">Passes if the value equals any item in the list</span></div>
+          <div class="badge-item"><code class="badge-code">IS NULL</code><span class="badge-desc">Passes if the field is missing <em>or</em> explicitly <code>null</code></span></div>
+        </div>
+      </section>
+
+      <!-- SCREEN 7: SPOT THE BUG -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Spot the bug</h2>
+        <p>Imagine an AI "tidied up" the pipeline and produced this order. One line is in the wrong place. With products sorted by price (Laptop, Phone, Monitor, Desk, Chair), <code>SELECT DISTINCT category FROM products ORDER BY price DESC LIMIT 2</code> now returns only <em>one</em> category. Click the culprit.</p>
+
+        <div class="bug-challenge">
+          <div class="bug-code">
+            <div class="bug-line" onclick="checkBugLine(this, false)" data-hint="Filtering first is right: it shrinks the list before any expensive work.">
+              <span class="line-num">1</span><code>rows = applyWhere(rows, where);</code>
+            </div>
+            <div class="bug-line" onclick="checkBugLine(this, false)" data-hint="Sorting before projection is deliberate, so you can sort by a column you did not select.">
+              <span class="line-num">2</span><code>rows = applyOrderBy(rows, orderBy);</code>
+            </div>
+            <div class="bug-line" onclick="checkBugLine(this, true)" data-explanation="LIMIT ran before DISTINCT. It kept the first 2 rows (Laptop and Phone, both Electronics), and only then removed duplicates, leaving 1. LIMIT must always come last so it counts finished answer rows.">
+              <span class="line-num">3</span><code>rows = rows.subList(0, limit);</code>
+            </div>
+            <div class="bug-line" onclick="checkBugLine(this, false)" data-hint="Projecting before DISTINCT is correct: duplicates should be judged on what you will actually see.">
+              <span class="line-num">4</span><code>rows = projectColumns(rows, columns);</code>
+            </div>
+            <div class="bug-line" onclick="checkBugLine(this, false)" data-hint="DISTINCT itself is fine here. Ask yourself: how many rows did it receive?">
+              <span class="line-num">5</span><code>rows = applyDistinct(rows);</code>
+            </div>
+          </div>
+          <div class="bug-feedback"></div>
+        </div>
+      </section>
+
+      <!-- QUIZ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Check your understanding</h2>
+        <div class="quiz-container" id="quiz-module3">
+
+          <div class="quiz-question-block"
+               data-correct="a"
+               data-explanation-right="Sorting happens at station 5, while every row still has all its fields. Projection (station 6) only removes price afterwards, so the sort works fine."
+               data-explanation-wrong="Look at the order of the stations again. ORDER BY runs before the SELECT list trims columns away, so price is still available when sorting happens.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>You run <code>SELECT name FROM products ORDER BY price DESC</code>. Price is not in your SELECT list.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">What happens?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It works: names come back sorted by price, and price is not shown</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Error: you cannot sort by a column you did not select</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It runs, but the sort is ignored because price is gone</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="b"
+               data-explanation-right="The join compares every left row against every right row. Asking for a lookup table (a hash map keyed by the join column) turns 100 million comparisons into roughly 20,000 quick lookups, without changing results."
+               data-explanation-wrong="Caching avoids re-reading files, and indexes skip whole files, but neither changes how the join itself compares rows. The bottleneck is the nested loop: every order checked against every product. The fix is a lookup table keyed by the join column.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>A join between 10,000 orders and 10,000 products takes far longer than loading either file. The files themselves are small.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">What is the best thing to ask AI for?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>"Turn on --enable-cache by default"</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>"Change performJoin to build a hash map of the right-hand rows by join key, instead of a nested loop"</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>"Move the JOIN station after LIMIT so there are fewer rows to join"</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="c"
+               data-explanation-right="UNNEST runs before JOIN on purpose (the git history even says &quot;UNNEST before JOIN so we can actually join on those properties&quot;). Each array element becomes its own row first, so the join can match on it."
+               data-explanation-wrong="Think about what the join needs. To match on an individual tag, each tag must already be its own row. That only works because UNNEST is station 2 and JOIN is station 3.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>Each product has a <code>tags</code> list. You want to join each individual tag against a separate "tag descriptions" table.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">Why is this possible in JsonSQL?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>JOIN automatically looks inside lists</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>WHERE can compare against list items</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>UNNEST runs before JOIN, so each tag is already its own row</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module3')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module3')">Try Again</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</section>
+<section class="module" id="module-4" style="background: var(--color-bg)">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">04</span>
+      <h1 class="module-title">Working Smarter, Not Harder</h1>
+      <p class="module-subtitle">Three optional tricks that make repeat questions fast, and the rule that keeps them from ever giving wrong answers</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- SCREEN 1 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The expensive part: reading the whole file</h2>
+        <p>Before any filtering happens, every backing file is read into
+          <span class="term" data-definition="Memory (RAM) is the computer's short-term workspace: very fast, but limited and wiped when the program ends. Loading a 500 MB file means holding roughly that much (often more) in memory at once.">memory</span>
+          in one gulp. There is no
+          <span class="term" data-definition="Streaming means processing data a little at a time as it arrives, like drinking through a straw instead of pouring the whole glass in your mouth. It keeps memory use small for huge files.">streaming</span>.
+          Even <code>LIMIT 1</code> loads everything first, because LIMIT is the last station on the belt.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">QueryExecutor.java</span>
+            <pre><code><span class="code-line">    <span class="code-keyword">private</span> List&lt;JsonNode&gt; <span class="code-function">loadFromFile</span>(File jsonFile, String jsonPathExpression) <span class="code-keyword">throws</span> IOException {</span><span class="code-line">        <span class="code-comment">// Read JSON file</span></span><span class="code-line">        String jsonContent = Files.<span class="code-function">readString</span>(jsonFile.<span class="code-function">toPath</span>());</span><span class="code-line">        </span><span class="code-line">        <span class="code-comment">// Apply JSONPath</span></span><span class="code-line">        Object result = JsonPath.<span class="code-function">using</span>(jsonPathConfig).<span class="code-function">parse</span>(jsonContent).<span class="code-function">read</span>(jsonPathExpression);</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">"Load the rows from this file, using this mapping path."</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Read the <em>entire</em> file into one giant piece of text.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Parse all of it, then walk the path (e.g. <code>$.data.products</code>) to find the list we want.</p>
+            </div>
+          </div>
+        </div>
+
+        <p>So the three speed-ups all attack the same cost from different angles:</p>
+
+        <div class="pattern-cards stagger-children">
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)">
+            <div class="pattern-icon" style="background: var(--color-actor-2)">🧊</div>
+            <h4 class="pattern-title">Cache</h4>
+            <p class="pattern-desc">Read the same file <em>faster</em> next time. <code>--enable-cache</code></p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)">
+            <div class="pattern-icon" style="background: var(--color-actor-3)">🔎</div>
+            <h4 class="pattern-title">Index</h4>
+            <p class="pattern-desc">Don't read files that <em>can't</em> contain a match. <code>--add-index</code></p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-4)">
+            <div class="pattern-icon" style="background: var(--color-actor-4)">🏛️</div>
+            <h4 class="pattern-title">Materialized view</h4>
+            <p class="pattern-desc">Save a heavy query's <em>answer</em> and reuse it as a table. <code>--materialize-view</code></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 2 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The cache: photocopies stamped with an edition number</h2>
+        <p>Imagine photocopying a chapter so you don't have to fetch the heavy book again. The danger: the book gets a new edition and your copy is now wrong. JsonSQL's fix is to write the book's "edition" (its last-saved time and size) into the name of every copy. A
+          <span class="term" data-definition="A cache is a stash of already-computed results kept somewhere fast, so the next request can skip the slow work. Browsers cache images; JsonSQL caches parsed JSON on disk in .jsonsql-cache/.">cache</span>
+          entry for an old edition simply never gets asked for again.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CacheManager.java</span>
+            <pre><code><span class="code-line">        <span class="code-keyword">long</span> lastModified = jsonFile.<span class="code-function">lastModified</span>();</span><span class="code-line">        <span class="code-keyword">long</span> length = jsonFile.<span class="code-function">length</span>();</span><span class="code-line">        <span class="code-keyword">try</span> {</span><span class="code-line">            String absolutePath = jsonFile.<span class="code-function">getAbsolutePath</span>();</span><span class="code-line">            <span class="code-comment">// Combine file path, JSONPath, mtime and size for a freshness-sensitive cache key</span></span><span class="code-line">            String cacheKey = absolutePath + <span class="code-string">"|"</span> + jsonPathExpression + <span class="code-string">"|"</span> + lastModified + <span class="code-string">"|"</span> + length;</span><span class="code-line">            String hash = <span class="code-function">hashPath</span>(cacheKey);</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">When was this data file last saved?</p>
+              <p class="tl">How many bytes is it?</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Where exactly is it on disk?</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Glue together: location + which list inside it + save time + size. Change any one and you get a different
+                <span class="term" data-definition="A cache key is the label used to look something up in a cache. Two requests with the same key get the same stored answer, so everything that could change the answer must be part of the key.">cache key</span>.</p>
+              <p class="tl">Squash that long label into a short fixed-length code (a
+                <span class="term" data-definition="A hash is a short 'fingerprint' computed from any amount of text. The same input always gives the same hash; a tiny change gives a completely different one. Here it is used to make a safe file name.">hash</span>) to use as the cache file's name.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-accent animate-in">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">Put freshness in the key, not in a cleanup job</strong>
+            <p>Programmers joke that <em>cache invalidation</em> (knowing when stored copies are out of date) is one of the two hardest problems in computing. Folding "what could change the answer" into the key side-steps it entirely. When you ask AI to cache something, ask: "what goes into the cache key?" If anything that affects the result is missing, you will get stale answers.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 3 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Indexes: reading the labels on the binders</h2>
+        <p>Picture a shelf of binders, one per data file. Each spine has a sticky label: "contains categories: Tools, Office · prices 5 to 240". Looking for something over $500? You can skip that binder without opening it. JsonSQL's
+          <span class="term" data-definition="An index is a small summary built ahead of time that lets you find things without scanning everything, like the index at the back of a book. JsonSQL's indexes summarize each file, so whole files can be skipped.">index</span>
+          builds exactly these labels, called file summaries.</p>
+
+        <p><strong>Query:</strong> <code>SELECT * FROM catalog WHERE category = 'Tools' AND price &gt; 500</code> (illustrative summaries)</p>
+
+        <div class="pattern-cards stagger-children">
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-success)">
+            <h4 class="pattern-title">tools/2024.json · KEEP</h4>
+            <p class="pattern-desc">categories: Tools<br>price: 12 to 899<br>Could hold a match, so it must be read.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-error); opacity: 0.6">
+            <h4 class="pattern-title">tools/2021.json · SKIP</h4>
+            <p class="pattern-desc">categories: Tools<br>price: 4 to 310<br>Max price 310 is not over 500. Nothing here can match.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-error); opacity: 0.6">
+            <h4 class="pattern-title">office/2024.json · SKIP</h4>
+            <p class="pattern-desc">categories: Office<br>price: 3 to 1,200<br>No "Tools" anywhere in it.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-success)">
+            <h4 class="pattern-title">misc.json · KEEP</h4>
+            <p class="pattern-desc">No fresh summary (file edited since the index was built). Can't prove anything, so read it.</p>
+          </div>
+        </div>
+
+        <p>Here is the check for a "greater than" style condition on numbers. It only needs the label's min and max:</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">IndexPlanner.java</span>
+            <pre><code><span class="code-line">        <span class="code-keyword">if</span> (<span class="code-string">"number"</span>.<span class="code-function">equals</span>(type)) {</span><span class="code-line">            <span class="code-keyword">double</span> v;</span><span class="code-line">            <span class="code-keyword">try</span> {</span><span class="code-line">                v = Double.<span class="code-function">parseDouble</span>(value);</span><span class="code-line">            } <span class="code-keyword">catch</span> (NumberFormatException e) {</span><span class="code-line">                <span class="code-keyword">return true</span>;</span><span class="code-line">            }</span><span class="code-line">            <span class="code-keyword">switch</span> (op) {</span><span class="code-line">                <span class="code-keyword">case</span> <span class="code-string">"&gt;"</span>:  <span class="code-keyword">return</span> max.<span class="code-function">asDouble</span>() &gt; v;</span><span class="code-line">                <span class="code-keyword">case</span> <span class="code-string">"&gt;="</span>: <span class="code-keyword">return</span> max.<span class="code-function">asDouble</span>() &gt;= v;</span><span class="code-line">                <span class="code-keyword">case</span> <span class="code-string">"&lt;"</span>:  <span class="code-keyword">return</span> min.<span class="code-function">asDouble</span>() &lt; v;</span><span class="code-line">                <span class="code-keyword">case</span> <span class="code-string">"&lt;="</span>: <span class="code-keyword">return</span> min.<span class="code-function">asDouble</span>() &lt;= v;</span><span class="code-line">                <span class="code-keyword">default</span>:   <span class="code-keyword">return true</span>;</span><span class="code-line">            }</span><span class="code-line">        }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">If this field holds numbers in this file...</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">try to read the query's value (e.g. 500) as a number.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">If it isn't a number...</p>
+              <p class="tl">...answer "maybe it matches". Never skip on a guess.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Otherwise, depending on the comparison:</p>
+              <p class="tl"><code>price &gt; 500</code> can only match if the biggest price here is over 500.</p>
+              <p class="tl">Same idea for "at least".</p>
+              <p class="tl"><code>price &lt; 10</code> can only match if the smallest price here is under 10.</p>
+              <p class="tl">Same idea for "at most".</p>
+              <p class="tl">Anything unexpected: "maybe", keep the file.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 4 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The golden rule: when in doubt, read the file</h2>
+        <p>Skipping a file that <em>did</em> contain a match would silently give you a wrong answer, which is far worse than a slow one. So the whole index system is wrapped in a safety net:</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">IndexPlanner.java</span>
+            <pre><code><span class="code-line">    <span class="code-keyword">public</span> List&lt;File&gt; <span class="code-function">prune</span>(TableInfo fromTable, ParsedQuery query, List&lt;File&gt; currentFiles) {</span><span class="code-line">        <span class="code-keyword">try</span> {</span><span class="code-line">            <span class="code-keyword">return</span> <span class="code-function">doPrune</span>(fromTable, query, currentFiles);</span><span class="code-line">        } <span class="code-keyword">catch</span> (RuntimeException e) {</span><span class="code-line">            <span class="code-keyword">return</span> currentFiles;</span><span class="code-line">        }</span><span class="code-line">    }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">"Given these files, which ones do we actually need to read?"</p>
+              <p class="tl">Try the clever pruning logic...</p>
+              <p class="tl">...and return the shorter list if it works.</p>
+              <p class="tl">If <em>anything</em> goes wrong in there (an
+                <span class="term" data-definition="An exception is Java's way of signalling 'something went wrong' mid-task. It jumps out of the current code until a 'catch' block handles it. Uncaught, it crashes the program.">exception</span>)...</p>
+              <p class="tl">...give back the full, original list. Slower, but always right.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="icon-rows">
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-success-light)">✅</div>
+            <div><strong>Can be used to skip files</strong><p>Conditions every row must meet (joined by AND) using <code>=</code>, <code>IN</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>, backed by a fresh summary</p></div>
+          </div>
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-error-light)">🚫</div>
+            <div><strong>Never used to skip</strong><p>OR groups, NOT IN, LIKE, missing or stale summaries, a changed mapping. Other AND conditions can still help; if none are usable, every file is read.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 5 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Materialized views: the printed monthly report</h2>
+        <p>Your finance team doesn't recompute last month's totals every time someone asks; they print a report, date it, and file it. A materialized view does that for a heavy
+          <span class="term" data-definition="A CTE (Common Table Expression) is a named sub-query written with WITH name AS (SELECT ...). It lets you build a temporary table and then query it, like naming an intermediate step in a recipe.">CTE</span>.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">TERMINAL (from MATERIALIZED-VIEWS.md)</span>
+            <pre><code><span class="code-line"><span class="code-function">jsonsql</span> <span class="code-keyword">--materialize-view</span> expensive \</span><span class="code-line">  <span class="code-keyword">--query</span> <span class="code-string">"WITH expensive AS (SELECT id, category, price FROM catalog_large WHERE price &gt; 100) SELECT * FROM expensive"</span> \</span><span class="code-line">  <span class="code-keyword">--data-dir</span> example-data</span><span class="code-line"> </span><span class="code-line"><span class="code-comment"># later, as if it were an ordinary table:</span></span><span class="code-line"><span class="code-function">jsonsql</span> -q <span class="code-string">"SELECT id, category FROM expensive WHERE category = 'Electronics'"</span> <span class="code-keyword">--data-dir</span> example-data</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">"Save a report called <em>expensive</em>..."</p>
+              <p class="tl">"...made of every catalog item over $100." The rows are written to <code>.jsonsql-views/expensive.json</code>, and a fingerprint of the source files is recorded in <code>.jsonsql-views.json</code>.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Later queries read the small saved report instead of rescanning the whole catalog.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-info animate-in">
+          <div class="callout-icon">🗓️</div>
+          <div class="callout-content">
+            <strong class="callout-title">Stale, but honest</strong>
+            <p>If the source files change after the view was built, the view is marked <strong>STALE</strong>. It still returns the stored rows (that is the point of a saved report) but prints a warning telling you to run <code>--rebuild-view</code>. This is a deliberate trade-off between speed and freshness, and the tool tells you which one you are getting.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- QUIZ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Check your understanding</h2>
+        <div class="quiz-container" id="quiz-module4">
+
+          <div class="quiz-question-block"
+               data-correct="b"
+               data-explanation-right="Saving the file changes its last-modified time (and usually its size). Those are part of the cache key, so JsonSQL looks for a cache entry that does not exist yet, re-reads the file, and stores a fresh copy."
+               data-explanation-wrong="Remember the edition-number trick: the file's save time and size are baked into the cache key. Editing the file produces a new key, which is automatically a cache miss. No manual clearing is needed.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>You run a query with <code>--enable-cache</code>, then fix a typo in <code>products.json</code> by hand and run the same query again.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">What do you get?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The old, cached data with the typo, until you run <code>--clear-cache</code></span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The corrected data, because the edit changed the cache key</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>An error saying the cache is out of date</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="c"
+               data-explanation-right="An OR means a row could match through either side, so no single summary can prove a file is empty of matches. The planner only uses conditions that every result row must satisfy (AND), so it reads every file and the answer stays correct."
+               data-explanation-wrong="With OR, a file with no Tools could still contain a product over 500, and vice versa. The planner cannot safely rule a file out, so it falls back to reading every file. Correctness first, speed second.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>You have indexes on both <code>category</code> and <code>price</code>. You run <code>WHERE category = 'Tools' OR price &gt; 500</code> over 16 files.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">How many files does the index let JsonSQL skip?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Every file that has neither Tools nor any price over 500</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only files with no Tools</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>None. OR conditions are not used for skipping, so all 16 are read</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="a"
+               data-explanation-right="A missing summary means &quot;we know nothing about this file&quot;. Skipping it could drop real matches and silently return a wrong answer. The system's rule is to skip only when a fresh summary proves a file cannot match."
+               data-explanation-wrong="Think about what a missing summary tells you: nothing. Skipping a file you know nothing about could silently drop real results. A wrong answer that looks right is the worst kind of bug, which is why the planner always keeps files it cannot rule out.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>An AI suggests: "To speed things up, if a file has no index summary yet, just skip it."</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">How should you respond?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Reject it. A file with no summary might hold matches; only skip what a summary proves is empty</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Accept it. New files are rare, so the risk is small</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Accept it, but print a warning</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module4')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module4')">Try Again</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</section>
+<section class="module" id="module-5" style="background: var(--color-bg-warm)">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">05</span>
+      <h1 class="module-title">When Things Go Wrong</h1>
+      <p class="module-subtitle">How JsonSQL reports trouble, the traps hiding in real data, and how to debug (and steer AI) without going in circles</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- SCREEN 1 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Fail loudly, never quietly</h2>
+        <p>A smoke alarm with a dead battery is worse than no alarm, because you <em>trust</em> it. Early on, a WHERE condition JsonSQL didn't understand (like <code>BETWEEN</code>) simply matched nothing, and you got an empty answer that looked real. Now the judge refuses to guess:</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">WhereEvaluator.java</span>
+            <pre><code><span class="code-line">        <span class="code-comment">// Unsupported expression type - fail loudly instead of silently excluding all rows</span></span><span class="code-line">        <span class="code-keyword">throw new</span> <span class="code-function">UnsupportedExpressionException</span>(</span><span class="code-line">            <span class="code-string">"Unsupported WHERE expression: "</span> + expression +</span><span class="code-line">            <span class="code-string">" (type: "</span> + expression.<span class="code-function">getClass</span>().<span class="code-function">getSimpleName</span>() + <span class="code-string">")"</span></span><span class="code-line">        );</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">If we reach this line, none of the known operators matched.</p>
+              <p class="tl">Stop everything and raise an alarm...</p>
+              <p class="tl">...quoting the exact piece of SQL we did not understand...</p>
+              <p class="tl">...and what kind of thing the parser said it was (e.g. "Between"), which is a great clue for whoever adds support for it.</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-accent animate-in">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">A wrong answer that looks right is the worst bug there is</strong>
+            <p>Crashes get noticed and fixed. Silently wrong results end up in reports. The same instinct runs through the whole codebase: JOIN rejects conditions it can't handle, LIMIT rejects negative numbers, and the index planner falls back to a full read when unsure. When reviewing AI code, watch for <code>catch</code> blocks that swallow errors and carry on with empty data.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 2 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The NULL trap</h2>
+        <p>JSON records don't all have the same fields. Some products have no <code>discount</code> at all; some have <code>"discount": null</code>. SQL calls both
+          <span class="term" data-definition="NULL means 'no value' or 'unknown'. It is not zero and not an empty string. In SQL, comparing anything with NULL gives 'unknown', which WHERE treats as 'no'. The only reliable test is IS NULL / IS NOT NULL.">NULL</span>,
+          and NULL fails <em>every</em> comparison, even "not equal to".</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">WhereEvaluator.java</span>
+            <pre><code><span class="code-line">        <span class="code-comment">// In SQL, any comparison with NULL returns NULL (treated as FALSE in WHERE clauses)</span></span><span class="code-line">        <span class="code-comment">// This includes both missing fields (fieldValue == null) and present but null fields (fieldValue.isNull())</span></span><span class="code-line">        <span class="code-keyword">if</span> (fieldValue == <span class="code-keyword">null</span> || fieldValue.<span class="code-function">isNull</span>()) {</span><span class="code-line">            <span class="code-keyword">return false</span>;</span><span class="code-line">        }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Standard SQL rule: comparing with "no value" can never be true...</p>
+              <p class="tl">...whether the field is missing entirely or present but empty.</p>
+              <p class="tl">So if this row has no value for the field...</p>
+              <p class="tl">...the row fails, for <code>=</code>, <code>!=</code>, <code>&gt;</code>, <code>&lt;</code> alike.</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pattern-cards stagger-children">
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-error)">
+            <div class="pattern-icon" style="background: var(--color-error)">🕳️</div>
+            <h4 class="pattern-title">!= drops blanks</h4>
+            <p class="pattern-desc"><code>WHERE status != 'cancelled'</code> also hides rows with no status. Add <code>OR status IS NULL</code> to keep them.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-4)">
+            <div class="pattern-icon" style="background: var(--color-actor-4)">🔤</div>
+            <h4 class="pattern-title">Numbers stored as text</h4>
+            <p class="pattern-desc"><code>"price": "9"</code> (in quotes) is text, compared alphabetically. So "9" counts as greater than "10".</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)">
+            <div class="pattern-icon" style="background: var(--color-actor-3)">🔠</div>
+            <h4 class="pattern-title">Field names are exact</h4>
+            <p class="pattern-desc"><code>Category</code> and <code>category</code> are different fields. A typo means "missing", which means NULL, which means no rows.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-1)">
+            <div class="pattern-icon" style="background: var(--color-actor-1)">💉</div>
+            <h4 class="pattern-title">Parameters are pasted in</h4>
+            <p class="pattern-desc"><code>${category}</code> is replaced with your text <em>before</em> parsing, with no escaping. Only use trusted values.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 3 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Two exits: one for answers, one for chatter</h2>
+        <p>A building has a loading dock for deliveries and a reception desk for conversation. Command-line programs have the same two exits:
+          <span class="term" data-definition="stdout (standard output) is the main channel a program writes its results to. When you pipe a command into another with |, only stdout travels down the pipe.">stdout</span>
+          for results and
+          <span class="term" data-definition="stderr (standard error) is a second output channel meant for messages, warnings and errors. It still shows in your terminal, but it is not sent down a pipe, so it never pollutes the data.">stderr</span>
+          for everything else. JsonSQL is strict about this, so its output can be
+          <span class="term" data-definition="Piping (the | symbol) sends one program's output straight into another program's input, like jsonsql ... | jq '.[0]'. It only works if the output is pure data.">piped</span>
+          into other tools.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">JsonSqlCli.java</span>
+            <pre><code><span class="code-line">            query = queryManager.<span class="code-function">getQuery</span>(runQueryName);</span><span class="code-line">            <span class="code-comment">// Informational messages go to stderr so stdout carries only result data (pipe-friendly)</span></span><span class="code-line">            System.err.<span class="code-function">println</span>(<span class="code-string">"Running saved query: "</span> + runQueryName);</span><span class="code-line">            System.err.<span class="code-function">println</span>(<span class="code-string">"SQL: "</span> + query);</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Look up the saved query's SQL by its name.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Tell the human which query is running, via the <em>chatter</em> exit (<code>System.err</code>)...</p>
+              <p class="tl">...and show its SQL there too. The results will later go out the <em>answers</em> exit (<code>System.out</code>) untouched.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="badge-list animate-in">
+          <div class="badge-item"><code class="badge-code">exit 0</code><span class="badge-desc">Success. Scripts can carry on.</span></div>
+          <div class="badge-item"><code class="badge-code">exit 1</code><span class="badge-desc">Something failed. The reason is on stderr, starting with "Error".</span></div>
+        </div>
+      </section>
+
+      <!-- SCREEN 4 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Your debugging toolkit</h2>
+        <p>When a query misbehaves, resist the urge to have AI rewrite the engine. Work from the outside in, using flags the tool already gives you:</p>
+
+        <div class="step-cards stagger-children">
+          <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Read the error on stderr</strong><p>It names the table, file or SQL fragment involved. Most problems end here.</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong><code>--dry-run</code></strong><p>Checks the SQL, the mappings and that the files exist, without loading data.</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong><code>--describe products</code></strong><p>Shows the real field names, their types and sample values. Catches typos and "numbers stored as text".</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">4</div><div class="step-body"><strong>Remove the speed-ups</strong><p>Add <code>--no-index</code> and drop <code>--enable-cache</code>. If the answer changes, you found a speed-up bug.</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">5</div><div class="step-body"><strong><code>DEBUG=1</code></strong><p>Prints the full
+            <span class="term" data-definition="A stack trace is the list of functions that were running, nested inside each other, at the moment an error happened. Read from the top, it points to the exact file and line where things broke. Paste it to AI for a precise diagnosis.">stack trace</span>
+            for errors, the best thing to paste to an AI.</p></div></div>
+        </div>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">JsonSqlCli.java</span>
+            <pre><code><span class="code-line">    <span class="code-keyword">static boolean</span> <span class="code-function">isDebugEnabled</span>() {</span><span class="code-line">        String debug = System.<span class="code-function">getenv</span>(<span class="code-string">"DEBUG"</span>);</span><span class="code-line">        <span class="code-keyword">if</span> (debug == <span class="code-keyword">null</span>) {</span><span class="code-line">            <span class="code-keyword">return false</span>;</span><span class="code-line">        }</span><span class="code-line">        String v = debug.<span class="code-function">trim</span>().<span class="code-function">toLowerCase</span>();</span><span class="code-line">        <span class="code-keyword">return</span> !(v.<span class="code-function">isEmpty</span>() || v.<span class="code-function">equals</span>(<span class="code-string">"0"</span>) || v.<span class="code-function">equals</span>(<span class="code-string">"false"</span>) || v.<span class="code-function">equals</span>(<span class="code-string">"no"</span>) || v.<span class="code-function">equals</span>(<span class="code-string">"off"</span>));</span><span class="code-line">    }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">"Should we show the gory details?"</p>
+              <p class="tl">Look for a setting called DEBUG in the
+                <span class="term" data-definition="An environment variable is a named setting that lives in your terminal session rather than in the code, like DEBUG=1. Programs can read it to change behaviour without new flags.">environment</span>.</p>
+              <p class="tl">Not set at all?</p>
+              <p class="tl">Then no.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Tidy it up: trim spaces, ignore upper/lower case.</p>
+              <p class="tl">Anything except blank, 0, false, no or off counts as "yes", so <code>DEBUG=false</code> hides stack traces. (Real-world wrinkle: QueryExecutor's own "DEBUG:" lines only check whether DEBUG exists at all, so they still appear with <code>DEBUG=false</code>.)</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 5: GROUP CHAT -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Breaking out of an AI bug loop</h2>
+        <p>A real-feeling debugging session. Notice the moment the human stops the AI from "fixing" the engine and checks the data instead.</p>
+
+        <div class="chat-window animate-in" id="chat-module5">
+          <div class="chat-messages">
+            <div class="chat-message" data-msg="0" data-sender="you" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">Y</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">You</span>
+                <p><code>SELECT * FROM products WHERE Category = 'Tools'</code> returns <code>[]</code>. There are definitely Tools in the file. Fix it.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="1" data-sender="ai" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-3)">AI</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-3)">AI assistant</span>
+                <p>I'll rewrite compareEquals in WhereEvaluator to trim whitespace and ignore case on both sides...</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="2" data-sender="you" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">Y</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">You</span>
+                <p>Hold on. No errors, just empty. That smells like a data problem, not an engine problem. Let me run <code>--describe products</code> first.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="3" data-sender="tool" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-1)">J</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-1)">JsonSQL</span>
+                <p>Table: products · Rows: 3<br><code>id</code> number · <code>name</code> string · <code>category</code> string, sample "Tools" · <code>inStock</code> boolean</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="4" data-sender="you" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">Y</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">You</span>
+                <p>The field is <code>category</code>, lowercase. I wrote <code>Category</code>.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="5" data-sender="ai" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-3)">AI</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-3)">AI assistant</span>
+                <p>Good catch. Field lookups are exact, so <code>Category</code> was "missing", which counts as NULL and fails every comparison. The engine is behaving correctly; only the query needs changing.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="6" data-sender="tool" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-1)">J</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-1)">JsonSQL</span>
+                <p><code>[{"id":1,"name":"Widget",...},{"id":3,"name":"Doohickey",...}]</code> · exit 0</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="chat-typing" style="display:none">
+            <div class="chat-avatar" id="chat-module5-typing-avatar">?</div>
+            <div class="chat-typing-dots">
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+            </div>
+          </div>
+
+          <div class="chat-controls">
+            <button class="btn chat-next-btn">Next Message</button>
+            <button class="btn chat-all-btn">Play All</button>
+            <button class="btn chat-reset-btn">Replay</button>
+            <span class="chat-progress"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 6 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The safety net: tests and docs, every time</h2>
+        <p>This repository contains instructions for Claude in <code>CLAUDE.md</code>. They say that a change is not done until it has thorough tests <em>and</em> updated documentation, and a hook runs the tests automatically. That is why there are 55 test files guarding the behaviour you've learned about.</p>
+
+        <div class="file-tree animate-in">
+          <div class="ft-folder open">
+            <span class="ft-name">src/test/java/com/jsonsql/</span>
+            <span class="ft-desc">Automated checks, run with <code>mvn test</code></span>
+            <div class="ft-children">
+              <div class="ft-file"><span class="ft-name">JsonSqlCliTest.java</span><span class="ft-desc">Flags, exit codes, stdout vs stderr</span></div>
+              <div class="ft-folder">
+                <span class="ft-name">query/</span>
+                <span class="ft-desc">Parser, pipeline order, WHERE operators, NULLs, joins, UNNEST, UNION</span>
+              </div>
+              <div class="ft-folder">
+                <span class="ft-name">config/</span>
+                <span class="ft-desc">Mappings, saved queries, parameters, cache freshness</span>
+              </div>
+              <div class="ft-folder">
+                <span class="ft-name">index/</span>
+                <span class="ft-desc">Building summaries and proving pruning never changes answers</span>
+              </div>
+              <div class="ft-folder">
+                <span class="ft-name">view/</span>
+                <span class="ft-desc">Materialized views and their freshness fingerprints</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p>With the vocabulary from this course, your requests to AI get much sharper:</p>
+
+        <div class="icon-rows">
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-error-light)">😕</div>
+            <div><strong>"Make joins faster"</strong><p>Vague. The AI might add caching, which would not help.</p></div>
+          </div>
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-success-light)">🎯</div>
+            <div><strong>"Replace the nested loop in performJoin with a hash join on the right-hand rows. Keep NULL keys non-matching and number/string coercion. Add tests in JoinConditionTest."</strong><p>Names the place, the technique, the rules to preserve, and where the tests go.</p></div>
+          </div>
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-success-light)">🎯</div>
+            <div><strong>"Add BETWEEN to WhereEvaluator, and teach IndexPlanner to treat it as a range so it can prune files. Update the README's Future Enhancements."</strong><p>Covers the judge, the speed-up, and the docs the project's rule requires.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- QUIZ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Final check: debugging scenarios</h2>
+        <div class="quiz-container" id="quiz-module5">
+
+          <div class="quiz-question-block"
+               data-correct="b"
+               data-explanation-right="Products without a discount field are NULL for discount, and NULL fails every comparison, including !=. Adding OR discount IS NULL brings them back. Nothing in the engine is broken; this is standard SQL behaviour."
+               data-explanation-wrong="Think about the products that vanished: they had no discount field at all. Missing means NULL, and NULL fails every comparison, even &quot;not equal&quot;. The fix is in the query: add OR discount IS NULL.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p><code>WHERE discount != 0</code> is meant to hide only zero-discount items, but products with no <code>discount</code> field disappear too.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">What's going on?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>A bug in WhereEvaluator's != logic that AI should fix</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Missing fields are NULL, which fails every comparison. Add <code>OR discount IS NULL</code></span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The index skipped those files; rerun with <code>--no-index</code></span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="c"
+               data-explanation-right="Anything printed with System.out ends up mixed into the JSON results, and any script piping the output (for example into jq) will choke on it. Status messages belong on System.err, exactly like the existing &quot;Running saved query&quot; line."
+               data-explanation-wrong="The issue is which exit the message uses. System.out is the answers channel; a stray &quot;Loaded 3 files&quot; there would corrupt the JSON for anyone piping it. Status chatter must go to System.err.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>An AI adds <code>System.out.println("Loaded 3 files")</code> inside the executor to "help with debugging".</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">What should you ask it to change?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Nothing, extra information is always helpful</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only print it when <code>--pretty</code> is on</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Send it to stderr (<code>System.err</code>) so piped JSON stays clean, ideally only when DEBUG is set</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="a"
+               data-explanation-right="The error is intentional: BETWEEN is listed as not yet supported, and JsonSQL now refuses rather than silently returning nothing. Rewriting as two range conditions joined by AND works today and can even use an index on price to skip files."
+               data-explanation-wrong="This error is the tool doing its job: saying clearly that it does not support BETWEEN yet, instead of quietly returning zero rows. You can get the same result today with price &gt;= 10 AND price &lt;= 50, which the index planner can also use.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p><code>WHERE price BETWEEN 10 AND 50</code> fails with "Unsupported WHERE expression ... (type: Between)". You need results today.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">Best move?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Rewrite as <code>price &gt;= 10 AND price &lt;= 50</code></span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Set <code>DEBUG=1</code> and retry</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Ask AI to remove the exception so the query returns whatever it can</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="b"
+               data-explanation-right="An empty result with no error is almost always a mismatch between your query and the data: a field-name typo, a value stored as text, a different capitalisation. --describe shows you exactly what fields and types are really there."
+               data-explanation-wrong="DEBUG only adds stack traces when there is an error, and there isn't one here. Clearing the cache won't help either (it already tracks file changes). An empty answer with no error points to a mismatch between query and data, which --describe reveals.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>A query against a new data file returns <code>[]</code>, exit code 0, no warnings.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">What is the most useful first step?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Run with <code>DEBUG=1</code></span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Run <code>--describe</code> on the table to see the real field names and types</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Run <code>--clear-cache</code></span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module5')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module5')">Try Again</button>
+        </div>
+
+        <div class="callout callout-info animate-in">
+          <div class="callout-icon">🎓</div>
+          <div class="callout-content">
+            <strong class="callout-title">You made it</strong>
+            <p>You can now trace a query from keypress to output, name each part of the engine, explain why the stations run in their order, judge whether a speed-up is safe, and debug from the outside in. That is enough to direct an AI on this codebase with confidence.</p>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</section>
+  </main>
+
+</body>
+</html>

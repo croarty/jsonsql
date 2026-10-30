@@ -11,8 +11,10 @@ mvn clean package
 
 Create an alias for easier usage:
 ```bash
-alias jsonsql='java -jar target/jsonsql-1.4.0.jar'
+alias jsonsql='java -jar target/jsonsql-1.6.0.jar'
 ```
+
+Run the commands below from the repository root. Mappings are written to `.jsonsql-mappings.json` in the current directory (it is git-ignored, so a fresh clone has none). The `products` and `orders` names used here point at `products.json` / `orders.json`; other guides (e.g. [COMPLEX-QUERY-EXAMPLES.md](COMPLEX-QUERY-EXAMPLES.md)) reuse those names for different files, and re-running `--add-mapping` overwrites an alias. Use `-c <file>` to keep a separate mapping file per guide if you switch between them.
 
 ## Scenario 1: Simple Auto-Detect (Default)
 
@@ -126,10 +128,13 @@ jsonsql --list-indexes --data-dir example-data
 # Now this only reads the file(s) actually containing year = 2025
 jsonsql --query "SELECT * FROM products_multi WHERE year = 2025" --data-dir example-data --pretty
 
-# Rebuild after the underlying files change; or bypass with --no-index
+# Rebuild after the underlying files change
 jsonsql --rebuild-indexes --data-dir example-data
+
+# Bypass indexes for one query (results are identical, every file is read)
+jsonsql --query "SELECT * FROM products_multi WHERE year = 2025" --data-dir example-data --no-index
 ```
-Indexes prune at the file level, so they help most with many partitioned files. See [INDEXING.md](INDEXING.md) for details.
+Indexes prune at the file level, so they help most with many partitioned files. Index definitions are stored in `.jsonsql-indexes.json` in the current directory and the summaries under `example-data/.jsonsql-index/`. See [INDEXING.md](INDEXING.md) for details.
 
 ## View All Configured Mappings
 
@@ -141,17 +146,19 @@ Output:
 ```
 Configured JSONPath Mappings:
 ────────────────────────────────────────────────────────────────────────────────
-  ecommerce_orders           ->  ecommerce.json:$.store.data.orders
-  ecommerce_products         ->  ecommerce.json:$.store.data.products
-  orders                     ->  $.orders
-  orders_multi               ->  orders-multi:$.orders
-  products                   ->  $.data.products
-  products_multi             ->  products-multi:$.products
-  specified_file_orders      ->  orders.json:$.orders
-  specified_file_products    ->  products.json:$.data.products
+  ecommerce_orders         ->  ecommerce.json:$.store.data.orders
+  ecommerce_products       ->  ecommerce.json:$.store.data.products
+  orders                   ->  $.orders
+  orders_multi             ->  orders-multi:$.orders
+  products                 ->  $.data.products
+  products_multi           ->  products-multi:$.products
+  specified_file_orders    ->  orders.json:$.orders
+  specified_file_products  ->  products.json:$.data.products
 ────────────────────────────────────────────────────────────────────────────────
 Total: 8 mapping(s)
 ```
+
+(Shown after running only the Scenario 1–4 setup commands above. Mappings are listed alphabetically.)
 
 ## Comparison of Mapping Formats
 
@@ -225,8 +232,9 @@ jsonsql --query "SELECT p.brand, o.status FROM orders o JOIN ecommerce_products 
 - Build more complex queries
 
 For more details, see:
-- `README.md` - Complete documentation
+- `README.md` - Complete documentation (including the Known Limitations section)
 - `EXAMPLES.md` - Basic usage examples
 - `MULTI-FILE-EXAMPLES.md` - Advanced multi-file scenarios
 - `INDEXING.md` - Declared indexes and file-level pruning
+- `MATERIALIZED-VIEWS.md` - Persisting CTE results as views
 

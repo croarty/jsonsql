@@ -54,17 +54,21 @@ jsonsql --drop-index products category
 ```
 
 Notes:
-- `--add-index` both **declares** the index and **builds** it immediately.
+- `--add-index` both **declares** the index and **builds** it immediately. Re-adding an
+  existing index rebuilds it. The table must be a mapped table or a materialized view.
 - All index commands honor `--data-dir`, `--config`, and `--indexes-file`.
-- Index **definitions** are stored in `.jsonsql-indexes.json` (override with
-  `--indexes-file`). Per-file **summaries** are stored under `.jsonsql-index/` inside the
-  data directory (alongside the optional `.jsonsql-cache/`).
+- Index **definitions** are stored in `.jsonsql-indexes.json` in the current working
+  directory (override with `--indexes-file`). Per-file **summaries** are stored under
+  `.jsonsql-index/` inside the data directory (alongside the optional `.jsonsql-cache/`).
+- `--rebuild-indexes` exits with code `1` if any declared index fails to build (for
+  example, a definition whose table no longer has a mapping).
 
 ## How a query uses indexes
 
 When you run a query and indexes are declared, JsonSQL:
 
-1. Resolves the FROM table's files (recursively for directory mappings).
+1. Resolves the FROM table's files (recursively for directory mappings). This happens
+   separately for every `SELECT` in the statement (CTE bodies and `UNION` branches too).
 2. Splits the `WHERE` clause on top-level `AND` into individual predicates.
 3. For each predicate that targets an indexed field, loads the index summary and removes
    files whose summary **proves** no row can match.
@@ -80,12 +84,17 @@ conjuncts** on an indexed field:
 
 - Equality: `field = 'value'`
 - Membership: `field IN ('a', 'b', ...)`
-- Ranges: `field > n`, `field >= n`, `field < n`, `field <= n` (either operand order)
+- Ranges: `field > n`, `field >= n`, `field < n`, `field <= n`
+
+Write the field on the left. The planner would also understand `150 <= price`, but the
+WHERE evaluator requires *field operator literal*, so a reversed comparison returns no rows
+with or without an index.
 
 Everything else is simply not used for pruning (the file is kept):
 
 - `OR` between predicates → the whole table is scanned (an `OR` branch can match anything).
-- `LIKE` / `ILIKE`, `IS NULL`, `!=`, `NOT IN`, `BETWEEN`, functions, etc.
+- `NOT (...)`, `LIKE` / `ILIKE`, `IS NULL`, `!=` / `<>`, `NOT IN`, functions, etc.
+  (`BETWEEN` is rejected by the query engine before pruning matters.)
 - Predicates on non-indexed fields.
 
 Because predicates are AND-ed, a single usable conjunct is enough to prune. For example,
@@ -146,7 +155,7 @@ a catalog `id`), `quantity`, `unitPrice`, `status`, `channel`, `region`, and `qu
 > `--indexes-file` at scratch files. Adjust paths as you like.
 
 ```bash
-JAR=target/jsonsql-1.4.0.jar
+JAR=target/jsonsql-1.6.0.jar
 CFG=/tmp/jsonsql-mappings.json
 IDX=/tmp/jsonsql-indexes.json
 
@@ -171,7 +180,8 @@ A="java -jar $JAR -c $CFG --indexes-file $IDX --data-dir example-data -q"
 # Equality on the partition key -> reads ONLY catalog/furniture/* (2 files)
 $A "SELECT id, name, price FROM catalog WHERE category = 'Furniture'"
 
-# Range on price -> skips files whose max price < 150 (e.g. furniture/2023 stays, tools vary)
+# Range on price -> skips files whose max price < 150: reads electronics/2024 and both
+# furniture files; skips electronics/2023 and both tools files
 $A "SELECT id, name, price FROM catalog WHERE price >= 150 ORDER BY price DESC"
 
 # IN list -> only the named categories' files
@@ -230,8 +240,14 @@ jsonsql --add-index premium category --data-dir example-data
 
 The view's stored rows live in a single file under `.jsonsql-views/`. The index summary
 covers that file as a whole: pruning skips loading the entire view when the predicate
-cannot match any row. Rebuild the view (`--rebuild-view`) after source data changes, then
-`--rebuild-index` if needed.
+cannot match any row. Rebuilding the view (`--rebuild-view`) rewrites that file, so the
+index stops pruning until you also run `--rebuild-index <view> <field>` (or
+`--rebuild-indexes`). Dropping the view (`--drop-materialized-view`) also drops its indexes.
+
+`--list-indexes` reports a view index as `FRESH` while the view's row file is unchanged
+since the index was built, and `STALE` after `--rebuild-view` (or if the row file is
+missing) until the index is rebuilt. `--show-view <name>` lists the indexes declared on
+a view.
 
 See [Materialized Views](MATERIALIZED-VIEWS.md) for the full workflow.
 
@@ -239,7 +255,9 @@ See [Materialized Views](MATERIALIZED-VIEWS.md) for the full workflow.
 
 - **File-level only.** Pruning skips whole files; it does not skip rows inside a file.
   A single large document gains nothing.
-- **FROM table only.** Pruning applies to the query's FROM table, not to JOINed tables.
+- **FROM table only.** Pruning applies to the FROM table (a mapped table or a
+  materialized view) of each `SELECT` — the main query, each CTE body, and each `UNION`
+  branch, using that `SELECT`'s own `WHERE` — but never to JOINed tables.
 - **Manual freshness.** Indexes are not auto-rebuilt on data changes; stale files simply
   fall back to scanning. Rebuild to restore pruning.
 - **High-cardinality fields.** Above an internal cap, the per-file distinct-value list is

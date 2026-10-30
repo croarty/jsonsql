@@ -198,7 +198,7 @@ class UnionTest {
 
     @Test
     void testUnionWithLimit() throws Exception {
-        // In JSqlParser 4.9, LIMIT on UNION queries needs to be applied to individual SELECTs
+        // TOP belongs to its own branch
         String result = queryExecutor.execute(
             "SELECT TOP 2 name FROM products " +
             "UNION ALL " +
@@ -252,13 +252,113 @@ class UnionTest {
         String result = queryExecutor.execute(
             "SELECT p.name FROM products p WHERE p.id = 1 " +
             "UNION ALL " +
-            "SELECT 'Order: ' || o.quantity FROM orders o"
+            "SELECT o.quantity FROM orders o"
         );
         
         JsonNode resultNode = objectMapper.readTree(result);
         assertTrue(resultNode.isArray());
-        // Widget + "Order: 5" + "Order: 3" = 3 results
+        // Widget + quantity 5 + quantity 3 = 3 results; each row keeps its branch's column name
         assertEquals(3, resultNode.size());
+        assertEquals("Widget", resultNode.get(0).get("name").asText());
+        assertEquals(5, resultNode.get(1).get("quantity").asInt());
+        assertEquals(3, resultNode.get(2).get("quantity").asInt());
+    }
+
+    @Test
+    void testTrailingLimitAppliesToWholeUnion() throws Exception {
+        // JSqlParser attaches this LIMIT to the last branch; SQL semantics limit the whole union.
+        JsonNode rows = objectMapper.readTree(queryExecutor.execute(
+            "SELECT name FROM products WHERE category = 'Tools' " +
+            "UNION ALL " +
+            "SELECT name FROM categories LIMIT 3"));
+        assertEquals(3, rows.size());
+        assertEquals("Widget", rows.get(0).get("name").asText());
+        assertEquals("Doohickey", rows.get(1).get("name").asText());
+        assertEquals("Tools", rows.get(2).get("name").asText());
+    }
+
+    @Test
+    void testOrderByThenLimitOnWholeUnion() throws Exception {
+        JsonNode rows = objectMapper.readTree(queryExecutor.execute(
+            "SELECT name FROM products WHERE category = 'Tools' " +
+            "UNION ALL " +
+            "SELECT name FROM categories " +
+            "ORDER BY name DESC LIMIT 2"));
+        assertEquals(2, rows.size());
+        assertEquals("Widget", rows.get(0).get("name").asText());
+        assertEquals("Tools", rows.get(1).get("name").asText());
+    }
+
+    @Test
+    void testTrailingLimitAppliedAfterUnionDeduplication() throws Exception {
+        JsonNode rows = objectMapper.readTree(queryExecutor.execute(
+            "SELECT name FROM products WHERE category = 'Tools' " +
+            "UNION " +
+            "SELECT name FROM products WHERE category = 'Tools' LIMIT 5"));
+        assertEquals(2, rows.size(), "duplicates are removed before the limit is applied");
+    }
+
+    @Test
+    void testTrailingLimitZeroReturnsNoRows() throws Exception {
+        JsonNode rows = objectMapper.readTree(queryExecutor.execute(
+            "SELECT name FROM products UNION ALL SELECT name FROM categories LIMIT 0"));
+        assertEquals(0, rows.size());
+    }
+
+    @Test
+    void testParenthesizedLastBranchLimitStaysOnThatBranch() throws Exception {
+        JsonNode rows = objectMapper.readTree(queryExecutor.execute(
+            "SELECT name FROM products WHERE category = 'Tools' " +
+            "UNION ALL " +
+            "(SELECT name FROM categories ORDER BY name LIMIT 1)"));
+        assertEquals(3, rows.size());  // 2 tools + first category alphabetically
+        assertEquals("Electronics", rows.get(2).get("name").asText());
+    }
+
+    @Test
+    void testTopOnLastBranchStaysOnThatBranch() throws Exception {
+        JsonNode rows = objectMapper.readTree(queryExecutor.execute(
+            "SELECT name FROM products WHERE category = 'Tools' " +
+            "UNION ALL " +
+            "SELECT TOP 1 name FROM categories"));
+        assertEquals(3, rows.size());
+    }
+
+    @Test
+    void testNegativeTrailingLimitRejected() {
+        assertThrows(QueryParseException.class, () -> queryExecutor.execute(
+            "SELECT name FROM products UNION ALL SELECT name FROM categories ORDER BY name LIMIT -1"));
+    }
+
+    @Test
+    void testUnionThenUnionAllKeepsLaterDuplicates() throws Exception {
+        // (Tools UNION Tools) -> 2 rows, then UNION ALL Tools -> 2 more rows kept
+        JsonNode rows = objectMapper.readTree(queryExecutor.execute(
+            "SELECT name FROM products WHERE category = 'Tools' " +
+            "UNION " +
+            "SELECT name FROM products WHERE category = 'Tools' " +
+            "UNION ALL " +
+            "SELECT name FROM products WHERE category = 'Tools'"));
+        assertEquals(4, rows.size());
+    }
+
+    @Test
+    void testUnionAllThenUnionDeduplicatesEverything() throws Exception {
+        // (Tools UNION ALL Tools) -> 4 rows, then UNION Tools -> all de-duplicated to 2
+        JsonNode rows = objectMapper.readTree(queryExecutor.execute(
+            "SELECT name FROM products WHERE category = 'Tools' " +
+            "UNION ALL " +
+            "SELECT name FROM products WHERE category = 'Tools' " +
+            "UNION " +
+            "SELECT name FROM products WHERE category = 'Tools'"));
+        assertEquals(2, rows.size());
+    }
+
+    @Test
+    void testIntersectIsRejectedRatherThanTreatedAsUnion() {
+        QueryParseException ex = assertThrows(QueryParseException.class, () -> queryExecutor.execute(
+            "SELECT name FROM products INTERSECT SELECT name FROM categories"));
+        assertTrue(ex.getMessage().contains("INTERSECT is not supported"), ex.getMessage());
     }
 
     @Test

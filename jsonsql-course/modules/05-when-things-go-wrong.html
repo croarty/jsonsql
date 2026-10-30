@@ -1,0 +1,381 @@
+<section class="module" id="module-5" style="background: var(--color-bg-warm)">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">05</span>
+      <h1 class="module-title">When Things Go Wrong</h1>
+      <p class="module-subtitle">How JsonSQL reports trouble, the traps hiding in real data, and how to debug (and steer AI) without going in circles</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- SCREEN 1 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Fail loudly, never quietly</h2>
+        <p>A smoke alarm with a dead battery is worse than no alarm, because you <em>trust</em> it. Early on, a WHERE condition JsonSQL didn't understand (like <code>BETWEEN</code>) simply matched nothing, and you got an empty answer that looked real. Now the judge refuses to guess:</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">WhereEvaluator.java</span>
+            <pre><code><span class="code-line">        <span class="code-comment">// Unsupported expression type - fail loudly instead of silently excluding all rows</span></span><span class="code-line">        <span class="code-keyword">throw new</span> <span class="code-function">UnsupportedExpressionException</span>(</span><span class="code-line">            <span class="code-string">"Unsupported WHERE expression: "</span> + expression +</span><span class="code-line">            <span class="code-string">" (type: "</span> + expression.<span class="code-function">getClass</span>().<span class="code-function">getSimpleName</span>() + <span class="code-string">")"</span></span><span class="code-line">        );</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">If we reach this line, none of the known operators matched.</p>
+              <p class="tl">Stop everything and raise an alarm...</p>
+              <p class="tl">...quoting the exact piece of SQL we did not understand...</p>
+              <p class="tl">...and what kind of thing the parser said it was (e.g. "Between"), which is a great clue for whoever adds support for it.</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-accent animate-in">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">A wrong answer that looks right is the worst bug there is</strong>
+            <p>Crashes get noticed and fixed. Silently wrong results end up in reports. The same instinct runs through the whole codebase: JOIN rejects conditions it can't handle, LIMIT rejects negative numbers, and the index planner falls back to a full read when unsure. When reviewing AI code, watch for <code>catch</code> blocks that swallow errors and carry on with empty data.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 2 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The NULL trap</h2>
+        <p>JSON records don't all have the same fields. Some products have no <code>discount</code> at all; some have <code>"discount": null</code>. SQL calls both
+          <span class="term" data-definition="NULL means 'no value' or 'unknown'. It is not zero and not an empty string. In SQL, comparing anything with NULL gives 'unknown', which WHERE treats as 'no'. The only reliable test is IS NULL / IS NOT NULL.">NULL</span>,
+          and NULL fails <em>every</em> comparison, even "not equal to".</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">WhereEvaluator.java</span>
+            <pre><code><span class="code-line">        <span class="code-comment">// In SQL, any comparison with NULL returns NULL (treated as FALSE in WHERE clauses)</span></span><span class="code-line">        <span class="code-comment">// This includes both missing fields (fieldValue == null) and present but null fields (fieldValue.isNull())</span></span><span class="code-line">        <span class="code-keyword">if</span> (fieldValue == <span class="code-keyword">null</span> || fieldValue.<span class="code-function">isNull</span>()) {</span><span class="code-line">            <span class="code-keyword">return false</span>;</span><span class="code-line">        }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Standard SQL rule: comparing with "no value" can never be true...</p>
+              <p class="tl">...whether the field is missing entirely or present but empty.</p>
+              <p class="tl">So if this row has no value for the field...</p>
+              <p class="tl">...the row fails, for <code>=</code>, <code>!=</code>, <code>&gt;</code>, <code>&lt;</code> alike.</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pattern-cards stagger-children">
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-error)">
+            <div class="pattern-icon" style="background: var(--color-error)">🕳️</div>
+            <h4 class="pattern-title">!= drops blanks</h4>
+            <p class="pattern-desc"><code>WHERE status != 'cancelled'</code> also hides rows with no status. Add <code>OR status IS NULL</code> to keep them.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-4)">
+            <div class="pattern-icon" style="background: var(--color-actor-4)">🔤</div>
+            <h4 class="pattern-title">Numbers stored as text</h4>
+            <p class="pattern-desc"><code>"price": "9"</code> (in quotes) is text, compared alphabetically. So "9" counts as greater than "10".</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)">
+            <div class="pattern-icon" style="background: var(--color-actor-3)">🔠</div>
+            <h4 class="pattern-title">Field names are exact</h4>
+            <p class="pattern-desc"><code>Category</code> and <code>category</code> are different fields. A typo means "missing", which means NULL, which means no rows.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-1)">
+            <div class="pattern-icon" style="background: var(--color-actor-1)">💉</div>
+            <h4 class="pattern-title">Parameters are pasted in</h4>
+            <p class="pattern-desc"><code>${category}</code> is replaced with your text <em>before</em> parsing, with no escaping. Only use trusted values.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 3 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Two exits: one for answers, one for chatter</h2>
+        <p>A building has a loading dock for deliveries and a reception desk for conversation. Command-line programs have the same two exits:
+          <span class="term" data-definition="stdout (standard output) is the main channel a program writes its results to. When you pipe a command into another with |, only stdout travels down the pipe.">stdout</span>
+          for results and
+          <span class="term" data-definition="stderr (standard error) is a second output channel meant for messages, warnings and errors. It still shows in your terminal, but it is not sent down a pipe, so it never pollutes the data.">stderr</span>
+          for everything else. JsonSQL is strict about this, so its output can be
+          <span class="term" data-definition="Piping (the | symbol) sends one program's output straight into another program's input, like jsonsql ... | jq '.[0]'. It only works if the output is pure data.">piped</span>
+          into other tools.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">JsonSqlCli.java</span>
+            <pre><code><span class="code-line">            query = queryManager.<span class="code-function">getQuery</span>(runQueryName);</span><span class="code-line">            <span class="code-comment">// Informational messages go to stderr so stdout carries only result data (pipe-friendly)</span></span><span class="code-line">            System.err.<span class="code-function">println</span>(<span class="code-string">"Running saved query: "</span> + runQueryName);</span><span class="code-line">            System.err.<span class="code-function">println</span>(<span class="code-string">"SQL: "</span> + query);</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Look up the saved query's SQL by its name.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Tell the human which query is running, via the <em>chatter</em> exit (<code>System.err</code>)...</p>
+              <p class="tl">...and show its SQL there too. The results will later go out the <em>answers</em> exit (<code>System.out</code>) untouched.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="badge-list animate-in">
+          <div class="badge-item"><code class="badge-code">exit 0</code><span class="badge-desc">Success. Scripts can carry on.</span></div>
+          <div class="badge-item"><code class="badge-code">exit 1</code><span class="badge-desc">Something failed. The reason is on stderr, starting with "Error".</span></div>
+        </div>
+      </section>
+
+      <!-- SCREEN 4 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Your debugging toolkit</h2>
+        <p>When a query misbehaves, resist the urge to have AI rewrite the engine. Work from the outside in, using flags the tool already gives you:</p>
+
+        <div class="step-cards stagger-children">
+          <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Read the error on stderr</strong><p>It names the table, file or SQL fragment involved. Most problems end here.</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong><code>--dry-run</code></strong><p>Checks the SQL, the mappings and that the files exist, without loading data.</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong><code>--describe products</code></strong><p>Shows the real field names, their types and sample values. Catches typos and "numbers stored as text".</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">4</div><div class="step-body"><strong>Remove the speed-ups</strong><p>Add <code>--no-index</code> and drop <code>--enable-cache</code>. If the answer changes, you found a speed-up bug.</p></div></div>
+          <div class="step-card animate-in"><div class="step-num">5</div><div class="step-body"><strong><code>DEBUG=1</code></strong><p>Prints the full
+            <span class="term" data-definition="A stack trace is the list of functions that were running, nested inside each other, at the moment an error happened. Read from the top, it points to the exact file and line where things broke. Paste it to AI for a precise diagnosis.">stack trace</span>
+            for errors, the best thing to paste to an AI.</p></div></div>
+        </div>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">JsonSqlCli.java</span>
+            <pre><code><span class="code-line">    <span class="code-keyword">static boolean</span> <span class="code-function">isDebugEnabled</span>() {</span><span class="code-line">        String debug = System.<span class="code-function">getenv</span>(<span class="code-string">"DEBUG"</span>);</span><span class="code-line">        <span class="code-keyword">if</span> (debug == <span class="code-keyword">null</span>) {</span><span class="code-line">            <span class="code-keyword">return false</span>;</span><span class="code-line">        }</span><span class="code-line">        String v = debug.<span class="code-function">trim</span>().<span class="code-function">toLowerCase</span>();</span><span class="code-line">        <span class="code-keyword">return</span> !(v.<span class="code-function">isEmpty</span>() || v.<span class="code-function">equals</span>(<span class="code-string">"0"</span>) || v.<span class="code-function">equals</span>(<span class="code-string">"false"</span>) || v.<span class="code-function">equals</span>(<span class="code-string">"no"</span>) || v.<span class="code-function">equals</span>(<span class="code-string">"off"</span>));</span><span class="code-line">    }</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">"Should we show the gory details?"</p>
+              <p class="tl">Look for a setting called DEBUG in the
+                <span class="term" data-definition="An environment variable is a named setting that lives in your terminal session rather than in the code, like DEBUG=1. Programs can read it to change behaviour without new flags.">environment</span>.</p>
+              <p class="tl">Not set at all?</p>
+              <p class="tl">Then no.</p>
+              <p class="tl">&nbsp;</p>
+              <p class="tl">Tidy it up: trim spaces, ignore upper/lower case.</p>
+              <p class="tl">Anything except blank, 0, false, no or off counts as "yes", so <code>DEBUG=false</code> hides stack traces. (Real-world wrinkle: QueryExecutor's own "DEBUG:" lines only check whether DEBUG exists at all, so they still appear with <code>DEBUG=false</code>.)</p>
+              <p class="tl">&nbsp;</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 5: GROUP CHAT -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Breaking out of an AI bug loop</h2>
+        <p>A real-feeling debugging session. Notice the moment the human stops the AI from "fixing" the engine and checks the data instead.</p>
+
+        <div class="chat-window animate-in" id="chat-module5">
+          <div class="chat-messages">
+            <div class="chat-message" data-msg="0" data-sender="you" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">Y</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">You</span>
+                <p><code>SELECT * FROM products WHERE Category = 'Tools'</code> returns <code>[]</code>. There are definitely Tools in the file. Fix it.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="1" data-sender="ai" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-3)">AI</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-3)">AI assistant</span>
+                <p>I'll rewrite compareEquals in WhereEvaluator to trim whitespace and ignore case on both sides...</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="2" data-sender="you" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">Y</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">You</span>
+                <p>Hold on. No errors, just empty. That smells like a data problem, not an engine problem. Let me run <code>--describe products</code> first.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="3" data-sender="tool" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-1)">J</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-1)">JsonSQL</span>
+                <p>Table: products · Rows: 3<br><code>id</code> number · <code>name</code> string · <code>category</code> string, sample "Tools" · <code>inStock</code> boolean</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="4" data-sender="you" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">Y</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">You</span>
+                <p>The field is <code>category</code>, lowercase. I wrote <code>Category</code>.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="5" data-sender="ai" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-3)">AI</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-3)">AI assistant</span>
+                <p>Good catch. Field lookups are exact, so <code>Category</code> was "missing", which counts as NULL and fails every comparison. The engine is behaving correctly; only the query needs changing.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="6" data-sender="tool" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-1)">J</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-1)">JsonSQL</span>
+                <p><code>[{"id":1,"name":"Widget",...},{"id":3,"name":"Doohickey",...}]</code> · exit 0</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="chat-typing" style="display:none">
+            <div class="chat-avatar" id="chat-module5-typing-avatar">?</div>
+            <div class="chat-typing-dots">
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+            </div>
+          </div>
+
+          <div class="chat-controls">
+            <button class="btn chat-next-btn">Next Message</button>
+            <button class="btn chat-all-btn">Play All</button>
+            <button class="btn chat-reset-btn">Replay</button>
+            <span class="chat-progress"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 6 -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The safety net: tests and docs, every time</h2>
+        <p>This repository contains instructions for Claude in <code>CLAUDE.md</code>. They say that a change is not done until it has thorough tests <em>and</em> updated documentation, and a hook runs the tests automatically. That is why there are 55 test files guarding the behaviour you've learned about.</p>
+
+        <div class="file-tree animate-in">
+          <div class="ft-folder open">
+            <span class="ft-name">src/test/java/com/jsonsql/</span>
+            <span class="ft-desc">Automated checks, run with <code>mvn test</code></span>
+            <div class="ft-children">
+              <div class="ft-file"><span class="ft-name">JsonSqlCliTest.java</span><span class="ft-desc">Flags, exit codes, stdout vs stderr</span></div>
+              <div class="ft-folder">
+                <span class="ft-name">query/</span>
+                <span class="ft-desc">Parser, pipeline order, WHERE operators, NULLs, joins, UNNEST, UNION</span>
+              </div>
+              <div class="ft-folder">
+                <span class="ft-name">config/</span>
+                <span class="ft-desc">Mappings, saved queries, parameters, cache freshness</span>
+              </div>
+              <div class="ft-folder">
+                <span class="ft-name">index/</span>
+                <span class="ft-desc">Building summaries and proving pruning never changes answers</span>
+              </div>
+              <div class="ft-folder">
+                <span class="ft-name">view/</span>
+                <span class="ft-desc">Materialized views and their freshness fingerprints</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p>With the vocabulary from this course, your requests to AI get much sharper:</p>
+
+        <div class="icon-rows">
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-error-light)">😕</div>
+            <div><strong>"Make joins faster"</strong><p>Vague. The AI might add caching, which would not help.</p></div>
+          </div>
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-success-light)">🎯</div>
+            <div><strong>"Replace the nested loop in performJoin with a hash join on the right-hand rows. Keep NULL keys non-matching and number/string coercion. Add tests in JoinConditionTest."</strong><p>Names the place, the technique, the rules to preserve, and where the tests go.</p></div>
+          </div>
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-success-light)">🎯</div>
+            <div><strong>"Add BETWEEN to WhereEvaluator, and teach IndexPlanner to treat it as a range so it can prune files. Update the README's Future Enhancements."</strong><p>Covers the judge, the speed-up, and the docs the project's rule requires.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- QUIZ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Final check: debugging scenarios</h2>
+        <div class="quiz-container" id="quiz-module5">
+
+          <div class="quiz-question-block"
+               data-correct="b"
+               data-explanation-right="Products without a discount field are NULL for discount, and NULL fails every comparison, including !=. Adding OR discount IS NULL brings them back. Nothing in the engine is broken; this is standard SQL behaviour."
+               data-explanation-wrong="Think about the products that vanished: they had no discount field at all. Missing means NULL, and NULL fails every comparison, even &quot;not equal&quot;. The fix is in the query: add OR discount IS NULL.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p><code>WHERE discount != 0</code> is meant to hide only zero-discount items, but products with no <code>discount</code> field disappear too.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">What's going on?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>A bug in WhereEvaluator's != logic that AI should fix</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Missing fields are NULL, which fails every comparison. Add <code>OR discount IS NULL</code></span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The index skipped those files; rerun with <code>--no-index</code></span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="c"
+               data-explanation-right="Anything printed with System.out ends up mixed into the JSON results, and any script piping the output (for example into jq) will choke on it. Status messages belong on System.err, exactly like the existing &quot;Running saved query&quot; line."
+               data-explanation-wrong="The issue is which exit the message uses. System.out is the answers channel; a stray &quot;Loaded 3 files&quot; there would corrupt the JSON for anyone piping it. Status chatter must go to System.err.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>An AI adds <code>System.out.println("Loaded 3 files")</code> inside the executor to "help with debugging".</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">What should you ask it to change?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Nothing, extra information is always helpful</span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only print it when <code>--pretty</code> is on</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Send it to stderr (<code>System.err</code>) so piped JSON stays clean, ideally only when DEBUG is set</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="a"
+               data-explanation-right="The error is intentional: BETWEEN is listed as not yet supported, and JsonSQL now refuses rather than silently returning nothing. Rewriting as two range conditions joined by AND works today and can even use an index on price to skip files."
+               data-explanation-wrong="This error is the tool doing its job: saying clearly that it does not support BETWEEN yet, instead of quietly returning zero rows. You can get the same result today with price &gt;= 10 AND price &lt;= 50, which the index planner can also use.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p><code>WHERE price BETWEEN 10 AND 50</code> fails with "Unsupported WHERE expression ... (type: Between)". You need results today.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">Best move?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Rewrite as <code>price &gt;= 10 AND price &lt;= 50</code></span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Set <code>DEBUG=1</code> and retry</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Ask AI to remove the exception so the query returns whatever it can</span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="b"
+               data-explanation-right="An empty result with no error is almost always a mismatch between your query and the data: a field-name typo, a value stored as text, a different capitalisation. --describe shows you exactly what fields and types are really there."
+               data-explanation-wrong="DEBUG only adds stack traces when there is an error, and there isn't one here. Clearing the cache won't help either (it already tracks file changes). An empty answer with no error points to a mismatch between query and data, which --describe reveals.">
+            <div class="scenario-block">
+              <div class="scenario-context">
+                <span class="scenario-label">Scenario</span>
+                <p>A query against a new data file returns <code>[]</code>, exit code 0, no warnings.</p>
+              </div>
+            </div>
+            <h3 class="quiz-question">What is the most useful first step?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Run with <code>DEBUG=1</code></span></button>
+              <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Run <code>--describe</code> on the table to see the real field names and types</span></button>
+              <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Run <code>--clear-cache</code></span></button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module5')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module5')">Try Again</button>
+        </div>
+
+        <div class="callout callout-info animate-in">
+          <div class="callout-icon">🎓</div>
+          <div class="callout-content">
+            <strong class="callout-title">You made it</strong>
+            <p>You can now trace a query from keypress to output, name each part of the engine, explain why the stations run in their order, judge whether a speed-up is safe, and debug from the outside in. That is enough to direct an AI on this codebase with confidence.</p>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</section>

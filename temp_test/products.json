@@ -1,9 +1,0 @@
-{
-  "products": [
-    {
-      "id": 1,
-      "name": "Smartphone",
-      "tags": ["mobile", "smartphone", "android"]
-    }
-  ]
-}

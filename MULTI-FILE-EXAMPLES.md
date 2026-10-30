@@ -2,6 +2,8 @@
 
 JsonSQL supports powerful multi-file querying scenarios, allowing you to work with partitioned data spread across multiple files or directories.
 
+The scenarios below use a hypothetical `data/` directory to illustrate layouts. For runnable versions against the shipped `example-data/` fixtures (`ecommerce.json`, `products-multi/`, `orders-multi/`), see [QUICK-START.md](QUICK-START.md).
+
 ## Scenario 1: Multiple Tables in One File
 
 When you have several data collections in a single JSON file:
@@ -25,6 +27,8 @@ jsonsql --add-mapping products "ecommerce.json:$.store.data.products"
 jsonsql --add-mapping orders "ecommerce.json:$.store.data.orders"
 jsonsql --add-mapping customers "ecommerce.json:$.store.data.customers"
 ```
+
+(The shipped `example-data/ecommerce.json` contains only `products` and `orders`.)
 
 **Query:**
 ```bash
@@ -69,7 +73,7 @@ jsonsql --query "SELECT * FROM all_products ORDER BY year, price" --data-dir dat
 # Filter across all files
 jsonsql --query "SELECT * FROM all_products WHERE year >= 2024 ORDER BY price DESC" --data-dir data
 
-# Count products by year
+# List products grouped visually by year (GROUP BY/COUNT are not supported; pipe to jq to count)
 jsonsql --query "SELECT year, name FROM all_products ORDER BY year" --data-dir data
 ```
 
@@ -199,10 +203,11 @@ Split large datasets across multiple files for easier management and faster load
 - Mix and match different file organizations
 - No need to merge files manually
 
-### 3. **Organization over one giant file**
+### 3. **Selective loading**
 - Only the files in the mapped directory are loaded (each is read fully into memory)
 - Same JSONPath applied to all files in a directory (and its subdirectories)
 - Combine data from multiple sources without merging files by hand
+- With [declared indexes](INDEXING.md), selective queries can skip whole files that cannot match
 
 ### 4. **Organization**
 - Keep data organized by time period (year, quarter, month)
@@ -246,11 +251,12 @@ jsonsql --query "SELECT p.name, o.quantity FROM orders o JOIN products p ON o.pr
 
 | Format | Description | Example |
 |--------|-------------|---------|
-| `$.path` | Single file, filename = table name | `"$.products"` → looks for `products.json` |
+| `$.path` | Single file, filename = table name | `"$.products"` → looks for `products.json` (case-insensitive fallback) |
 | `file.json:$.path` | Specific file | `"ecommerce.json:$.data.products"` |
-| `directory:$.path` | All .json files in directory | `"products-archive:$.products"` |
+| `directory:$.path` | All .json files in directory, recursively | `"products-archive:$.products"` |
 | `path/file.json:$.path` | Relative path to file | `"2024/products.json:$.data"` |
 | `path/dir:$.path` | Relative path to directory | `"archive/products:$.items"` |
+| `/abs/path:$.path` | Absolute file or directory | `"/var/data/products.json:$.items"`, `"C:\data\products.json:$.items"` |
 
-All paths are relative to the `--data-dir` directory (default: current directory).
+Relative paths are resolved against the `--data-dir` directory (default: current directory); absolute paths are used as-is. Files in a directory mapping are loaded in sorted path order, and JsonSQL's own metadata (`.jsonsql-cache/`, `.jsonsql-index/`, `.jsonsql-views/`) is skipped.
 

@@ -5,10 +5,11 @@
 JsonSQL is a well-architected SQL-like query engine for JSON data. This document provides a thorough review of existing functionality and prioritized suggestions for new features.
 
 **Current Status:**
-- **Test Coverage**: 607 tests, all passing ✅
+- **Test Coverage**: 712 tests across 55 test classes, all passing ✅
 - **Core Features**: Fully functional SQL-like query engine
-- **Recent Additions**: DISTINCT, ILIKE, CTEs, CSV output, schema introspection (`--describe`), dry-run validation (`--dry-run`), declared indexes / file-level pruning (`--add-index`), materialized CTE views (`--materialize-view`)
+- **Recent Additions**: DISTINCT, ILIKE, CTEs, `UNION` / `UNION ALL`, CSV output, schema introspection (`--describe`), dry-run validation (`--dry-run`), declared indexes / file-level pruning (`--add-index`), materialized CTE views (`--materialize-view`)
 - **Architecture**: Clean separation of concerns, well-structured, maintainable
+- **Error handling**: unimplemented SQL (`GROUP BY`, `HAVING`, aggregates/functions in SELECT, `OFFSET`, `RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`) is rejected at parse time; a few ineffective constructs remain — see [Part 2.0](#20-unsupported-syntax-handling-high-priority)
 
 ---
 
@@ -28,9 +29,10 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - `SELECT DISTINCT field1, field2` - Unique combinations (✅ **IMPLEMENTED**)
   - `SELECT DISTINCT *` - Unique rows (✅ **IMPLEMENTED**)
 - **Limitations**:
-  - No calculated fields (e.g., `SELECT price * 1.1 AS total`)
-  - No functions in SELECT (e.g., `SELECT UPPER(name)`)
-  - No aggregation functions (COUNT, SUM, AVG, etc.)
+  - No calculated fields (e.g., `SELECT price * 1.1 AS total`) — rejected with an error
+  - No functions in SELECT (e.g., `SELECT UPPER(name)`) — rejected with an error
+  - No aggregation functions (COUNT, SUM, AVG, etc.) — rejected with an error
+  - No `t.*` projection — rejected with an error (use `SELECT *`)
 
 #### FROM Clause
 - **Status**: Fully Implemented
@@ -39,13 +41,17 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - Table aliases (e.g., `FROM orders o`)
   - Multiple tables from single file
   - Directory-based multi-file loading
-  - Relative path support
+  - Relative and absolute path support
   - CTE references (✅ **IMPLEMENTED** - via WITH clause)
+  - Materialized view references (✅ **IMPLEMENTED**)
 - **Strengths**: Excellent flexibility for different JSON structures
+- **Limitations**:
+  - No derived tables (`FROM (SELECT ...) t`)
+  - Table/view names are case-sensitive (CTE names are not)
 
 #### WHERE Clause
 - **Status**: Fully Implemented with Advanced Features
-- **Comparison Operators**: `=`, `!=`, `>`, `<`, `>=`, `<=`
+- **Comparison Operators**: `=`, `!=` / `<>`, `>`, `<`, `>=`, `<=`
 - **Logical Operators**: `AND`, `OR`, `NOT`
 - **Pattern Matching**: 
   - `LIKE`, `NOT LIKE` with `%` and `_` wildcards
@@ -55,8 +61,11 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 - **Grouping**: Parentheses `()` for complex conditions
 - **Nested Field Access**: `WHERE profile.level = 'Gold'`
 - **Limitations**:
-  - No `BETWEEN` operator
-  - No subqueries in WHERE
+  - No `BETWEEN` operator (raises a clear error)
+  - No subqueries in WHERE (raises a clear error)
+  - Predicates must be *field op literal*; reversed (`20 < price`), field-to-field, and function operands silently match nothing
+  - Two-valued NULL logic: `NOT (price > 20)` includes rows where `price` is missing
+  - `LIKE ... ESCAPE` is ignored
 
 #### JOIN Operations
 - **Status**: Partially Implemented
@@ -67,11 +76,12 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - JOIN with WHERE clauses
   - JOIN with UNNEST (execution order fixed)
   - JOIN with CTEs (✅ **IMPLEMENTED**)
+  - Self-joins with distinct aliases (works; verified manually, no dedicated test yet)
 - **Limitations**:
-  - No `RIGHT JOIN`
-  - No `FULL OUTER JOIN`
-  - No `CROSS JOIN` (explicit)
-  - No self-joins with same table (untested)
+  - No `RIGHT JOIN` / `FULL OUTER JOIN` / `NATURAL JOIN` — rejected with an error
+  - No `CROSS JOIN` or comma joins between tables (rejected; both forms work only with `UNNEST`)
+  - Only a single equi-join condition in `ON`
+  - Nested-loop join (O(n × m))
 
 #### UNNEST Operations
 - **Status**: Fully Implemented
@@ -94,6 +104,9 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - Nested field sorting
   - Numeric, text, and boolean sorting
 - **Strengths**: Handles mixed types intelligently
+- **Limitations**:
+  - Sorting runs before projection, so `ORDER BY <select alias>` and `ORDER BY <ordinal>` silently do nothing (except in a UNION, where ORDER BY uses output names)
+  - Explicit JSON `null` sorts as the string `"null"`; only missing fields sort first
 
 #### TOP / LIMIT
 - **Status**: Fully Implemented
@@ -104,7 +117,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - Works with JOINs
   - Works with DISTINCT
 - **Limitations**:
-  - No `OFFSET` support for pagination
+  - No `OFFSET` support for pagination — `OFFSET` / `FETCH` are rejected with an error
 
 #### DISTINCT Clause
 - **Status**: ✅ **FULLY IMPLEMENTED**
@@ -122,15 +135,33 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 - **Features**:
   - `WITH cte_name AS (SELECT ...)` syntax
   - Multiple CTEs in single query
-  - CTEs can reference other CTEs (forward references)
+  - CTEs can reference CTEs defined **earlier** in the same `WITH` list (not later ones)
   - CTEs can be used in FROM clause
   - CTEs can be used in JOINs
   - CTEs with WHERE, ORDER BY, DISTINCT, LIMIT
+  - CTE names are case-insensitive
 - **Implementation**: 
   - Recursive query execution via `QueryExecutionContext`
   - CTE results stored in execution context
-  - Supports nested CTE definitions
-- **Test Coverage**: Comprehensive test suite in `CteTest.java` (9 test cases)
+  - Optional on-disk CTE result cache (`--enable-cache`)
+- **Limitations**:
+  - No nested `WITH` inside a CTE body, no `UNION` inside a CTE, no `WITH RECURSIVE`
+- **Caching**: with `--enable-cache`, a CTE's cache key includes the fingerprint of the mapped files or materialized view it reads, or the cache key of the upstream CTE it reads, so changes propagate through CTE chains
+- **Test Coverage**: `CteTest.java` (10 test cases), plus `CTECacheTest`, `CteCacheKeyTest`, and `CteNamesTest`
+
+#### UNION / UNION ALL
+- **Status**: ✅ **IMPLEMENTED**
+- **Features**:
+  - `UNION` (de-duplicated) and `UNION ALL`
+  - Column-count validation across branches
+  - Trailing `ORDER BY` and `LIMIT` over the combined result
+  - Per-branch `TOP` / parenthesized `LIMIT`
+  - Mixed `UNION` / `UNION ALL` evaluated left to right, as in standard SQL
+  - CTEs shared across branches
+- **Limitations**:
+  - Column names are not unified to the first branch's names
+  - `INTERSECT` / `EXCEPT` / `MINUS` and `OFFSET` are rejected
+- **Test Coverage**: `UnionTest.java`
 
 ### 1.2 Data Management Features ✅
 
@@ -177,7 +208,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Strengths
 - Clean separation of concerns
 - Well-structured packages
-- Comprehensive test coverage (607 tests, all passing)
+- Comprehensive test coverage (712 tests, all passing)
 - Good error handling
 - Flexible field accessor pattern
 - Efficient JSONPath integration
@@ -185,27 +216,38 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 - Execution context pattern for managing CTE results
 
 #### Code Organization
+- `JsonSqlCli.java` - Picocli entry point and command dispatch
+- `DebugMode.java` - Shared `DEBUG` environment-variable check (CLI and query engine)
 - `query/` - Query parsing and execution
-  - `QueryParser.java` - SQL parsing (JSqlParser integration)
-  - `QueryExecutor.java` - Query execution engine
+  - `QueryParser.java` - SQL parsing (JSqlParser integration), including `UNION` and `WITH`
+  - `QueryExecutor.java` - Query execution engine (also dry-run validation)
   - `WhereEvaluator.java` - WHERE clause evaluation
   - `FieldAccessor.java` - Field access interface
   - `QueryExecutionContext.java` - CTE execution context
-  - Supporting classes: `ParsedQuery`, `ColumnInfo`, `TableInfo`, `JoinInfo`, `UnnestInfo`, `OrderByInfo`
+  - `TableFileResolver.java` - Resolves a mapping to its backing file(s), shared with indexing
+  - `DryRunReporter.java` / `DryRunResult.java` - `--dry-run` output
+  - `CteNames.java` - Case-insensitive CTE name lookup
+  - Supporting classes: `ParsedQuery`, `UnionQuery`, `ColumnInfo`, `TableInfo`, `JoinInfo`, `UnnestInfo`, `OrderByInfo`, `QueryParseException`, `UnsupportedExpressionException`
 - `config/` - Configuration management
   - `MappingManager.java` - JSONPath mapping management
-  - `QueryManager.java` - Saved query management
+  - `QueryManager.java` - Saved query management (atomic writes)
+  - `QueryParameterReplacer.java` - `${var}` / `${var:default}` substitution
+  - `CacheManager.java` - Disk cache for parsed rows and CTE results
+- `index/` - Declared indexes: `IndexManager`, `IndexDefinition`, `IndexBuilder`, `IndexStore`, `TableIndex`, `FileSummary`, `IndexPlanner` (file pruning)
+- `view/` - Materialized views: `MaterializedViewManager`, `MaterializedViewDefinition`, `MaterializedViewBuilder`, `MaterializedViewStore`, `SourceFingerprint`
+- `introspection/` - `TableDescriber` (`--describe`)
 - `output/` - Output handling
-  - `OutputHandler.java` - Output formatting and delivery
+  - `OutputHandler.java` - Output formatting and delivery (stdout, file, clipboard)
+  - `CsvFormatter.java` / `OutputFormat.java` - CSV output
 - Clear interfaces (FieldAccessor)
 
 #### Dependencies
 - **Java 21**: Modern Java features
-- **JSqlParser 4.7**: SQL parsing
-- **Jackson 2.16.0**: JSON processing
+- **JSqlParser 4.9**: SQL parsing (pinned to 4.x; 5.x changes the AST API)
+- **Jackson 2.18.12**: JSON processing
 - **JSONPath 2.9.0**: JSONPath expression evaluation
-- **Picocli 4.7.5**: Command-line interface
-- **JUnit 5.10.1**: Testing framework
+- **Picocli 4.7.6**: Command-line interface
+- **JUnit 5.11.4**: Testing framework
 
 #### Build & Security Tooling
 - **GitHub Actions CI** (`.github/workflows/ci.yml`): builds and tests every push/PR on JDK 21 and 24
@@ -217,6 +259,31 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 ---
 
 ## Part 2: Missing Core SQL Features
+
+### 2.0 Unsupported Syntax Handling (HIGH PRIORITY)
+
+**Current Status**: ✅ Mostly implemented. `QueryParser` rejects SQL that JSqlParser accepts but the engine does not implement, with a `QueryParseException` such as `GROUP BY is not supported`. It does this for the main query, CTE bodies, and UNION branches, so `--dry-run` catches it too. Covered by `UnsupportedSyntaxTest`.
+
+| Construct | Behavior |
+|---|---|
+| `GROUP BY`, `HAVING` | Rejected |
+| Aggregates, functions, arithmetic, literals, `CASE`, `t.*` in SELECT | Rejected |
+| `OFFSET` / `LIMIT m, n` / `FETCH` | Rejected |
+| `RIGHT`, `FULL`, `CROSS` (non-`UNNEST`), `NATURAL` joins | Rejected |
+| `INTERSECT`, `EXCEPT`, `MINUS` | Rejected (previously executed as `UNION`) |
+| `LIMIT` after a `UNION` | ✅ Implemented — limits the whole result |
+| Mixed `UNION` / `UNION ALL` | ✅ Implemented — left-associative, as in standard SQL |
+
+**Remaining (still accepted but ineffective)**:
+
+| Construct | Current behavior |
+|---|---|
+| `ORDER BY alias` / `ORDER BY 2` | No sort (could be resolved to the SELECT expression) |
+| `20 < price`, `price > stock`, `UPPER(x) = ...` in WHERE | No rows match (could be rejected or supported) |
+| `LIKE ... ESCAPE` | Escape ignored |
+
+**Implementation Complexity**: Low
+**Business Value**: Very High (prevents silently wrong answers)
 
 ### 2.1 Aggregation & Grouping (HIGH PRIORITY)
 
@@ -311,10 +378,10 @@ WHERE price > (SELECT AVG(price) FROM products)
 **Current Status**: Partially Implemented
 
 **Missing Features**:
-- `RIGHT JOIN`
-- `FULL OUTER JOIN`
+- `RIGHT JOIN` (currently rejected)
+- `FULL OUTER JOIN` (currently rejected)
 - `CROSS JOIN` (explicit)
-- Self-joins (same table, different aliases)
+- Test coverage for self-joins (same table, different aliases), which already work
 
 **Use Cases**:
 ```sql
@@ -342,7 +409,7 @@ LEFT JOIN employees e2 ON e1.managerId = e2.id
   - ✅ `UNION` / `UNION ALL`
   - ✅ ORDER BY on UNION results
 
-**Notes**: In JSqlParser 4.9, LIMIT and TOP cannot be applied directly to a UNION statement as a whole. Apply them to individual SELECT statements within the union.
+**Notes**: A trailing `LIMIT` limits the whole UNION result. JSqlParser attaches it either to the set operation (when there is a trailing `ORDER BY`) or to the last unparenthesized branch (when there isn't); `QueryParser` normalizes both cases to the union level. Per-branch limits use `SELECT TOP n ...` or `(SELECT ... LIMIT n)`.
 
 **Use Cases**:
 ```sql
@@ -359,7 +426,7 @@ SELECT name FROM products WHERE category = 'Furniture'
 
 ### 2.6 Pagination (LOW PRIORITY)
 
-**Current Status**: Partially Implemented
+**Current Status**: Not Implemented (`LIMIT`/`TOP` only; `OFFSET` is rejected with an error)
 
 **Missing Features**:
 - `OFFSET` clause: `LIMIT 10 OFFSET 20`
@@ -383,11 +450,11 @@ SELECT * FROM products ORDER BY price LIMIT 10 OFFSET 20
 
 Saved (and inline) queries can have placeholders that are filled at runtime.
 
-**Syntax**:
+**Syntax** (in bash, `\$` stops the shell from expanding the placeholder itself):
 ```bash
 # Save query with parameters
 jsonsql --save-query filtered_products \
-  --query "SELECT * FROM products WHERE price > ${min_price} AND category = '${category}'"
+  --query "SELECT * FROM products WHERE price > \${min_price} AND category = '\${category}'"
 
 # Run with parameters
 jsonsql --run-query filtered_products \
@@ -482,6 +549,9 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
 ## Part 4: Prioritized Implementation Roadmap
 
 ### Phase 1: Core SQL Features (High Impact)
+0. **Reject silently-ignored constructs** ✅ DONE (see 2.0)
+   - Remaining: `ORDER BY` alias/ordinal, reversed/field-to-field comparisons, `LIKE ... ESCAPE`
+
 1. **Aggregation & GROUP BY** ⭐⭐⭐
    - Essential for analytics
    - High user demand
@@ -517,10 +587,8 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
    - Low-medium complexity
    - Medium value
 
-8. **UNION / UNION ALL** ⭐
-   - Useful but less common
-   - Medium complexity
-   - Medium value
+8. **UNION / UNION ALL** ✅ DONE (including whole-union `LIMIT` and mixed operators)
+   - Remaining: column-name unification, `INTERSECT` / `EXCEPT`
 
 9. **Subqueries** ⭐
    - Complex to implement
@@ -548,8 +616,12 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
 ## Part 5: Implementation Recommendations
 
 ### 5.1 Quick Wins (Low Effort, High Value)
-1. **OFFSET support** - Simple addition to LIMIT
+1. **OFFSET support** - Simple addition to LIMIT (currently rejected)
 2. **BETWEEN operator** - Easy WHERE clause enhancement
+3. **ORDER BY alias / ordinal** - Resolve to the matching SELECT expression before sorting
+4. **Reversed comparisons** (`20 < price`) - Normalize to *field op literal* in the evaluator
+
+Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `LIMIT`, left-associative mixed `UNION`/`UNION ALL`, CTE cache keys that follow CTE chains and materialized views, `--list-indexes` freshness for view indexes, and a single `DEBUG` check (`DebugMode`) shared by the CLI and query engine.
 
 (Parameterized queries — previously listed here — are now implemented.)
 
@@ -575,7 +647,7 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
 - DISTINCT implementation uses canonical JSON string representation
 
 ### 6.2 Testing Strategy
-- Maintain high test coverage (currently 607 tests, all passing)
+- Maintain high test coverage (currently 712 tests, all passing)
 - Add integration tests for new features
 - Test edge cases (nulls, empty arrays, etc.)
 - Test files organized by feature:
@@ -583,6 +655,9 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
   - `CteTest.java` - CTE functionality
   - `IlikeOperatorTest.java` - ILIKE functionality
   - `UnnestJoinTest.java` - UNNEST + JOIN combinations
+  - `UnionTest.java` - UNION / UNION ALL
+  - `UnsupportedSyntaxTest.java` - parse-time rejection of unimplemented SQL
+  - `DebugModeTest.java` - `DEBUG` environment-variable parsing
   - `IndexManagerTest.java` / `IndexBuilderTest.java` / `IndexPlannerTest.java` / `IndexPathResolutionTest.java` - declared indexes & file pruning
   - `MaterializedViewManagerTest.java` / `MaterializedViewBuilderTest.java` / `SourceFingerprintTest.java` / `QueryExecutorMaterializedViewTest.java` / `JsonSqlCliMaterializedViewTest.java` - materialized views & freshness
   - `QueryExecutorIndexPruningTest.java` - indexed vs. full-scan result parity
@@ -600,6 +675,7 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
 ### Current Strengths
 ✅ Robust WHERE clause with complex logic (AND, OR, NOT, parentheses)
 ✅ Excellent JOIN support (INNER, LEFT)
+✅ UNION / UNION ALL
 ✅ UNNEST functionality (well-tested)
 ✅ DISTINCT keyword (fully implemented)
 ✅ ILIKE for case-insensitive pattern matching
@@ -616,26 +692,27 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
 ✅ Clean, maintainable architecture
 
 ### Key Gaps
+❌ A few constructs are still accepted but ineffective (`ORDER BY` alias/ordinal, reversed comparisons, `LIKE ... ESCAPE`; see 2.0)
 ❌ No aggregation (GROUP BY, COUNT, SUM, etc.)
 ❌ No calculated fields or functions
 ❌ Limited output formats (JSON and CSV only; no TSV/table/XML)
 ❌ No BETWEEN operator
-❌ No subqueries
+❌ No subqueries or derived tables
 ❌ No RIGHT JOIN or FULL OUTER JOIN
-❌ No UNION / UNION ALL
 ❌ No OFFSET for pagination
 
 ### Recommended Next Steps
-1. **Short-term**: Aggregation & GROUP BY (high value)
-2. **Medium-term**: Calculated fields & functions
-3. **Long-term**: Advanced features (subqueries, UNION)
+1. **Immediate**: Resolve the remaining ineffective constructs (`ORDER BY` alias/ordinal, reversed comparisons)
+2. **Short-term**: Aggregation & GROUP BY (high value)
+3. **Medium-term**: Calculated fields & functions
+4. **Long-term**: Advanced features (subqueries, derived tables)
 
 ---
 
 ## Conclusion
 
-JsonSQL is a solid foundation with excellent core functionality. Recent additions of DISTINCT, ILIKE, and CTEs demonstrate the system's extensibility. The suggested enhancements would transform it from a good tool into a comprehensive SQL-like query engine for JSON data. The prioritized roadmap focuses on high-impact features that provide the most value to users.
+JsonSQL is a solid foundation with excellent core functionality. Recent additions of DISTINCT, ILIKE, CTEs, UNION, indexes, and materialized views demonstrate the system's extensibility. The suggested enhancements would transform it from a good tool into a comprehensive SQL-like query engine for JSON data. The prioritized roadmap focuses on high-impact features that provide the most value to users.
 
-**Current Test Status**: ✅ 607 tests passing
+**Current Test Status**: ✅ 712 tests passing
 **Code Quality**: ✅ High - Clean architecture, good separation of concerns
 **Documentation**: ✅ Comprehensive - README, examples, saved queries reference

@@ -9,23 +9,23 @@ First, build the project:
 mvn clean package
 ```
 
-The executable JAR will be at `target/jsonsql-1.4.0.jar`.
+The executable JAR will be at `target/jsonsql-1.6.0.jar`.
 
 For convenience, create an alias:
 ```bash
-alias jsonsql='java -jar target/jsonsql-1.4.0.jar'
+alias jsonsql='java -jar target/jsonsql-1.6.0.jar'
 ```
 
 ## Example 1: Basic Setup
 
-Configure the JSONPath mappings for the example data:
+Configure the JSONPath mappings for the example data. These map `products` to `example-data/products.json` and `orders` to `example-data/orders.json` (each JSONPath-only mapping reads `<table>.json` from `--data-dir`). Mappings are saved to `.jsonsql-mappings.json` in the current directory; `--data-dir` is only used at query time.
 
 ```bash
 # Add mapping for products
-jsonsql --add-mapping products "$.data.products" --data-dir example-data
+jsonsql --add-mapping products "$.data.products"
 
 # Add mapping for orders
-jsonsql --add-mapping orders "$.orders" --data-dir example-data
+jsonsql --add-mapping orders "$.orders"
 
 # View configured mappings
 jsonsql --list-tables
@@ -106,8 +106,9 @@ Let's say you have a complex JSON file `data.json`:
 Setup and query:
 
 ```bash
-# Add mapping for the deeply nested users array
-jsonsql --add-mapping users "$.api.response.users"
+# Add mapping for the deeply nested users array. The file name is needed because it
+# differs from the table name (a bare "$.api.response.users" would look for users.json).
+jsonsql --add-mapping users "data.json:$.api.response.users"
 
 # Query the users
 jsonsql --query "SELECT * FROM users"
@@ -172,9 +173,9 @@ jsonsql --data-dir example-data --query "SELECT name, price FROM products" | \
 
 ## Troubleshooting
 
-### "No mapping found for table"
+### "No mapping or materialized view found for table"
 ```bash
-# Solution: Add the mapping
+# Solution: Add the mapping (table names are case-sensitive)
 jsonsql --add-mapping <table_name> "<jsonpath>"
 ```
 

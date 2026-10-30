@@ -24,6 +24,7 @@ class JsonSqlCliMaterializedViewTest {
     private Path mappingFile;
     private Path queriesFile;
     private Path viewsFile;
+    private Path indexesFile;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
@@ -40,6 +41,7 @@ class JsonSqlCliMaterializedViewTest {
         Files.writeString(mappingFile, "{\"products\": \"products.json:$.products[*]\"}");
         queriesFile = tempDir.resolve("queries.json");
         viewsFile = tempDir.resolve(".jsonsql-views.json");
+        indexesFile = tempDir.resolve(".jsonsql-indexes.json");
     }
 
     private record CliResult(int exitCode, String out, String err) {}
@@ -67,7 +69,8 @@ class JsonSqlCliMaterializedViewTest {
             "-d", dataDir.toString(),
             "-c", mappingFile.toString(),
             "--queries-file", queriesFile.toString(),
-            "--views-file", viewsFile.toString()
+            "--views-file", viewsFile.toString(),
+            "--indexes-file", indexesFile.toString()
         };
         String[] all = new String[base.length + args.length];
         System.arraycopy(base, 0, all, 0, base.length);
@@ -164,6 +167,7 @@ class JsonSqlCliMaterializedViewTest {
             "-c", mappingFile.toString(),
             "--queries-file", queriesFile.toString(),
             "--views-file", viewsFile.toString(),
+            "--indexes-file", indexesFile.toString(),
             "--list-materialized-views");
         assertEquals(0, list.exitCode(), list.err());
         assertTrue(list.out().contains("FRESH"), list.out());
@@ -178,5 +182,56 @@ class JsonSqlCliMaterializedViewTest {
         CliResult r = runCli(withConfig("--add-index", "expensive", "category"));
         assertEquals(0, r.exitCode(), r.err());
         assertTrue(r.out().contains("Index added: expensive.category"));
+        assertTrue(Files.exists(indexesFile), "index definitions must be written to --indexes-file");
+    }
+
+    @Test
+    void listIndexesReportsViewIndexFreshAfterBuild() {
+        runCli(withConfig(
+            "--materialize-view", "expensive",
+            "--query", "WITH expensive AS (SELECT id, category FROM products) SELECT * FROM expensive"));
+        runCli(withConfig("--add-index", "expensive", "category"));
+
+        CliResult list = runCli(withConfig("--list-indexes"));
+        assertEquals(0, list.exitCode(), list.err());
+        assertTrue(list.out().contains("expensive.category"), list.out());
+        assertTrue(list.out().contains("[FRESH]"), list.out());
+    }
+
+    @Test
+    void listIndexesReportsViewIndexStaleAfterViewRebuildUntilIndexRebuilt() throws Exception {
+        runCli(withConfig(
+            "--materialize-view", "expensive",
+            "--query", "WITH expensive AS (SELECT id, category FROM products WHERE price > 10) SELECT * FROM expensive"));
+        runCli(withConfig("--add-index", "expensive", "category"));
+
+        Files.writeString(dataDir.resolve("products.json"), """
+            {"products":[
+              {"id":1,"category":"Tools","price":9.99},
+              {"id":2,"category":"Electronics","price":29.99},
+              {"id":3,"category":"Furniture","price":120.0},
+              {"id":4,"category":"Office","price":200.0}
+            ]}""");
+        assertEquals(0, runCli(withConfig("--rebuild-view", "expensive")).exitCode());
+
+        CliResult stale = runCli(withConfig("--list-indexes"));
+        assertTrue(stale.out().contains("[STALE]"), stale.out());
+
+        assertEquals(0, runCli(withConfig("--rebuild-index", "expensive", "category")).exitCode());
+        CliResult fresh = runCli(withConfig("--list-indexes"));
+        assertTrue(fresh.out().contains("[FRESH]"), fresh.out());
+    }
+
+    @Test
+    void listIndexesReportsViewIndexStaleWhenViewDataMissing() throws Exception {
+        runCli(withConfig(
+            "--materialize-view", "expensive",
+            "--query", "WITH expensive AS (SELECT id, category FROM products) SELECT * FROM expensive"));
+        runCli(withConfig("--add-index", "expensive", "category"));
+        Files.delete(dataDir.resolve(".jsonsql-views/expensive.json"));
+
+        CliResult list = runCli(withConfig("--list-indexes"));
+        assertEquals(0, list.exitCode(), list.err());
+        assertTrue(list.out().contains("[STALE]"), list.out());
     }
 }

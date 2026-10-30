@@ -103,6 +103,68 @@ class CteCacheKeyTest {
         assertEquals(5, second.size(), "CTE cache must be invalidated when the source file changes");
     }
 
+    /** Rewrite the source with a new Laptop price; callers pick a value whose length differs from 900. */
+    private void rewritePrices(String laptopPrice) throws Exception {
+        Files.writeString(sourceFile.toPath(), """
+            {"products": [
+                {"id": 1, "name": "Laptop", "price": %s},
+                {"id": 2, "name": "Phone", "price": 700},
+                {"id": 3, "name": "Monitor", "price": 300},
+                {"id": 4, "name": "Cable", "price": 20}
+            ]}
+            """.formatted(laptopPrice));
+    }
+
+    @Test
+    void testChainedCteInvalidatedWhenUpstreamSourceChanges() throws Exception {
+        String sql = "WITH a AS (SELECT id, price FROM products), "
+            + "b AS (SELECT id, price FROM a WHERE price > 0) "
+            + "SELECT * FROM b WHERE id = 1";
+        assertEquals(900, run(sql).get(0).get("price").asInt());
+
+        rewritePrices("12345");
+
+        assertEquals(12345, run(sql).get(0).get("price").asInt(),
+            "a CTE reading another CTE must not serve a stale cached result");
+    }
+
+    @Test
+    void testThreeLevelChainInvalidatedTransitively() throws Exception {
+        String sql = "WITH a AS (SELECT id, price FROM products), "
+            + "b AS (SELECT id, price FROM a), "
+            + "c AS (SELECT id, price FROM b WHERE id = 1) "
+            + "SELECT * FROM c";
+        assertEquals(900, run(sql).get(0).get("price").asInt());
+
+        rewritePrices("4242");
+
+        assertEquals(4242, run(sql).get(0).get("price").asInt());
+    }
+
+    @Test
+    void testCteJoiningUpstreamCteInvalidatedWhenSourceChanges() throws Exception {
+        String sql = "WITH a AS (SELECT id, price FROM products), "
+            + "j AS (SELECT p.name, a.price FROM products p JOIN a ON p.id = a.id) "
+            + "SELECT * FROM j WHERE name = 'Laptop'";
+        assertEquals(900, run(sql).get(0).get("price").asInt());
+
+        rewritePrices("5555");
+
+        assertEquals(5555, run(sql).get(0).get("price").asInt());
+    }
+
+    @Test
+    void testUpstreamCteNameIsMatchedCaseInsensitively() throws Exception {
+        String sql = "WITH Base AS (SELECT id, price FROM products), "
+            + "top1 AS (SELECT id, price FROM BASE WHERE id = 1) "
+            + "SELECT * FROM top1";
+        assertEquals(900, run(sql).get(0).get("price").asInt());
+
+        rewritePrices("77777");
+
+        assertEquals(77777, run(sql).get(0).get("price").asInt());
+    }
+
     @Test
     void testRepeatedIdenticalCteQueryIsStable() throws Exception {
         // Cache hit path: identical query twice returns identical results
