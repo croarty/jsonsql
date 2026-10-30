@@ -68,7 +68,8 @@ test, and continuously monitor dependencies for security issues.
 - Builds and runs the full test suite with `./mvnw -B -ntp clean verify`
 - Tests against JDK 21 (the project target) and JDK 25 (the newest LTS)
 - Caches Maven downloads for faster runs
-- Uploads the Surefire test reports and the packaged JAR as build artifacts
+- Fails the build if line coverage drops below 85% or branch coverage below 75%
+- Uploads the Surefire test reports, the coverage report and the packaged JAR as build artifacts
 
 ### Dependency security monitoring
 
@@ -1458,6 +1459,7 @@ JsonSQL is built with:
 Contributions are welcome! Please ensure:
 
 - All tests pass: `mvn test`
+- Query behaviour stays consistent with SQL: `SqliteComparisonTest` runs the same queries through JsonSQL and SQLite, so add new SQL features to it
 - Code follows Java 21 best practices
 - New features include unit tests
 
