@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.jayway.jsonpath.Configuration;
-import com.jayway.jsonpath.JsonPath;
 import com.jsonsql.DebugMode;
 import com.jsonsql.config.CacheManager;
 import com.jsonsql.config.MappingManager;
@@ -20,7 +18,6 @@ import net.sf.jsqlparser.expression.Expression;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.*;
 
 /**
@@ -31,7 +28,7 @@ public class QueryExecutor implements FieldAccessor {
     private final File dataDirectory;
     private final ObjectMapper objectMapper;
     private final QueryParser queryParser;
-    private final Configuration jsonPathConfig;
+    private final DataFileReader dataFileReader = new DataFileReader();
     private final CacheManager cacheManager;
     private final TableFileResolver fileResolver;
     private final IndexPlanner indexPlanner;
@@ -69,7 +66,6 @@ public class QueryExecutor implements FieldAccessor {
         this.viewStore = viewManager != null ? new MaterializedViewStore(dataDirectory) : null;
         this.objectMapper = new ObjectMapper();
         this.queryParser = new QueryParser();
-        this.jsonPathConfig = JsonPathConfig.create();
         this.fileResolver = new TableFileResolver(mappingManager, dataDirectory);
         this.indexPlanner = indexManager != null
             ? new IndexPlanner(indexManager, new IndexStore(dataDirectory), mappingManager,
@@ -683,29 +679,7 @@ public class QueryExecutor implements FieldAccessor {
      * Returns unwrapped data (without table name wrapper).
      */
     private List<JsonNode> loadFromFile(File jsonFile, String jsonPathExpression) throws IOException {
-        // Read JSON file
-        String jsonContent = Files.readString(jsonFile.toPath());
-        
-        // Apply JSONPath
-        Object result = JsonPath.using(jsonPathConfig).parse(jsonContent).read(jsonPathExpression);
-        
-        // Convert to list of JsonNodes
-        JsonNode resultNode = objectMapper.valueToTree(result);
-        
-        List<JsonNode> dataList = new ArrayList<>();
-        
-        if (resultNode.isArray()) {
-            resultNode.forEach(node -> {
-                if (node.isObject()) {
-                    dataList.add(node);
-                }
-            });
-        } else if (resultNode.isObject()) {
-            // Single object
-            dataList.add(resultNode);
-        }
-        
-        return dataList;
+        return dataFileReader.readRows(jsonFile, jsonPathExpression);
     }
     
     /**

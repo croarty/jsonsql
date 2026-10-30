@@ -61,8 +61,19 @@ public class QueryParser {
             
             return query;
         } catch (JSQLParserException e) {
-            throw new QueryParseException("Invalid SQL syntax: " + e.getMessage(), e);
+            throw new QueryParseException("Invalid SQL syntax: " + syntaxErrorSummary(e), e);
         }
+    }
+
+    /**
+     * The parser's message without its class name or its long list of expected tokens.
+     */
+    private static String syntaxErrorSummary(JSQLParserException e) {
+        return e.getMessage()
+            .replaceFirst("^[\\w.]+Exception:\\s*", "")
+            .replaceFirst("(?s)\\s*Was expecting.*$", "")
+            .replaceAll("\\s+", " ")
+            .trim();
     }
 
     private PlainSelect getPlainSelect(Select select) throws QueryParseException {

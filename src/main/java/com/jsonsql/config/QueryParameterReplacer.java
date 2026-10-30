@@ -7,12 +7,21 @@ import java.util.regex.Pattern;
 /**
  * Replaces parameter placeholders in SQL queries with actual values.
  * Supports placeholders in the format: ${variable} or ${variable:default}
+ *
+ * A value from --param can't change the shape of the query. Inside single quotes its
+ * apostrophes are escaped, and outside them it must be a literal or a list of literals. Default values
+ * are part of the query's own text, so they are used as written.
  */
 public class QueryParameterReplacer {
     
     // Pattern to match ${variable} or ${variable:default}
     // Matches: ${var}, ${var:default}, ${var_name}, ${var:default value}
     private static final Pattern PARAMETER_PATTERN = Pattern.compile("\\$\\{([^}:]+)(?::([^}]*))?\\}");
+
+    // A number, a boolean or a single-quoted string, or a comma-separated list of them for IN (...)
+    private static final String LITERAL = "(?:[-+]?\\d+(?:\\.\\d+)?(?:e[-+]?\\d+)?|true|false|'(?:[^']|'')*')";
+    private static final Pattern BARE_VALUE_PATTERN = Pattern.compile(
+        "(?i)" + LITERAL + "(?:\\s*,\\s*" + LITERAL + ")*");
     
     /**
      * Replace all parameter placeholders in a query string with their values.
@@ -69,7 +78,7 @@ public class QueryParameterReplacer {
             String provided = parameters.get(paramName);
             if (provided != null) {
                 // Use provided value (guard against null to avoid NPE in quoteReplacement)
-                replacement = provided;
+                replacement = safeValue(paramName, provided, isInsideString(query, matcher.start()));
             } else if (defaultValue != null) {
                 // Use default value
                 replacement = defaultValue;
@@ -87,6 +96,24 @@ public class QueryParameterReplacer {
         return result.toString();
     }
     
+    private static boolean isInsideString(String query, int position) {
+        // Every quote toggles the state, and an escaped '' toggles it twice
+        return query.substring(0, position).chars().filter(c -> c == '\'').count() % 2 == 1;
+    }
+
+    private static String safeValue(String name, String value, boolean insideString) {
+        if (insideString) {
+            return value.replace("'", "''");
+        }
+        if (!BARE_VALUE_PATTERN.matcher(value.trim()).matches()) {
+            throw new IllegalArgumentException(
+                "Parameter '" + name + "' must be a number, a boolean or a quoted string, got: " + value +
+                ". For text, put the placeholder in single quotes in the query: '${" + name + "}'."
+            );
+        }
+        return value.trim();
+    }
+
     /**
      * Extract all parameter names from a query string (without defaults).
      * Useful for validation or listing required parameters.

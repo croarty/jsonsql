@@ -2,9 +2,7 @@ package com.jsonsql.index;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jayway.jsonpath.Configuration;
-import com.jayway.jsonpath.JsonPath;
-import com.jsonsql.query.JsonPathConfig;
+import com.jsonsql.query.DataFileReader;
 import com.jsonsql.config.MappingManager;
 import com.jsonsql.query.TableFileResolver;
 import com.jsonsql.view.MaterializedViewBuilder;
@@ -13,7 +11,6 @@ import com.jsonsql.view.MaterializedViewStore;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,7 +33,7 @@ public class IndexBuilder {
     private final MaterializedViewManager viewManager;
     private final MaterializedViewStore viewStore;
     private final ObjectMapper objectMapper;
-    private final Configuration jsonPathConfig;
+    private final DataFileReader dataFileReader = new DataFileReader();
 
     public IndexBuilder(MappingManager mappingManager, File dataDirectory, IndexStore store) {
         this(mappingManager, dataDirectory, store, null, null);
@@ -50,7 +47,6 @@ public class IndexBuilder {
         this.viewManager = viewManager;
         this.viewStore = viewStore;
         this.objectMapper = new ObjectMapper();
-        this.jsonPathConfig = JsonPathConfig.create();
     }
 
     /**
@@ -227,19 +223,6 @@ public class IndexBuilder {
     }
 
     private List<JsonNode> loadRows(File file, String jsonPath) throws IOException {
-        String content = Files.readString(file.toPath());
-        Object result = JsonPath.using(jsonPathConfig).parse(content).read(jsonPath);
-        JsonNode resultNode = objectMapper.valueToTree(result);
-        List<JsonNode> rows = new ArrayList<>();
-        if (resultNode.isArray()) {
-            resultNode.forEach(n -> {
-                if (n.isObject()) {
-                    rows.add(n);
-                }
-            });
-        } else if (resultNode.isObject()) {
-            rows.add(resultNode);
-        }
-        return rows;
+        return dataFileReader.readRows(file, jsonPath);
     }
 }

@@ -1235,7 +1235,7 @@ See [MATERIALIZED-VIEWS.md](MATERIALIZED-VIEWS.md) for the full guide (this exam
 
 Understanding how JsonSQL processes data helps set expectations for large inputs:
 
-- **In-memory processing**: Each matched JSON file is read fully into memory (via `Files.readString`) and parsed before any query phases run. There is no streaming parser; peak memory scales with the total size of the loaded files.
+- **In-memory processing**: Each matched JSON file is read fully into memory  and parsed before any query phases run. There is no streaming parser; peak memory scales with the total size of the loaded files.
 - **No early termination**: `TOP`/`LIMIT` does **not** short-circuit loading. Queries run in the order WHERE → ORDER BY → projection → DISTINCT → LIMIT, so the entire matched dataset is loaded and filtered before the limit is applied.
 - **Optional disk cache**: Use `--enable-cache` to persist parsed JSON between runs (see [Caching](#caching)). The cache speeds up repeated queries against unchanged sources but does not reduce per-query memory usage.
 
