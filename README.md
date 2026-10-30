@@ -14,6 +14,7 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
   - `UNNEST` - Flatten arrays into individual rows
   - `TOP x` / `LIMIT` - Limit result sets
   - `ORDER BY` - Sort results ascending or descending
+  - `GROUP BY` / `HAVING` - Group rows and summarise them with `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`
 - **Schema-less Design**: Works with any JSON structure without predefined models
 - **JSONPath Mapping**: Define shortcuts for complex JSONPath expressions
 - **Saved Queries**: Save and reuse frequently-used queries by name, including parameterized queries
@@ -793,7 +794,7 @@ jsonsql --query "SELECT * FROM products" --output results.json --pretty
 
 **Output column names:** an unaliased column uses its last path segment (`p.name` → `name`). If two selected columns would produce the same name, both fall back to their full expression (`SELECT o.id, p.id` → keys `o.id` and `p.id`). With `SELECT *` over a JOIN, all tables' fields are merged into one object and a later table's field overwrites an earlier one with the same name — alias the columns explicitly if names collide.
 
-**Only plain field references and `*` are supported in the SELECT list.** `t.*`, literals, arithmetic (`price * 2`), string concatenation, functions (`UPPER(name)`), aggregates (`COUNT(*)`), and `CASE` are rejected with an error such as `Function or aggregate in SELECT list: COUNT(*) is not supported`.
+**Only plain field references, `*` and aggregates are supported in the SELECT list.** `t.*`, literals, arithmetic (`price * 2`), string concatenation, functions (`UPPER(name)`), and `CASE` are rejected with an error such as `Function or aggregate in SELECT list: UPPER(name) is not supported`.
 
 ### FROM Clause
 
@@ -907,6 +908,64 @@ ORDER BY p.name, o.orderDate DESC
 
 Sorting runs *before* projection, so `ORDER BY` can use a source field you did not select. It also accepts a SELECT alias (`SELECT price AS cost ... ORDER BY cost`) or a column position (`ORDER BY 2`). An alias takes priority over a field with the same name. A position needs an explicit column list, not `SELECT *`. Expressions such as `ORDER BY price * 2` are rejected. (In a `UNION`, see below.)
 
+### GROUP BY and Aggregates
+
+Summarise rows with `COUNT`, `SUM`, `AVG`, `MIN` and `MAX`. These examples map `products` to `complex-products.json:$.products[*]`.
+
+```bash
+# Over the whole table
+jsonsql --data-dir example-data --query "SELECT COUNT(*) AS total, AVG(price) AS average, MAX(price) AS highest FROM products"
+```
+
+```json
+[{"total":6,"average":50.90833333333333,"highest":89.99}]
+```
+
+```bash
+# One row per category
+jsonsql --data-dir example-data --query "SELECT category, COUNT(*) AS products, AVG(price) AS average FROM products GROUP BY category ORDER BY products DESC, category"
+```
+
+```json
+[{"category":"Electronics","products":4,"average":57.49},{"category":"Accessories","products":1,"average":45.5},{"category":"Office","products":1,"average":29.99}]
+```
+
+```bash
+# Keep only some groups with HAVING
+jsonsql --data-dir example-data --query "SELECT category, COUNT(*) AS products FROM products GROUP BY category HAVING COUNT(*) > 1"
+
+# Count distinct values
+jsonsql --data-dir example-data --query "SELECT category, COUNT(DISTINCT brand) AS brands FROM products GROUP BY category"
+
+# Across a join
+jsonsql --data-dir example-data --query "SELECT p.category, COUNT(*) AS orders, SUM(o.quantity) AS units FROM ecommerce_orders o JOIN ecommerce_products p ON o.productId = p.id GROUP BY p.category ORDER BY units DESC"
+```
+
+| Function | Result |
+|---|---|
+| `COUNT(*)` | Number of rows (`COUNT(1)` is the same) |
+| `COUNT(field)` | Number of values that aren't NULL |
+| `SUM(field)` | Total; a whole number if every value is |
+| `AVG(field)` | Average, always a decimal |
+| `MIN(field)`, `MAX(field)` | Lowest and highest; numbers sort before text |
+
+`DISTINCT` works in any of them, such as `SUM(DISTINCT price)`. Nested fields work too, such as `SUM(info.size)`.
+
+Rules:
+
+- Aggregates skip NULL and missing values. With no values, `COUNT` gives `0` and the others give `null`.
+- Without `GROUP BY`, the whole table is one group, so you always get one row, even if nothing matched.
+- NULL and missing values form one group. `1` and `1.0` are the same group; `1` and `"1"` are not.
+- Text in `SUM` and `AVG` counts as its leading number, or 0 if it has none, as in SQLite. So `"3.5kg"` counts as 3.5 and `"none"` as 0. Check text fields first if that isn't what you want.
+- Every selected field must be in `GROUP BY`. `SELECT category, name ... GROUP BY category` is rejected, because `name` would be an arbitrary row's value.
+- `GROUP BY` accepts a field, a SELECT alias or a position, but not an expression.
+- `HAVING` can use grouped fields, aliases and aggregates. `ORDER BY` can use those and positions, including aggregates you didn't select.
+- Aggregates are not allowed in `WHERE`, which runs before grouping. Use `HAVING`.
+- Without an alias, a column is named as written, such as `COUNT(*)`. Use `AS` for easier names.
+- Without `ORDER BY`, groups appear in the order they were first seen.
+
+Clauses run in this order: **WHERE → GROUP BY → HAVING → ORDER BY → SELECT → DISTINCT → OFFSET/LIMIT**.
+
 ### TOP / LIMIT
 
 - `SELECT TOP n` - Limit to first n results
@@ -1003,8 +1062,8 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 
 | Construct | Error |
 |---|---|
-| `GROUP BY`, `HAVING` | `GROUP BY is not supported` / `HAVING is not supported` |
-| Aggregates, functions, arithmetic, literals, `CASE`, `\|\|` in SELECT | `Function or aggregate in SELECT list: COUNT(*) is not supported (...)` |
+| Functions, arithmetic, literals, `CASE`, `\|\|` in SELECT | `Function or aggregate in SELECT list: UPPER(name) is not supported (...)` |
+| Expressions inside aggregates, such as `SUM(price * 2)` | `Aggregate argument is not supported: ...` |
 | `SELECT t.*` | `SELECT t.* is not supported (use SELECT * or list the columns)` |
 | `FETCH` | `FETCH is not supported (use LIMIT and OFFSET)` |
 | `RIGHT`, `FULL [OUTER]`, `CROSS` (except with `UNNEST`), `NATURAL` joins | `RIGHT JOIN is not supported`, ... |
@@ -1017,8 +1076,6 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 These checks run at parse time, so `--dry-run` reports them too, and they apply inside CTE bodies and UNION branches as well.
 
 A name that matches nothing is not an error, because JSON has no fixed schema and `profile.level` could be a nested field: `SELECT nope` and `SELECT typo.id` return `null`, and `WHERE nope = 1` matches no rows. Check field names and case with `--describe`.
-
-Until aggregation lands, pipe results to a tool like `jq` for counts and sums.
 
 ## Advanced Usage
 
@@ -1164,9 +1221,9 @@ jsonsql --query "SELECT * FROM products" | jq '.[] | select(.price > 20)'
 # Save to file and process
 jsonsql --query "SELECT * FROM products WHERE price > 20" --output high-value.json
 
-# Use in scripts: count rows with jq (COUNT(*) is not yet supported)
+# Use in scripts: read one value out with jq
 #!/bin/bash
-COUNT=$(jsonsql --query "SELECT * FROM products" | jq 'length')
+COUNT=$(jsonsql --query "SELECT COUNT(*) AS n FROM products" | jq '.[0].n')
 echo "Total products: $COUNT"
 ```
 
@@ -1360,15 +1417,15 @@ Planned features for future releases, organized by priority:
 
 **Aggregation & Grouping:**
 
-- `GROUP BY` clause with aggregation functions (currently rejected with an error)
-- `COUNT`, `SUM`, `AVG`, `MIN`, `MAX` functions (currently rejected with an error)
-- `HAVING` clause for filtering grouped results
+- ✅ `GROUP BY` clause - **IMPLEMENTED**
+- ✅ `COUNT`, `SUM`, `AVG`, `MIN`, `MAX` functions - **IMPLEMENTED**
+- ✅ `HAVING` clause - **IMPLEMENTED**
 
 **Query Features:**
 
 - Subqueries (e.g., `WHERE price > (SELECT AVG(price) FROM products)`) and derived tables in `FROM`
 - Calculated fields in SELECT (e.g., `SELECT price * 1.1 AS price_with_tax`)
-- ✅ **Unsupported SQL fails loudly** — `GROUP BY`, `HAVING`, `RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`, and non-column SELECT items are rejected at parse time instead of being silently ignored - **IMPLEMENTED**
+- ✅ **Unsupported SQL fails loudly** — `RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`, and non-column SELECT items are rejected at parse time instead of being silently ignored - **IMPLEMENTED**
 - ✅ `ORDER BY` on a SELECT alias or column position - **IMPLEMENTED**
 
 ### Medium Priority (Advanced Features)

@@ -250,6 +250,11 @@ public class WhereEvaluator {
         if (expr instanceof Column) {
             return resolveColumn(row, (Column) expr);
         }
+        if (AggregateCall.isAggregate(expr)) {
+            // Only reachable from HAVING, where each row already holds its aggregate results
+            JsonNode value = fieldAccessor.getFieldValue(row, QueryParser.fieldName(expr));
+            return new Operand(value == null || value.isNull() ? null : value, true);
+        }
         throw new UnsupportedExpressionException(
             "Unsupported WHERE expression: " + expr + " (type: " + expr.getClass().getSimpleName() + ")"
         );

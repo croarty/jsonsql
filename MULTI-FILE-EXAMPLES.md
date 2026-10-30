@@ -73,8 +73,8 @@ jsonsql --query "SELECT * FROM all_products ORDER BY year, price" --data-dir dat
 # Filter across all files
 jsonsql --query "SELECT * FROM all_products WHERE year >= 2024 ORDER BY price DESC" --data-dir data
 
-# List products grouped visually by year (GROUP BY/COUNT are not supported; pipe to jq to count)
-jsonsql --query "SELECT year, name FROM all_products ORDER BY year" --data-dir data
+# Count products per year
+jsonsql --query "SELECT year, COUNT(*) AS products FROM all_products GROUP BY year ORDER BY year" --data-dir data
 ```
 
 ## Scenario 3: Partitioned Data by Quarter
@@ -191,7 +191,7 @@ jsonsql --query "SELECT p.name, o.quantity, o.totalPrice FROM orders_2024 o JOIN
 jsonsql --query "SELECT TOP 20 p.name, o.quantity, o.totalPrice FROM orders_2024 o JOIN products_2024 p ON o.productId = p.id ORDER BY o.totalPrice DESC" --data-dir sales-data --pretty
 ```
 
-> Note: aggregation such as `SUM(o.quantity)` is not yet supported. To total a column, pipe the result JSON to a tool like `jq` (for example `... | jq '[.[].quantity] | add'`).
+> To total a column, use `GROUP BY` and `SUM`: `SELECT p.name, SUM(o.quantity) AS units FROM orders_2024 o JOIN products_2024 p ON o.productId = p.id GROUP BY p.name`.
 
 ## Key Benefits
 

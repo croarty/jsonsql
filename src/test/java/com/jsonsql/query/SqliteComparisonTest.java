@@ -290,6 +290,67 @@ class SqliteComparisonTest {
             any("WITH p AS (SELECT id FROM o) SELECT id FROM p"));
     }
 
+    static Stream<Query> aggregateQueries() {
+        List<Query> queries = new ArrayList<>();
+        List<String> functions = List.of("COUNT(*)", "COUNT(price)", "COUNT(cat)", "COUNT(DISTINCT cat)", "COUNT(DISTINCT name)",
+            "COUNT(1)", "count(*)", "SUM(price)", "SUM(qty)", "SUM(id)", "SUM(DISTINCT price)", "AVG(price)", "AVG(qty)",
+            "AVG(DISTINCT qty)", "MIN(price)", "MAX(price)", "MIN(name)", "MAX(name)", "MIN(cat)", "MAX(cat)",
+            "SUM(name)", "AVG(name)", "SUM(cat)");
+        for (String function : functions) {
+            queries.add(any("SELECT " + function + " FROM p"));
+            queries.add(any("SELECT " + function + " AS v FROM p WHERE id > 99"));
+            queries.add(any("SELECT cat, " + function + " AS v FROM p GROUP BY cat"));
+            queries.add(any("SELECT name, price, " + function + " AS v FROM p GROUP BY name, price"));
+            queries.add(any("SELECT qty, " + function + " AS v FROM p WHERE price > 0 GROUP BY qty"));
+        }
+        queries.add(any("SELECT cat FROM p GROUP BY cat"));
+        queries.add(any("SELECT cat FROM k GROUP BY cat"));
+        queries.add(any("SELECT cat, name FROM p GROUP BY cat, name"));
+        queries.add(any("SELECT cat AS c, COUNT(*) AS n FROM p GROUP BY c"));
+        queries.add(any("SELECT cat, COUNT(*) AS n FROM p GROUP BY 1"));
+        queries.add(any("SELECT cat, COUNT(*) FROM p WHERE id > 99 GROUP BY cat"));
+        queries.add(any("SELECT DISTINCT cat FROM p GROUP BY cat, name"));
+        queries.add(any("SELECT COUNT(*) AS a, SUM(qty) AS b, AVG(qty) AS c, MIN(qty) AS d, MAX(qty) AS e FROM p"));
+
+        for (String condition : List.of("COUNT(*) > 1", "COUNT(*) = 1", "COUNT(*) != 2", "SUM(qty) > 5", "SUM(price) IS NULL", "SUM(price) IS NOT NULL",
+                "NOT (SUM(price) > 10)", "AVG(price) BETWEEN 5 AND 25", "MAX(price) IN (20, 30)", "MIN(name) LIKE 'D%'", "COUNT(*) > 1 AND SUM(qty) > 5",
+                "COUNT(*) > 2 OR SUM(qty) = 1", "1 < COUNT(*)", "COUNT(price) < COUNT(*)", "cat = 'Tools'", "cat IS NULL", "n > 1", "cat != 'Toys' AND n > 1", "count(*) > 1")) {
+            queries.add(any("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat HAVING " + condition));
+        }
+        queries.add(any("SELECT COUNT(*) AS n FROM p HAVING COUNT(*) > 1"));
+        queries.add(any("SELECT COUNT(*) AS n FROM p HAVING COUNT(*) > 100"));
+
+        queries.add(ordered("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat ORDER BY n DESC, cat", "n", "cat"));
+        queries.add(ordered("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat ORDER BY cat", "cat"));
+        queries.add(ordered("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat ORDER BY cat DESC", "cat"));
+        queries.add(ordered("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat ORDER BY 2 DESC, 1", "n", "cat"));
+        queries.add(ordered("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat ORDER BY COUNT(*) DESC, cat", "n", "cat"));
+        queries.add(ordered("SELECT cat, SUM(qty) AS s FROM p GROUP BY cat ORDER BY SUM(qty)", "s"));
+        queries.add(ordered("SELECT cat FROM p GROUP BY cat ORDER BY MAX(price) DESC, cat", "cat"));
+        queries.add(ordered("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat ORDER BY n DESC, cat LIMIT 2", "n", "cat"));
+        queries.add(ordered("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat ORDER BY n DESC, cat LIMIT 2 OFFSET 1", "n", "cat"));
+
+        queries.add(any("SELECT p.cat, COUNT(o.id) AS n FROM p JOIN o ON p.id = o.pid GROUP BY p.cat"));
+        queries.add(any("SELECT p.cat AS c, SUM(o.n) AS total FROM p LEFT JOIN o ON p.id = o.pid GROUP BY p.cat"));
+        queries.add(any("SELECT p.name, COUNT(o.id) AS orders, SUM(o.n) AS units FROM p LEFT JOIN o ON o.pid = p.id GROUP BY p.name"));
+        queries.add(any("SELECT o.st, COUNT(*) AS n FROM o GROUP BY o.st HAVING COUNT(*) > 1"));
+        queries.add(any("SELECT COUNT(*) AS n, SUM(o.n) AS total FROM p JOIN o ON p.id = o.pid"));
+        queries.add(any("SELECT cat, COUNT(*) AS n FROM p GROUP BY p.cat"));
+
+        queries.add(any("WITH x AS (SELECT cat, COUNT(*) AS n FROM p GROUP BY cat) SELECT cat FROM x WHERE n > 1"));
+        queries.add(any("WITH x AS (SELECT cat, SUM(qty) AS s FROM p GROUP BY cat) SELECT x.cat, x.s, k.cat AS other FROM x JOIN k ON x.cat = k.cat"));
+        queries.add(any("WITH x AS (SELECT id, cat FROM p WHERE qty > 1) SELECT cat, COUNT(*) AS n FROM x GROUP BY cat"));
+        queries.add(any("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat UNION SELECT cat, COUNT(*) FROM k GROUP BY cat"));
+        queries.add(any("SELECT COUNT(*) AS n FROM p UNION ALL SELECT COUNT(*) FROM o"));
+        return queries.stream();
+    }
+
+    @ParameterizedTest
+    @MethodSource("aggregateQueries")
+    void aggregatesMatchSqlite(Query query) throws Exception {
+        assertMatchesSqlite(query);
+    }
+
     @ParameterizedTest
     @MethodSource("whereQueries")
     void whereMatchesSqlite(Query query) throws Exception {

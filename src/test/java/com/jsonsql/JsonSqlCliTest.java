@@ -254,26 +254,26 @@ class JsonSqlCliTest {
     }
 
     @Test
-    void testUnsupportedGroupByFailsWithClearErrorAndNoOutput() {
-        CliResult r = runCli(withConfig("-q", "SELECT name FROM products GROUP BY name"));
+    void testUngroupedColumnFailsWithClearErrorAndNoOutput() {
+        CliResult r = runCli(withConfig("-q", "SELECT id, name FROM products GROUP BY name"));
         assertEquals(1, r.exitCode());
-        assertTrue(r.err().contains("GROUP BY is not supported"), r.err());
+        assertTrue(r.err().contains("must be in GROUP BY"), r.err());
         assertEquals("", r.out(), "no partial result may be written to stdout");
     }
 
     @Test
-    void testUnsupportedAggregateFailsWithClearError() {
-        CliResult r = runCli(withConfig("-q", "SELECT COUNT(*) FROM products"));
+    void testUnsupportedFunctionFailsWithClearError() {
+        CliResult r = runCli(withConfig("-q", "SELECT UPPER(name) FROM products"));
         assertEquals(1, r.exitCode());
-        assertTrue(r.err().contains("COUNT(*)"), r.err());
+        assertTrue(r.err().contains("UPPER(name)"), r.err());
         assertTrue(r.err().contains("is not supported"), r.err());
     }
 
     @Test
     void testDryRunRejectsUnsupportedSyntax() {
-        CliResult r = runCli(withConfig("-q", "SELECT name FROM products GROUP BY name", "--dry-run"));
+        CliResult r = runCli(withConfig("-q", "SELECT UPPER(name) FROM products", "--dry-run"));
         assertEquals(1, r.exitCode());
-        assertTrue(r.err().contains("GROUP BY is not supported"), r.err());
+        assertTrue(r.err().contains("is not supported"), r.err());
         assertFalse(r.out().contains("Dry run OK"));
     }
 

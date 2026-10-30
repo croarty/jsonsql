@@ -54,8 +54,6 @@ class UnsupportedSyntaxTest {
 
     @ParameterizedTest
     @CsvSource(delimiter = '|', quoteCharacter = '"', value = {
-        "SELECT category FROM products GROUP BY category                        | GROUP BY is not supported",
-        "SELECT name FROM products HAVING price > 1                             | HAVING is not supported",
         "SELECT name FROM products OFFSET 5 ROWS FETCH NEXT 2 ROWS ONLY         | FETCH is not supported",
         "SELECT o.orderId FROM orders o RIGHT JOIN products p ON o.productId = p.id      | RIGHT JOIN is not supported",
         "SELECT o.orderId FROM orders o FULL OUTER JOIN products p ON o.productId = p.id | FULL OUTER JOIN is not supported",
@@ -63,8 +61,6 @@ class UnsupportedSyntaxTest {
         "SELECT o.orderId FROM orders o CROSS JOIN products p                   | CROSS JOIN is not supported",
         "SELECT o.orderId FROM orders o NATURAL JOIN products p                 | NATURAL JOIN is not supported",
         "SELECT p.* FROM products p                                             | SELECT p.* is not supported",
-        "SELECT COUNT(*) FROM products                                          | Function or aggregate in SELECT list: COUNT(*) is not supported",
-        "SELECT SUM(price) AS total FROM products                               | Function or aggregate in SELECT list: SUM(price) is not supported",
         "SELECT UPPER(name) FROM products                                       | Function or aggregate in SELECT list: UPPER(name) is not supported",
         "SELECT price * 2 AS doubled FROM products                              | Expression in SELECT list: price * 2 is not supported",
         "SELECT 'x' AS label FROM products                                      | Expression in SELECT list: 'x' is not supported",
@@ -100,15 +96,15 @@ class UnsupportedSyntaxTest {
     @Test
     void rejectedInsideCteBody() {
         QueryParseException ex = rejected(
-            "WITH c AS (SELECT category FROM products GROUP BY category) SELECT * FROM c");
-        assertTrue(ex.getMessage().contains("GROUP BY"));
+            "WITH c AS (SELECT UPPER(name) FROM products) SELECT * FROM c");
+        assertTrue(ex.getMessage().contains("UPPER(name)"));
     }
 
     @Test
     void rejectedInsideUnionBranch() {
         QueryParseException ex = rejected(
-            "SELECT name FROM products UNION ALL SELECT COUNT(*) FROM products");
-        assertTrue(ex.getMessage().contains("COUNT(*)"));
+            "SELECT name FROM products UNION ALL SELECT UPPER(name) FROM products");
+        assertTrue(ex.getMessage().contains("UPPER(name)"));
     }
 
     @Test
@@ -121,7 +117,7 @@ class UnsupportedSyntaxTest {
     @Test
     void executorSurfacesParseErrorInsteadOfReturningRows() {
         assertThrows(QueryParseException.class,
-            () -> executor.execute("SELECT category FROM products GROUP BY category"));
+            () -> executor.execute("SELECT UPPER(category) FROM products"));
         assertThrows(QueryParseException.class,
             () -> executor.execute("SELECT o.orderId FROM orders o RIGHT JOIN products p ON o.productId = p.id"));
     }
@@ -129,7 +125,7 @@ class UnsupportedSyntaxTest {
     @Test
     void dryRunAlsoRejects() {
         assertThrows(QueryParseException.class,
-            () -> executor.dryRunValidate("SELECT name FROM products GROUP BY name"));
+            () -> executor.dryRunValidate("SELECT UPPER(name) FROM products"));
     }
 
     // -- forms that must remain accepted ----------------------------------------------
