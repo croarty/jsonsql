@@ -7,6 +7,7 @@ Java 21 command-line tool that queries JSON files with SQL-like syntax. Built wi
 ```bash
 mvn test                                  # full suite, about 30 seconds
 mvn test -Dtest=QueryExecutorTest         # one class, while iterating
+mvn verify                                # also checks coverage: 85% line, 75% branch
 mvn package                               # builds target/jsonsql-<version>.jar
 java -jar target/jsonsql-1.6.0.jar --help
 ```
@@ -43,7 +44,7 @@ Implementing, fixing or changing behaviour isn't finished until all three are do
 2. **Tests:** cover the happy path, edge cases and error paths, in JUnit under `src/test/java/`, matching the existing style.
    - Pure logic: unit tests on the class (e.g. `CsvFormatterTest`)
    - CLI wiring: `JsonSqlCliTest`
-   - Query behaviour: the `QueryExecutor`, parser or evaluator tests
+   - Query behaviour: the `QueryExecutor`, parser or evaluator tests, and `SqliteComparisonTest` for anything SQL defines
 3. **Docs:** update every doc that would otherwise be wrong. At minimum check:
    - `README.md`: features, CLI options, examples, Future Enhancements
    - `EXAMPLES.md`, `QUICK-START.md`: runnable examples
