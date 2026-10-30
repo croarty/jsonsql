@@ -256,7 +256,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 
 ### 2.0 Unsupported Syntax Handling (HIGH PRIORITY)
 
-**Current Status**: ✅ Mostly implemented. `QueryParser` rejects SQL that JSqlParser accepts but the engine does not implement, with a `QueryParseException` such as `GROUP BY is not supported`. It does this for the main query, CTE bodies, and UNION branches, so `--dry-run` catches it too. Covered by `UnsupportedSyntaxTest`.
+**Current Status**: ✅ Mostly implemented. `QueryParser` rejects SQL that JSqlParser accepts but the engine does not implement, with a `QueryParseException` such as `HAVING needs GROUP BY or an aggregate`. It does this for the main query, CTE bodies, and UNION branches, so `--dry-run` catches it too. Covered by `UnsupportedSyntaxTest`.
 
 | Construct | Behavior |
 |---|---|

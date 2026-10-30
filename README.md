@@ -315,7 +315,7 @@ Use this before writing queries to discover field names and nesting. Schema is i
 jsonsql --query "SELECT p.name, o.orderId FROM orders o JOIN products p ON o.productId = p.id" --data-dir example-data --dry-run
 ```
 
-Validates SQL syntax, confirms every referenced table has a mapping (or is a CTE or materialized view), and checks that backing JSON files exist — without loading data or returning results. Unsupported syntax that is rejected at parse time (`GROUP BY`, `OFFSET`, `RIGHT JOIN`, functions in SELECT, ...) also fails the dry run. It does **not** check that referenced *fields* exist, and it cannot flag the few constructs that are still accepted but ineffective (see [Known Limitations](#known-limitations)):
+Validates SQL syntax, confirms every referenced table has a mapping (or is a CTE or materialized view), and checks that backing JSON files exist — without loading data or returning results. Unsupported syntax that is rejected at parse time (`RIGHT JOIN`, `FETCH`, functions in SELECT, an ungrouped column with `GROUP BY`, ...) also fails the dry run. It does **not** check that referenced *fields* exist (see [Known Limitations](#known-limitations)):
 
 ```
 Dry run OK.
