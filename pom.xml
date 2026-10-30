@@ -11,6 +11,14 @@
 
     <name>JsonSQL</name>
     <description>A command-line tool for querying JSON files with SQL-like syntax</description>
+    <url>https://github.com/croarty/jsonsql</url>
+
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/license/mit</url>
+        </license>
+    </licenses>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -93,6 +101,23 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>${project.basedir}</directory>
+                <targetPath>META-INF</targetPath>
+                <includes>
+                    <include>THIRD-PARTY-NOTICES.md</include>
+                </includes>
+            </resource>
+            <!-- Under jsonsql/ because META-INF/LICENSE holds the Apache text for the bundled libraries -->
+            <resource>
+                <directory>${project.basedir}</directory>
+                <targetPath>META-INF/jsonsql</targetPath>
+                <includes>
+                    <include>LICENSE</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <!-- Maven Compiler Plugin -->
             <plugin>
@@ -133,6 +158,10 @@
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>com.jsonsql.JsonSqlCli</mainClass>
+                                </transformer>
+                                <!-- Keep every bundled library's NOTICE instead of only the last one -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+                                    <addHeader>false</addHeader>
                                 </transformer>
                                 <!-- Merge META-INF/services files from shaded dependencies -->
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>

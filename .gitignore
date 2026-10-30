@@ -26,6 +26,11 @@ CLAUDE.local.md
 # JsonSQL config
 .jsonsql-mappings.json
 
+# JsonSQL generated data, created next to the data files
+.jsonsql-cache/
+.jsonsql-index/
+.jsonsql-views/
+
 # Logs
 *.log
 
