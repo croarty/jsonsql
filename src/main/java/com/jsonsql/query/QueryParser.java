@@ -260,33 +260,39 @@ public class QueryParser {
      * looked up as a field name and silently match nothing.
      */
     private void validateWhere(Expression expression) throws QueryParseException {
-        if (expression instanceof AndExpression) {
-            validateWhere(((AndExpression) expression).getLeftExpression());
-            validateWhere(((AndExpression) expression).getRightExpression());
-        } else if (expression instanceof OrExpression) {
-            validateWhere(((OrExpression) expression).getLeftExpression());
-            validateWhere(((OrExpression) expression).getRightExpression());
-        } else if (expression instanceof NotExpression) {
-            validateWhere(((NotExpression) expression).getExpression());
-        } else if (expression instanceof Parenthesis) {
-            validateWhere(((Parenthesis) expression).getExpression());
-        } else if (expression instanceof ComparisonOperator) {
-            validateOperand(((ComparisonOperator) expression).getLeftExpression());
-            validateOperand(((ComparisonOperator) expression).getRightExpression());
-        } else if (expression instanceof LikeExpression) {
-            LikeExpression like = (LikeExpression) expression;
-            validateField(like.getLeftExpression(), like);
-            validateOperand(like.getRightExpression());
-            likeEscape(like);
-        } else if (expression instanceof IsNullExpression) {
-            validateField(((IsNullExpression) expression).getLeftExpression(), expression);
-        } else if (expression instanceof InExpression) {
-            InExpression in = (InExpression) expression;
-            validateField(in.getLeftExpression(), in);
-            if (in.getRightExpression() instanceof ParenthesedExpressionList) {
-                for (Object item : (ParenthesedExpressionList<?>) in.getRightExpression()) {
-                    validateOperand((Expression) item);
-                }
+        switch (expression) {
+            case AndExpression and -> {
+                validateWhere(and.getLeftExpression());
+                validateWhere(and.getRightExpression());
+            }
+            case OrExpression or -> {
+                validateWhere(or.getLeftExpression());
+                validateWhere(or.getRightExpression());
+            }
+            case NotExpression not -> validateWhere(not.getExpression());
+            case Parenthesis parenthesis -> validateWhere(parenthesis.getExpression());
+            case ComparisonOperator comparison -> {
+                validateOperand(comparison.getLeftExpression());
+                validateOperand(comparison.getRightExpression());
+            }
+            case LikeExpression like -> {
+                validateField(like.getLeftExpression(), like);
+                validateOperand(like.getRightExpression());
+                likeEscape(like);
+            }
+            case IsNullExpression isNull -> validateField(isNull.getLeftExpression(), isNull);
+            case InExpression in -> validateIn(in);
+            // Anything else, such as BETWEEN, is reported by WhereEvaluator
+            default -> {
+            }
+        }
+    }
+
+    private void validateIn(InExpression in) throws QueryParseException {
+        validateField(in.getLeftExpression(), in);
+        if (in.getRightExpression() instanceof ParenthesedExpressionList<?> list) {
+            for (Object item : list) {
+                validateOperand((Expression) item);
             }
         }
     }
