@@ -236,7 +236,7 @@
       <!-- SCREEN 6 -->
       <section class="screen animate-in">
         <h2 class="screen-heading">The safety net: tests and docs, every time</h2>
-        <p>This repository contains instructions for Claude in <code>CLAUDE.md</code>. They say that a change is not done until it has thorough tests <em>and</em> updated documentation, and a hook runs the tests automatically. That is why there are 67 test files guarding the behaviour you've learned about.</p>
+        <p>This repository contains instructions for Claude in <code>CLAUDE.md</code>. They say that a change is not done until it has thorough tests <em>and</em> updated documentation, and a hook runs the tests automatically. That is why there are 68 test files guarding the behaviour you've learned about.</p>
 
         <div class="file-tree animate-in">
           <div class="ft-folder open">
@@ -269,11 +269,11 @@
         <div class="icon-rows">
           <div class="icon-row">
             <div class="icon-circle" style="background: var(--color-error-light)">😕</div>
-            <div><strong>"Make joins faster"</strong><p>Vague. The AI might add caching, which would not help.</p></div>
+            <div><strong>"Make big files faster"</strong><p>Vague. The AI might add caching, which would not help.</p></div>
           </div>
           <div class="icon-row">
             <div class="icon-circle" style="background: var(--color-success-light)">🎯</div>
-            <div><strong>"Replace the nested loop in performJoin with a hash join on the right-hand rows. Keep NULL keys non-matching and number/string coercion. Add tests in JoinConditionTest."</strong><p>Names the place, the technique, the rules to preserve, and where the tests go.</p></div>
+            <div><strong>"Make DataFileReader stream large files instead of loading them whole. Keep the errors that name the file and the line. Add tests in DataFileReaderTest."</strong><p>Names the place, the technique, the rules to preserve, and where the tests go.</p></div>
           </div>
           <div class="icon-row">
             <div class="icon-circle" style="background: var(--color-success-light)">🎯</div>

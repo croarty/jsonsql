@@ -787,22 +787,21 @@ public class QueryExecutor implements FieldAccessor {
         // Parse ON condition (e.g., "o.productId = p.id")
         JoinCondition condition = orientJoinCondition(parseJoinCondition(onCondition), joinInfo.getTable());
 
-        for (JsonNode leftRow : leftData) {
-            boolean matchFound = false;
+        JoinIndex rightIndex = new JoinIndex(rightData, row -> getFieldValue(row, condition.rightField()));
 
-            for (JsonNode rightRow : rightData) {
-                if (matchesJoinCondition(leftRow, rightRow, condition)) {
-                    // Merge left and right rows
-                    ObjectNode mergedRow = objectMapper.createObjectNode();
-                    mergedRow.setAll((ObjectNode) leftRow);
-                    mergedRow.setAll((ObjectNode) rightRow);
-                    result.add(mergedRow);
-                    matchFound = true;
-                }
+        for (JsonNode leftRow : leftData) {
+            List<JsonNode> matches = rightIndex.matches(getFieldValue(leftRow, condition.leftField()));
+
+            for (JsonNode rightRow : matches) {
+                // Merge left and right rows
+                ObjectNode mergedRow = objectMapper.createObjectNode();
+                mergedRow.setAll((ObjectNode) leftRow);
+                mergedRow.setAll((ObjectNode) rightRow);
+                result.add(mergedRow);
             }
 
             // For LEFT JOIN, include left row even if no match found
-            if (joinInfo.isLeftJoin() && !matchFound) {
+            if (joinInfo.isLeftJoin() && matches.isEmpty()) {
                 result.add(leftRow);
             }
         }
@@ -848,61 +847,6 @@ public class QueryExecutor implements FieldAccessor {
             return new JoinCondition(condition.rightField(), condition.leftField());
         }
         return condition;
-    }
-
-    /**
-     * Check if two rows match the JOIN condition.
-     */
-    private boolean matchesJoinCondition(JsonNode leftRow, JsonNode rightRow, JoinCondition condition) {
-        JsonNode leftValue = getFieldValue(leftRow, condition.leftField());
-        JsonNode rightValue = getFieldValue(rightRow, condition.rightField());
-
-        return joinValuesMatch(leftValue, rightValue);
-    }
-
-    /**
-     * Compare two join key values with type coercion.
-     * SQL NULL (missing or explicit null) never matches. Numbers compare numerically,
-     * and a number matches a numeric string (e.g. 1 matches "1").
-     */
-    private boolean joinValuesMatch(JsonNode leftValue, JsonNode rightValue) {
-        // Treat missing and explicit JSON null as SQL NULL, which never matches.
-        if (leftValue == null || leftValue.isNull() || rightValue == null || rightValue.isNull()) {
-            return false;
-        }
-
-        // Numeric comparison when both are numbers.
-        if (leftValue.isNumber() && rightValue.isNumber()) {
-            return leftValue.asDouble() == rightValue.asDouble();
-        }
-
-        // Mixed number/string: compare numerically if the string parses as a number.
-        if (leftValue.isNumber() || rightValue.isNumber()) {
-            Double l = parseDoubleOrNull(leftValue.asText());
-            Double r = parseDoubleOrNull(rightValue.asText());
-            if (l != null && r != null) {
-                return l.doubleValue() == r.doubleValue();
-            }
-        }
-
-        // Booleans compare by value.
-        if (leftValue.isBoolean() && rightValue.isBoolean()) {
-            return leftValue.asBoolean() == rightValue.asBoolean();
-        }
-
-        // Fall back to textual comparison.
-        return leftValue.asText().equals(rightValue.asText());
-    }
-
-    private Double parseDoubleOrNull(String text) {
-        if (text == null) {
-            return null;
-        }
-        try {
-            return Double.parseDouble(text.trim());
-        } catch (NumberFormatException e) {
-            return null;
-        }
     }
 
     /**
