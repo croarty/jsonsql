@@ -20,12 +20,23 @@
         
         <!-- Dependency versions -->
         <picocli.version>4.7.6</picocli.version>
-        <jackson.version>2.18.10</jackson.version>
+        <jackson.version>2.18.12</jackson.version>
         <jsonpath.version>2.9.0</jsonpath.version>
         <!-- JSqlParser pinned to the latest 4.x (4.9); 5.x introduces breaking AST/visitor API changes -->
         <jsqlparser.version>4.9</jsqlparser.version>
         <junit.version>5.11.4</junit.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- JsonPath's default parser; json-path 2.9.0 brings in 2.5.0, affected by CVE-2024-57699 -->
+            <dependency>
+                <groupId>net.minidev</groupId>
+                <artifactId>json-smart</artifactId>
+                <version>2.5.2</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- Picocli for CLI -->
