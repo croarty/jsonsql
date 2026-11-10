@@ -4,7 +4,7 @@ JsonSQL now supports full boolean logic in WHERE clauses, including `AND`, `OR`,
 
 Most examples use a generic `products` / `orders` / `customers` / `users` schema to illustrate syntax; fields such as `stock`, `description`, or `notes` only exist in some of the shipped fixtures. For copy-paste runnable queries against `example-data/`, see [Examples with Real Data](#examples-with-real-data) at the end.
 
-> **Operands:** each side of a comparison can be a field or a literal, in either order (`price > 100`, `100 < price`, `price > stock`). Text needs single quotes, because an unquoted word is a field. Arithmetic and functions (`UPPER(name) = 'X'`) are rejected.
+> **Operands:** each side of a comparison can be a field or a literal, in either order (`price > 100`, `100 < price`, `price > stock`). Text needs single quotes, because an unquoted word is a field. Either side can also be a calculation (`price * stock > 5000`, `CAST(size AS REAL) > 10`). Functions (`UPPER(name) = 'X'`) are rejected.
 
 ## Table of Contents
 

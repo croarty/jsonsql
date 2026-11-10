@@ -256,8 +256,8 @@ public class QueryExecutor implements FieldAccessor {
         if (parsedQuery.isAggregate()) {
             projectedData = aggregate(filteredData, parsedQuery);
         } else {
-            // Work out calculated columns first, so ORDER BY can sort by one
-            filteredData = calculateColumns(filteredData, parsedQuery.getSelectColumns());
+            // Work out calculated columns and sort keys first, so ORDER BY can sort by them
+            filteredData = calculateColumns(filteredData, parsedQuery);
 
             // Apply ORDER BY before projection so sort keys not present in the SELECT list
             // (e.g. ORDER BY id while selecting only name) remain available.
@@ -332,40 +332,51 @@ public class QueryExecutor implements FieldAccessor {
     }
     
     /**
-     * Add the value of each calculated SELECT column to its row, under the column's key.
+     * Add the value of each calculated SELECT column and ORDER BY key to its row, under the
+     * key it was given.
      */
-    private List<JsonNode> calculateColumns(List<JsonNode> rows, List<ColumnInfo> columns) {
-        Map<ColumnInfo, ExpressionEvaluator> evaluators = new LinkedHashMap<>();
-        for (ColumnInfo column : columns) {
-            if (column.isComputed()) {
-                evaluators.put(column, new ExpressionEvaluator(this));
-            }
-        }
-        if (evaluators.isEmpty()) {
+    private List<JsonNode> calculateColumns(List<JsonNode> rows, ParsedQuery query) {
+        List<ColumnInfo> columns = query.getSelectColumns().stream().filter(ColumnInfo::isComputed).toList();
+        List<OrderByInfo> sortKeys = query.getOrderBy().stream().filter(order -> order.getCalculation() != null).toList();
+        if (columns.isEmpty() && sortKeys.isEmpty()) {
             return rows;
         }
+
+        // As for a plain ORDER BY, a name in a sort key means a SELECT alias before a field
+        FieldAccessor aliasesThenFields = (row, name) -> {
+            for (ColumnInfo column : query.getSelectColumns()) {
+                if (column.hasAlias() && column.getAlias().equalsIgnoreCase(name)) {
+                    return getFieldValue(row, column.getExpression());
+                }
+            }
+            return getFieldValue(row, name);
+        };
+        ExpressionEvaluator columnValues = new ExpressionEvaluator(this);
+        ExpressionEvaluator sortValues = new ExpressionEvaluator(aliasesThenFields);
 
         List<JsonNode> calculated = new ArrayList<>(rows.size());
         for (JsonNode row : rows) {
             ObjectNode withValues = objectMapper.createObjectNode();
             withValues.setAll((ObjectNode) row);
-            evaluators.forEach((column, evaluator) -> {
-                JsonNode value = evaluator.evaluate(row, column.getComputed());
-                withValues.set(column.getExpression(), value == null ? NullNode.getInstance() : value);
-            });
+            for (ColumnInfo column : columns) {
+                withValues.set(column.getExpression(), orNullNode(columnValues.evaluate(row, column.getComputed())));
+            }
+            for (OrderByInfo sortKey : sortKeys) {
+                withValues.set(sortKey.getColumn(), orNullNode(sortValues.evaluate(withValues, sortKey.getCalculation())));
+            }
             calculated.add(withValues);
         }
 
-        List<String> found = new ArrayList<>();
-        List<String> leftOut = new ArrayList<>();
-        evaluators.forEach((column, evaluator) -> {
-            if (!evaluator.leftOut().isEmpty()) {
-                found.add(evaluator.leftOut().describe(column.getComputed().toString(), "found"));
-                leftOut.add(evaluator.leftOut().describe(column.getComputed().toString(), "left out"));
-            }
-        });
+        List<String> found = new ArrayList<>(columnValues.leftOut("found"));
+        found.addAll(sortValues.leftOut("found"));
+        List<String> leftOut = new ArrayList<>(columnValues.leftOut("left out"));
+        leftOut.addAll(sortValues.leftOut("left out"));
         reportLeftOut(found, leftOut);
         return calculated;
+    }
+
+    private static JsonNode orNullNode(JsonNode value) {
+        return value == null ? NullNode.getInstance() : value;
     }
 
     /**
@@ -619,7 +630,9 @@ public class QueryExecutor implements FieldAccessor {
         if (cteQuery.hasOrderBy()) {
             keyBuilder.append("ORDERBY:");
             for (OrderByInfo ob : cteQuery.getOrderBy()) {
-                keyBuilder.append(ob.getColumn()).append(ob.isAscending() ? " ASC" : " DESC").append(",");
+                // A calculated sort key's column is only its position, so the calculation goes in
+                keyBuilder.append(ob.getCalculation() != null ? ob.getCalculation().toString() : ob.getColumn())
+                    .append(ob.isAscending() ? " ASC" : " DESC").append(",");
             }
             keyBuilder.append(":");
         }
@@ -1038,6 +1051,7 @@ public class QueryExecutor implements FieldAccessor {
             }
         }
 
+        reportLeftOut(evaluator.leftOut("found"), evaluator.leftOut("left out"));
         return result;
     }
     
@@ -1159,6 +1173,10 @@ public class QueryExecutor implements FieldAccessor {
         ObjectNode flattened = objectMapper.createObjectNode();
         
         row.properties().forEach(entry -> {
+            if (ColumnInfo.isCalculatedKey(entry.getKey())) {
+                // A sort key worked out for ORDER BY, which isn't part of the row
+                return;
+            }
             if (entry.getValue().isObject()) {
                 entry.getValue().properties().forEach(innerEntry -> {
                     flattened.set(innerEntry.getKey(), innerEntry.getValue());

@@ -122,6 +122,16 @@ class IndexPruningComparisonTest {
         "flag = 'banana'          | ''        | ''",
         "flag = 1                 | ''        | ''",
         "flag IN ('true', 'yes')  | 1,2,3,4,5,6 | numbers,text",
+        // A calculation says nothing about which files to skip, but a plain condition beside it still does
+        "v * 2 = 2                | 1         | large,mixed,numbers,text",
+        "v = 1 + 1                | ''        | large,mixed,numbers,text",
+        "2 < v + 0                | 2,3,7,10,11 | large,mixed,numbers,text",
+        "CAST(v AS INTEGER) = 1   | 1,4       | large,mixed,numbers,text",
+        "CAST(v AS INTEGER) IN (1, 5) | 1,4,7,8 | large,mixed,numbers,text",
+        "v + 0 BETWEEN 1 AND 3    | 1,2,3     | large,mixed,numbers,text",
+        "v + 0 > 2 AND flag = 'true' | 2,3    | numbers,text",
+        "v = 5 AND v * 2 = 10     | 7         | mixed",
+        "v * 2 = 10 OR v = 1      | 1,7       | large,mixed,numbers,text",
     })
     void pruningAgreesWithWhere(String condition, String expectedIds, String expectedFiles) throws Exception {
         assertEquals(expectedIds, ids(fullScan, condition), "full scan");

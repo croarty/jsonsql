@@ -327,17 +327,17 @@
 
           <div class="quiz-question-block"
                data-correct="a"
-               data-explanation-right="The error is intentional: arithmetic in WHERE is not supported, and JsonSQL refuses rather than silently returning nothing. Rewriting it as price &gt; 40 works today and can even use an index on price to skip files."
-               data-explanation-wrong="This error is the tool doing its job: saying clearly that it does not support arithmetic in WHERE, instead of quietly returning zero rows. You can get the same result today with price &gt; 40, which the index planner can also use.">
+               data-explanation-right="The error is intentional: FETCH is not supported, and JsonSQL refuses rather than silently returning every row. The message even names the fix: LIMIT 5 gives the same five rows."
+               data-explanation-wrong="This error is the tool doing its job: saying clearly that it does not support FETCH, instead of quietly ignoring it and returning every row. The message names the fix: LIMIT 5 gives the same result today.">
             <div class="scenario-block">
               <div class="scenario-context">
                 <span class="scenario-label">Scenario</span>
-                <p><code>WHERE price + 10 &gt; 50</code> fails with "Expression in WHERE: price + 10 is not supported". You need results today.</p>
+                <p><code>ORDER BY price FETCH FIRST 5 ROWS ONLY</code> fails with "FETCH is not supported (use LIMIT and OFFSET)". You need results today.</p>
               </div>
             </div>
             <h3 class="quiz-question">Best move?</h3>
             <div class="quiz-options">
-              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Rewrite as <code>price &gt; 40</code></span></button>
+              <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Rewrite as <code>ORDER BY price LIMIT 5</code></span></button>
               <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Set <code>DEBUG=1</code> and retry</span></button>
               <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Ask AI to remove the exception so the query returns whatever it can</span></button>
             </div>

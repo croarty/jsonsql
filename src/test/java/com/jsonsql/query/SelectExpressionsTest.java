@@ -153,7 +153,7 @@ class SelectExpressionsTest {
         assertEquals("\"true\" ; \"false\" ; null", each("ok || ''"));
         assertEquals("\"[1,2]!\" ; null ; null", each("tags || '!'"));
         assertEquals("\"#11\" ; \"#21.5\" ; null", each("'#' || (price + 1)"));
-        assertTrue(warnings.contains("'#' || (price + 1) left out 1 value that is not a number: \"none\""), warnings.toString());
+        assertTrue(warnings.contains("price + 1 left out 1 value that is not a number: \"none\""), warnings.toString());
     }
 
     @Test
