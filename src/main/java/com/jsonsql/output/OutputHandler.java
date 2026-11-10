@@ -1,5 +1,6 @@
 package com.jsonsql.output;
 
+import com.jsonsql.query.Json;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -25,7 +26,7 @@ public class OutputHandler {
     }
 
     public OutputHandler(boolean prettyPrint, OutputFormat format) {
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = Json.newMapper();
         this.prettyPrint = prettyPrint;
         this.format = format != null ? format : OutputFormat.JSON;
         this.csvFormatter = new CsvFormatter(objectMapper);

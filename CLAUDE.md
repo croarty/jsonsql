@@ -35,6 +35,8 @@ The course in `jsonsql-course/` is generated. Edit `modules/`, `_base.html` or `
 - Config files (`.jsonsql-mappings.json`, `.jsonsql-queries.json`, `.jsonsql-indexes.json`, `.jsonsql-views.json`) resolve from the current directory, not `--data-dir`.
 - `.jsonsql-mappings.json` is git-ignored, so a fresh clone has no mappings.
 - Read data files through `JsonPathConfig`. JsonPath's default json-smart parser accepts truncated JSON from 2.6.0, which gives silently wrong results.
+- Compare values only through `Values`. A second definition of equal or less than makes clauses disagree, as `ORDER BY` and `MIN` did in 2.0.
+- Get every mapper that reads or writes rows from `Json.newMapper()`, and create decimals with `Json.number`. A plain `ObjectMapper` reads decimals as doubles and loses digits.
 
 ## Every code change needs tests and docs
 

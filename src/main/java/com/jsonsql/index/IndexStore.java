@@ -1,5 +1,6 @@
 package com.jsonsql.index;
 
+import com.jsonsql.query.Json;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -22,7 +23,7 @@ public class IndexStore {
 
     public IndexStore(File dataDirectory) {
         this.indexDirectory = new File(dataDirectory, ".jsonsql-index");
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = Json.newMapper();
         // Tolerate older/newer index files that carry extra fields rather than discarding them.
         this.objectMapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
         if (!indexDirectory.exists() && !indexDirectory.mkdirs() && !indexDirectory.exists()) {

@@ -28,6 +28,7 @@ import java.util.Set;
 final class Aggregator {
 
     private static final int EXAMPLE_LENGTH = 40;
+    private static final int MAX_EXACT_SCALE = 10_000;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Map<String, LeftOut> leftOutByAggregate = new LinkedHashMap<>();
@@ -181,13 +182,26 @@ final class Aggregator {
         }
 
         private void addToSum(JsonNode value) {
-            if (!Double.isFinite(value.asDouble()) && value.isFloatingPointNumber() && !value.isBigDecimal()) {
-                nonFinite = nonFinite == null ? value.asDouble() : nonFinite + value.asDouble();
-                allIntegers = false;
+            allIntegers &= value.isIntegralNumber();
+            if (value.isFloatingPointNumber() && !value.isBigDecimal() && !Double.isFinite(value.asDouble())) {
+                addNonFinite(value.asDouble());
                 return;
             }
-            sum = sum.add(value.decimalValue());
-            allIntegers &= value.isIntegralNumber();
+            BigDecimal decimal = value.decimalValue();
+            if (Math.abs((long) decimal.scale()) > MAX_EXACT_SCALE) {
+                // Adding 1e999999999 to 1 exactly would need a billion digits
+                double approximate = value.asDouble();
+                if (!Double.isFinite(approximate)) {
+                    addNonFinite(approximate);
+                    return;
+                }
+                decimal = BigDecimal.valueOf(approximate);
+            }
+            sum = sum.add(decimal);
+        }
+
+        private void addNonFinite(double value) {
+            nonFinite = nonFinite == null ? value : nonFinite + value;
         }
 
         JsonNode result() {
@@ -195,20 +209,26 @@ final class Aggregator {
                 case "COUNT" -> LongNode.valueOf(count);
                 case "MIN" -> min == null ? NullNode.getInstance() : min;
                 case "MAX" -> max == null ? NullNode.getInstance() : max;
-                case "AVG" -> count == 0 ? NullNode.getInstance() : DoubleNode.valueOf(total() / count);
+                case "AVG" -> average();
                 default -> sumResult();
             };
         }
 
-        private double total() {
-            return nonFinite == null ? sum.doubleValue() : nonFinite;
+        private JsonNode average() {
+            if (count == 0) {
+                return NullNode.getInstance();
+            }
+            return nonFinite != null ? DoubleNode.valueOf(nonFinite) : Json.number(Json.divide(sum, BigDecimal.valueOf(count)));
         }
 
         private JsonNode sumResult() {
             if (count == 0) {
                 return NullNode.getInstance();
             }
-            return allIntegers ? BigIntegerNode.valueOf(sum.toBigInteger()) : DoubleNode.valueOf(total());
+            if (nonFinite != null) {
+                return DoubleNode.valueOf(nonFinite);
+            }
+            return allIntegers ? BigIntegerNode.valueOf(sum.toBigInteger()) : Json.number(sum);
         }
     }
 }

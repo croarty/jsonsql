@@ -5,7 +5,7 @@
 JsonSQL is a well-architected SQL-like query engine for JSON data. This document provides a thorough review of existing functionality and prioritized suggestions for new features.
 
 **Current Status:**
-- **Test Coverage**: 2720 tests across 74 test classes, all passing ✅
+- **Test Coverage**: 2766 tests across 75 test classes, all passing ✅
 - **Core Features**: Fully functional SQL-like query engine
 - **Recent Additions**: DISTINCT, ILIKE, CTEs, `UNION` / `UNION ALL`, CSV output, schema introspection (`--describe`), dry-run validation (`--dry-run`), declared indexes / file-level pruning (`--add-index`), materialized CTE views (`--materialize-view`)
 - **Architecture**: Clean separation of concerns, well-structured, maintainable
@@ -203,7 +203,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Strengths
 - Clean separation of concerns
 - Well-structured packages
-- Comprehensive test coverage (2720 tests, all passing)
+- Comprehensive test coverage (2766 tests, all passing)
 - Good error handling
 - Flexible field accessor pattern
 - Efficient JSONPath integration
@@ -218,6 +218,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - `QueryExecutor.java` - Query execution engine (also dry-run validation)
   - `WhereEvaluator.java` - WHERE clause evaluation
   - `Values.java` - The one definition of equal and less than, shared by WHERE, ORDER BY, MIN/MAX, GROUP BY, DISTINCT, joins and index pruning
+  - `Json.java` - Exact decimals: the mapper every row passes through, number creation, and the division rule
   - `FieldAccessor.java` - Field access interface
   - `QueryExecutionContext.java` - CTE execution context
   - `TableFileResolver.java` - Resolves a mapping to its backing file(s), shared with indexing
@@ -240,7 +241,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Dependencies
 - **Java 21**: Modern Java features
 - **JSqlParser 4.9**: SQL parsing (pinned to 4.x; 5.x changes the AST API)
-- **Jackson 2.22.4**: JSON processing
+- **Jackson 2.22.4**: JSON processing. Decimals are read as `BigDecimal`, never as doubles (`Json`)
 - **JSONPath 3.0.0**: JSONPath expression evaluation, using Jackson to parse data files (`JsonPathConfig`)
 - **Picocli 4.7.7**: Command-line interface
 - **JUnit 6.1.3**: Testing framework
@@ -566,7 +567,7 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 - DISTINCT implementation uses canonical JSON string representation
 
 ### 6.2 Testing Strategy
-- Maintain high test coverage (currently 2720 tests, all passing)
+- Maintain high test coverage (currently 2766 tests, all passing)
 - Add integration tests for new features
 - Test edge cases (nulls, empty arrays, etc.)
 - Test files organized by feature:
@@ -577,6 +578,7 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
   - `UnionTest.java` - UNION / UNION ALL
   - `UnsupportedSyntaxTest.java` - parse-time rejection of unimplemented SQL
   - `ValuesTest.java` / `StrictComparisonTest.java` / `IndexPruningComparisonTest.java` - one comparison rule everywhere
+  - `ExactDecimalsTest.java` - decimals stay exact through files, CTEs, the cache, views, indexes and output
   - `SqliteComparisonTest.java` - results checked against SQLite, including a column that mixes numbers and text
   - `DebugModeTest.java` - `DEBUG` environment-variable parsing
   - `IndexManagerTest.java` / `IndexBuilderTest.java` / `IndexPlannerTest.java` / `IndexPathResolutionTest.java` - declared indexes & file pruning
@@ -628,6 +630,6 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 
 JsonSQL is a solid foundation with excellent core functionality. Recent additions of DISTINCT, ILIKE, CTEs, UNION, indexes, and materialized views demonstrate the system's extensibility. The suggested enhancements would transform it from a good tool into a comprehensive SQL-like query engine for JSON data. The prioritized roadmap focuses on high-impact features that provide the most value to users.
 
-**Current Test Status**: ✅ 2720 tests passing
+**Current Test Status**: ✅ 2766 tests passing
 **Code Quality**: ✅ High - Clean architecture, good separation of concerns
 **Documentation**: ✅ Comprehensive - README, examples, saved queries reference

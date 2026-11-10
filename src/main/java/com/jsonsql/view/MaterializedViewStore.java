@@ -1,5 +1,6 @@
 package com.jsonsql.view;
 
+import com.jsonsql.query.Json;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,7 +18,7 @@ public class MaterializedViewStore {
 
     public MaterializedViewStore(File dataDirectory) {
         this.viewsDirectory = new File(dataDirectory, ".jsonsql-views");
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = Json.newMapper();
         if (!viewsDirectory.exists() && !viewsDirectory.mkdirs() && !viewsDirectory.exists()) {
             throw new IllegalStateException(
                 "Failed to create views directory: " + viewsDirectory.getAbsolutePath());

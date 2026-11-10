@@ -467,8 +467,15 @@ class SqliteComparisonTest {
         return rows;
     }
 
+    /**
+     * SQLite works in floating point and JsonSQL in decimals, so 40 / 3 is 13.333333333333334
+     * in one and 13.33333333333333 in the other. Twelve significant digits is what they share.
+     */
     private static String normalize(double value) {
-        return Double.toString(value);
+        if (!Double.isFinite(value) || value == 0) {
+            return Double.toString(value + 0.0);
+        }
+        return new java.math.BigDecimal(value).round(new java.math.MathContext(12)).stripTrailingZeros().toPlainString();
     }
 
     private static List<String> sorted(List<List<String>> rows) {

@@ -33,7 +33,7 @@ public final class JsonPathConfig {
                 JsonReadFeature.ALLOW_TRAILING_DECIMAL_POINT_FOR_NUMBERS,
                 JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS,
                 JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS)
-            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS, DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
             .build();
 
         return Configuration.builder()
