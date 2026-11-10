@@ -62,10 +62,17 @@ class UnsupportedSyntaxTest {
         "SELECT o.orderId FROM orders o NATURAL JOIN products p                 | NATURAL JOIN is not supported",
         "SELECT p.* FROM products p                                             | SELECT p.* is not supported",
         "SELECT UPPER(name) FROM products                                       | Function or aggregate in SELECT list: UPPER(name) is not supported",
-        "SELECT price * 2 AS doubled FROM products                              | Expression in SELECT list: price * 2 is not supported",
-        "SELECT 'x' AS label FROM products                                      | Expression in SELECT list: 'x' is not supported",
-        "SELECT 5 FROM products                                                 | Expression in SELECT list: 5 is not supported",
-        "SELECT CASE WHEN price > 20 THEN 'hi' ELSE 'lo' END FROM products     | Expression in SELECT list: CASE",
+        "SELECT price * LENGTH(name) AS x FROM products                         | Function or aggregate in SELECT list: price * LENGTH(name) is not supported",
+        "SELECT SUM(price) * 2 FROM products                                    | Function or aggregate in SELECT list: SUM(price) * 2 is not supported",
+        "SELECT (SELECT 1) FROM products                                        | Expression in SELECT list: (SELECT 1) is not supported",
+        "SELECT CAST(price AS DATE) FROM products                               | CAST to DATE in SELECT list: CAST(price AS DATE) is not supported (use INTEGER, REAL or TEXT)",
+        "SELECT category, price * 2 FROM products GROUP BY category             | Expression in SELECT with GROUP BY or an aggregate: price * 2 is not supported",
+        "SELECT COUNT(*), price + 1 FROM products                               | Expression in SELECT with GROUP BY or an aggregate: price + 1 is not supported",
+        "SELECT CASE WHEN price THEN 1 END FROM products                        | Condition in SELECT list",
+        "SELECT price + 1 LIKE '2%' FROM products                               | Condition in SELECT list",
+        "SELECT price IN (SELECT 1) FROM products                               | Condition in SELECT list",
+        "SELECT NOT name FROM products                                          | Condition in SELECT list",
+        "SELECT name FROM products ORDER BY price * 2                           | Expression in ORDER BY",
         "SELECT name FROM products INTERSECT SELECT name FROM products          | INTERSECT is not supported",
         "SELECT name FROM products EXCEPT SELECT name FROM products             | EXCEPT is not supported",
         "SELECT name FROM products MINUS SELECT name FROM products              | MINUS is not supported",
@@ -77,9 +84,9 @@ class UnsupportedSyntaxTest {
     }
 
     @Test
-    void stringConcatenationInSelectIsRejected() {
-        assertTrue(rejected("SELECT name || category FROM products").getMessage()
-            .contains("Expression in SELECT list: name || category is not supported"));
+    void functionJoinedToTextIsRejected() {
+        assertTrue(rejected("SELECT UPPER(name) || 'x' FROM products").getMessage()
+            .contains("Function or aggregate in SELECT list: UPPER(name) || 'x' is not supported"));
     }
 
     @Test

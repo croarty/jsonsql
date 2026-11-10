@@ -3,6 +3,7 @@ package com.jsonsql.query;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jsonsql.DebugMode;
 import com.jsonsql.config.CacheManager;
@@ -255,6 +256,9 @@ public class QueryExecutor implements FieldAccessor {
         if (parsedQuery.isAggregate()) {
             projectedData = aggregate(filteredData, parsedQuery);
         } else {
+            // Work out calculated columns first, so ORDER BY can sort by one
+            filteredData = calculateColumns(filteredData, parsedQuery.getSelectColumns());
+
             // Apply ORDER BY before projection so sort keys not present in the SELECT list
             // (e.g. ORDER BY id while selecting only name) remain available.
             if (parsedQuery.hasOrderBy()) {
@@ -327,16 +331,60 @@ public class QueryExecutor implements FieldAccessor {
         return objectMapper.writeValueAsString(resultArray);
     }
     
+    /**
+     * Add the value of each calculated SELECT column to its row, under the column's key.
+     */
+    private List<JsonNode> calculateColumns(List<JsonNode> rows, List<ColumnInfo> columns) {
+        Map<ColumnInfo, ExpressionEvaluator> evaluators = new LinkedHashMap<>();
+        for (ColumnInfo column : columns) {
+            if (column.isComputed()) {
+                evaluators.put(column, new ExpressionEvaluator(this));
+            }
+        }
+        if (evaluators.isEmpty()) {
+            return rows;
+        }
+
+        List<JsonNode> calculated = new ArrayList<>(rows.size());
+        for (JsonNode row : rows) {
+            ObjectNode withValues = objectMapper.createObjectNode();
+            withValues.setAll((ObjectNode) row);
+            evaluators.forEach((column, evaluator) -> {
+                JsonNode value = evaluator.evaluate(row, column.getComputed());
+                withValues.set(column.getExpression(), value == null ? NullNode.getInstance() : value);
+            });
+            calculated.add(withValues);
+        }
+
+        List<String> found = new ArrayList<>();
+        List<String> leftOut = new ArrayList<>();
+        evaluators.forEach((column, evaluator) -> {
+            if (!evaluator.leftOut().isEmpty()) {
+                found.add(evaluator.leftOut().describe(column.getComputed().toString(), "found"));
+                leftOut.add(evaluator.leftOut().describe(column.getComputed().toString(), "left out"));
+            }
+        });
+        reportLeftOut(found, leftOut);
+        return calculated;
+    }
+
+    /**
+     * Values a calculation could not use are a warning, or an error in strict mode.
+     */
+    private void reportLeftOut(List<String> found, List<String> leftOut) {
+        if (strict && !found.isEmpty()) {
+            throw new IllegalStateException(String.join("; ", found));
+        }
+        leftOut.forEach(warningSink);
+    }
+
     private List<JsonNode> aggregate(List<JsonNode> rows, ParsedQuery query) {
         // A grouped row holds each value directly under its key, which can contain dots
         FieldAccessor groupFields = (row, name) -> row.get(name);
 
         Aggregator aggregator = new Aggregator();
         List<JsonNode> groups = aggregator.group(rows, query, this);
-        if (strict && !aggregator.leftOut("found").isEmpty()) {
-            throw new IllegalStateException(String.join("; ", aggregator.leftOut("found")));
-        }
-        aggregator.leftOut("left out").forEach(warningSink);
+        reportLeftOut(aggregator.leftOut("found"), aggregator.leftOut("left out"));
 
         if (query.getHaving() != null) {
             WhereEvaluator evaluator = new WhereEvaluator(groupFields);
@@ -549,7 +597,8 @@ public class QueryExecutor implements FieldAccessor {
         if (cteQuery.getSelectColumns() != null && !cteQuery.getSelectColumns().isEmpty()) {
             keyBuilder.append("SELECT:");
             for (var col : cteQuery.getSelectColumns()) {
-                keyBuilder.append(col.getExpression());
+                // A calculated column's key is only its position, so the calculation goes in too
+                keyBuilder.append(col.isComputed() ? col.getComputed().toString() : col.getExpression());
                 if (col.hasAlias()) {
                     keyBuilder.append(" AS ").append(col.getAlias());
                 }

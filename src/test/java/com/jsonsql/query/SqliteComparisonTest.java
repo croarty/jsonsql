@@ -390,6 +390,57 @@ class SqliteComparisonTest {
         assertMatchesSqlite(query);
     }
 
+    /**
+     * Calculated columns where the two engines are meant to agree. Left out on purpose:
+     * arithmetic on text and CAST of text with no number (SQLite gives 0, JsonSQL NULL),
+     * numbers joined with || (every number here reaches SQLite as a REAL, so 10 would join
+     * as 10.0), and conditions as values (SQLite gives 1 and 0, JsonSQL true and false).
+     */
+    static Stream<Query> expressionQueries() {
+        List<Query> queries = new ArrayList<>();
+        for (String expression : List.of(
+                "price + 1", "price - qty", "price * qty", "price / 4", "qty / 3", "price / qty", "qty * 2", "-price",
+                "(price + qty) * 2", "price * 1.5 + qty / 2", "price - qty - id", "id % 3", "price * 0", "0 - price",
+                "price + NULL", "id * id - 1", "price / (qty - 5)", "price * 1.1",
+                "CASE WHEN price > 15 THEN 'high' WHEN price IS NULL THEN 'none' ELSE 'low' END",
+                "CASE WHEN qty = 0 THEN 'out' END",
+                "CASE cat WHEN NULL THEN 'n' ELSE 'other' END",
+                "CASE cat WHEN 'Tools' THEN 1 WHEN 'Toys' THEN 2 ELSE 0 END",
+                "CASE name WHEN 'Widget' THEN price * 2 ELSE price END",
+                "CASE WHEN cat IS NULL THEN 'none' ELSE cat END",
+                "CASE WHEN price BETWEEN 10 AND 20 THEN 1 WHEN name LIKE 'Z%' THEN 2 END",
+                "CASE WHEN qty > 3 AND price > 10 THEN 'a' WHEN NOT (qty > 3) THEN 'b' ELSE 'c' END",
+                "CASE WHEN cat IN ('Tools', 'Misc') THEN qty ELSE 0 - qty END",
+                "CASE WHEN price * 2 > 30 THEN 'big' ELSE 'small' END",
+                "name || '-' || cat", "cat || ''", "'[' || name || ']'",
+                "CAST(price AS INTEGER)", "CAST(price AS REAL)", "CAST(qty / 2 AS INTEGER)", "CAST(0 - price AS INTEGER)",
+                "CAST(name AS TEXT)", "CAST(cat AS TEXT) || '!'", "CAST(NULL AS INTEGER)",
+                "'x'", "5", "2.5", "NULL")) {
+            queries.add(any("SELECT id, " + expression + " AS v FROM p"));
+        }
+        queries.add(ordered("SELECT id, price * qty AS v FROM p ORDER BY v, id", "v", "id"));
+        queries.add(ordered("SELECT id, price * qty AS v FROM p ORDER BY v DESC, id", "v", "id"));
+        queries.add(ordered("SELECT id, price / 4 AS v FROM p ORDER BY 2, 1", "v", "id"));
+        queries.add(ordered("SELECT CASE WHEN qty > 3 THEN 'many' ELSE 'few' END AS band, id FROM p ORDER BY band, id", "band", "id"));
+        queries.add(ordered("SELECT id, price * 2 AS v FROM p ORDER BY v LIMIT 3 OFFSET 2", "v"));
+        queries.add(any("SELECT DISTINCT CASE WHEN qty > 3 THEN 'many' ELSE 'few' END AS band FROM p"));
+        queries.add(any("SELECT DISTINCT price * 2 AS v FROM p"));
+        queries.add(any("SELECT id, price * 2 AS v FROM p WHERE price > 10"));
+        queries.add(any("SELECT o.id AS oi, o.n * p.price AS v, p.name || ':' || o.st AS label FROM o JOIN p ON o.pid = p.id"));
+        queries.add(any("SELECT o.id AS oi, o.n * p.price AS v FROM o LEFT JOIN p ON o.pid = p.id"));
+        queries.add(any("SELECT price * 2 AS v FROM p UNION SELECT n * 10 FROM o"));
+        queries.add(any("SELECT price * 2 AS v FROM p UNION ALL SELECT price + price FROM p"));
+        queries.add(any("WITH x AS (SELECT id, price * qty AS total FROM p) SELECT id, total / 2 AS half FROM x WHERE total > 20"));
+        queries.add(any("WITH x AS (SELECT cat, price * 2 AS d FROM p) SELECT cat, SUM(d) AS s, AVG(d) AS a FROM x GROUP BY cat"));
+        return queries.stream();
+    }
+
+    @ParameterizedTest
+    @MethodSource("expressionQueries")
+    void expressionsMatchSqlite(Query query) throws Exception {
+        assertMatchesSqlite(query);
+    }
+
     @ParameterizedTest
     @MethodSource("aggregateQueries")
     void aggregatesMatchSqlite(Query query) throws Exception {

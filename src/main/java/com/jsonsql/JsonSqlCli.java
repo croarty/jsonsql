@@ -94,7 +94,7 @@ public class JsonSqlCli implements Callable<Integer> {
     @Option(names = {"--dry-run"}, description = "Validate query syntax and table mappings without executing")
     private boolean dryRun;
 
-    @Option(names = {"--strict"}, description = "Fail, instead of warning, when SUM or AVG meets a value that is not a number")
+    @Option(names = {"--strict"}, description = "Fail, instead of warning, when a calculation meets a value that is not a number")
     private boolean strict;
 
     @Option(names = {"--indexes-file"}, description = "Path to declared-index definitions file", defaultValue = ".jsonsql-indexes.json")

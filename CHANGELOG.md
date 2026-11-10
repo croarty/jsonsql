@@ -34,10 +34,10 @@ To find affected queries, look for:
 |---|---|
 | A quoted number compared with a numeric field: `price = '10'`, `id IN ('1', '2')` | Remove the quotes |
 | An unquoted number compared with a text field: `zip = 10001` | Add quotes: `zip = '10001'` |
-| A join between a numeric id and a text id | Make the files agree on the type. A later 3.0 change will add `CAST` for this |
-| `ORDER BY` on text that starts with a number, such as `"15.6 inch"` | Store the number in its own field. A later 3.0 change will add `CAST` for this |
+| A join between a numeric id and a text id | Convert one side in a CTE: `WITH o AS (SELECT orderId, CAST(productId AS INTEGER) AS productId FROM orders) SELECT ... FROM o JOIN products p ON o.productId = p.id` |
+| `ORDER BY` on text that starts with a number, such as `"15.6 inch"` | Sort by its number: `SELECT name, CAST(size AS REAL) AS inches FROM products ORDER BY inches` |
 | A boolean compared with `0` or `1` | Use `false` or `true` |
-| `SUM` or `AVG` on a field that holds some text | Run the query and read the warning. If the text should count, store it as a number |
+| `SUM` or `AVG` on a field that holds some text | Run the query and read the warning. If the text should count, convert it in a CTE: `WITH w AS (SELECT CAST(weight AS REAL) AS kg FROM items) SELECT SUM(kg) FROM w` |
 | Anything that reads numbers out of the results as text, such as a script matching `1.0E-4` | Parse the output as JSON or CSV numbers, which read both forms the same |
 | Materialized views built by an earlier version | Run `--rebuild-views`. Until then a view still holds the rounded numbers it was built with |
 
@@ -47,7 +47,17 @@ Cache files from earlier versions are ignored, because they hold rounded numbers
 
 ### Added
 
-- `--strict`, which turns the `SUM` and `AVG` warning into an error with exit code 1
+- Calculated columns in `SELECT`: arithmetic (`+`, `-`, `*`, `/`, `%`), literals, text joined with `||`, `CASE`, `CAST`, and conditions as `true` or `false`. For example, `SELECT name, price * 1.2 AS with_tax FROM products ORDER BY with_tax`
+- `CAST(value AS INTEGER | REAL | TEXT)`, which reads the number at the start of text, so `CAST('15.6 inch' AS REAL)` is `15.6`
+- A warning when arithmetic meets a value that is not a number, as for `SUM` and `AVG`. The result for that row is `null`
+- `--strict`, which turns those warnings into an error with exit code 1
+
+Where calculated columns differ from other databases:
+
+- `/` always gives a decimal, so `7 / 2` is `3.5`. SQLite and PostgreSQL give `3`.
+- Arithmetic on text gives `null` and a warning. SQLite reads the text as a number, or as 0.
+- `CAST` of text with no number at the start gives `null`. SQLite gives `0`.
+- A condition gives `true` or `false`. SQLite gives `1` or `0`.
 
 ## 2.0.0 - 2026-10-30
 
