@@ -187,8 +187,8 @@ class NestedPathFixTest {
         assertTrue(resultArray.isArray());
         assertEquals(3, resultArray.size());
         
-        // Verify ordering by display size
-        String[] expectedOrder = {"5.0 inch", "6.1 inch", "15.6 inch"};
+        // Text sorts as text, so "15.6 inch" comes before "5.0 inch"
+        String[] expectedOrder = {"15.6 inch", "5.0 inch", "6.1 inch"};
         for (int i = 0; i < expectedOrder.length; i++) {
             assertEquals(expectedOrder[i], resultArray.get(i).get("size").asText());
         }

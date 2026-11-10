@@ -20,33 +20,9 @@ class JoinIndexTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    /** The original row-by-row rule, kept here as the reference the index is checked against. */
+    /** Comparing row by row, as the reference the index is checked against. */
     private static boolean matchesByComparison(JsonNode left, JsonNode right) {
-        if (left == null || left.isNull() || right == null || right.isNull()) {
-            return false;
-        }
-        if (left.isNumber() && right.isNumber()) {
-            return left.asDouble() == right.asDouble();
-        }
-        if (left.isNumber() || right.isNumber()) {
-            Double l = parse(left.asText());
-            Double r = parse(right.asText());
-            if (l != null && r != null) {
-                return l.doubleValue() == r.doubleValue();
-            }
-        }
-        if (left.isBoolean() && right.isBoolean()) {
-            return left.asBoolean() == right.asBoolean();
-        }
-        return left.asText().equals(right.asText());
-    }
-
-    private static Double parse(String text) {
-        try {
-            return Double.parseDouble(text.trim());
-        } catch (NumberFormatException e) {
-            return null;
-        }
+        return !Values.isNull(left) && !Values.isNull(right) && Values.equal(left, right);
     }
 
     private static List<JsonNode> awkwardValues() throws Exception {
@@ -123,23 +99,37 @@ class JoinIndexTest {
     }
 
     @Test
-    void matchesKeepTheirOriginalOrderAcrossKinds() throws Exception {
+    void matchesKeepTheirOriginalOrder() throws Exception {
         List<JsonNode> rows = List.of(
             row(0, MAPPER.readTree("\"1\"")), row(1, MAPPER.readTree("1")), row(2, MAPPER.readTree("\"1.0\"")),
-            row(3, MAPPER.readTree("1.0")), row(4, MAPPER.readTree("2")));
+            row(3, MAPPER.readTree("1.0")), row(4, MAPPER.readTree("2")), row(5, MAPPER.readTree("1.00")));
 
         List<JsonNode> matched = indexOf(rows).matches(MAPPER.readTree("1"));
 
-        assertEquals(List.of(rows.get(0), rows.get(1), rows.get(2), rows.get(3)), matched);
+        assertEquals(List.of(rows.get(1), rows.get(3), rows.get(5)), matched);
     }
 
     @Test
-    void numberAndTextRulesAreNotTransitive() throws Exception {
-        JoinIndex index = indexOf(List.of(row(0, MAPPER.readTree("1")), row(1, MAPPER.readTree("\"1.0\""))));
+    void aNumberNeverMatchesText() throws Exception {
+        JoinIndex index = indexOf(List.of(row(0, MAPPER.readTree("1")), row(1, MAPPER.readTree("\"1\""))));
 
-        assertEquals(2, index.matches(MAPPER.readTree("1")).size());
-        assertEquals(1, index.matches(MAPPER.readTree("\"1\"")).size());
-        assertEquals(0, index.matches(MAPPER.readTree("\"1\"")).get(0).get("id").asInt());
+        assertEquals(List.of(0), ids(index.matches(MAPPER.readTree("1.0"))));
+        assertEquals(List.of(1), ids(index.matches(MAPPER.readTree("\"1\""))));
+        assertTrue(index.matches(MAPPER.readTree("\"1.0\"")).isEmpty());
+    }
+
+    @Test
+    void aBooleanMatchesItsText() throws Exception {
+        JoinIndex index = indexOf(List.of(row(0, MAPPER.readTree("true")), row(1, MAPPER.readTree("\"true\"")),
+            row(2, MAPPER.readTree("false")), row(3, MAPPER.readTree("1"))));
+
+        assertEquals(List.of(0, 1), ids(index.matches(MAPPER.readTree("true"))));
+        assertEquals(List.of(0, 1), ids(index.matches(MAPPER.readTree("\"true\""))));
+        assertEquals(List.of(2), ids(index.matches(MAPPER.readTree("\"false\""))));
+    }
+
+    private static List<Integer> ids(List<JsonNode> rows) {
+        return rows.stream().map(row -> row.get("id").asInt()).toList();
     }
 
     @Test

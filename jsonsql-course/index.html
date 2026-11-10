@@ -1135,21 +1135,17 @@
           </div>
         </div>
 
-        <p>Here is the check for a "greater than" style condition on numbers. It only needs the label's min and max:</p>
+        <p>Here is the check for a "greater than" style condition. It only needs the label's min and max, and it compares them the same way <code>WHERE</code> does:</p>
 
         <div class="translation-block animate-in">
           <div class="translation-code">
             <span class="translation-label">IndexPlanner.java</span>
-            <pre><code><span class="code-line">        <span class="code-keyword">if</span> (<span class="code-string">"number"</span>.<span class="code-function">equals</span>(type)) {</span><span class="code-line">            <span class="code-keyword">double</span> v;</span><span class="code-line">            <span class="code-keyword">try</span> {</span><span class="code-line">                v = Double.<span class="code-function">parseDouble</span>(value);</span><span class="code-line">            } <span class="code-keyword">catch</span> (NumberFormatException e) {</span><span class="code-line">                <span class="code-keyword">return true</span>;</span><span class="code-line">            }</span><span class="code-line">            <span class="code-keyword">switch</span> (op) {</span><span class="code-line">                <span class="code-keyword">case</span> <span class="code-string">"&gt;"</span>:  <span class="code-keyword">return</span> max.<span class="code-function">asDouble</span>() &gt; v;</span><span class="code-line">                <span class="code-keyword">case</span> <span class="code-string">"&gt;="</span>: <span class="code-keyword">return</span> max.<span class="code-function">asDouble</span>() &gt;= v;</span><span class="code-line">                <span class="code-keyword">case</span> <span class="code-string">"&lt;"</span>:  <span class="code-keyword">return</span> min.<span class="code-function">asDouble</span>() &lt; v;</span><span class="code-line">                <span class="code-keyword">case</span> <span class="code-string">"&lt;="</span>: <span class="code-keyword">return</span> min.<span class="code-function">asDouble</span>() &lt;= v;</span><span class="code-line">                <span class="code-keyword">default</span>:   <span class="code-keyword">return true</span>;</span><span class="code-line">            }</span><span class="code-line">        }</span></code></pre>
+            <pre><code><span class="code-line">        <span class="code-keyword">if</span> (min == <span class="code-keyword">null</span> || max == <span class="code-keyword">null</span>) {</span><span class="code-line">            <span class="code-keyword">return true</span>;</span><span class="code-line">        }</span><span class="code-line">        <span class="code-keyword">switch</span> (op) {</span><span class="code-line">            <span class="code-keyword">case</span> <span class="code-string">"&gt;"</span>:  <span class="code-keyword">return</span> Values.<span class="code-function">compare</span>(max, value) &gt; 0;</span><span class="code-line">            <span class="code-keyword">case</span> <span class="code-string">"&gt;="</span>: <span class="code-keyword">return</span> Values.<span class="code-function">compare</span>(max, value) &gt;= 0;</span><span class="code-line">            <span class="code-keyword">case</span> <span class="code-string">"&lt;"</span>:  <span class="code-keyword">return</span> Values.<span class="code-function">compare</span>(min, value) &lt; 0;</span><span class="code-line">            <span class="code-keyword">case</span> <span class="code-string">"&lt;="</span>: <span class="code-keyword">return</span> Values.<span class="code-function">compare</span>(min, value) &lt;= 0;</span><span class="code-line">            <span class="code-keyword">default</span>:   <span class="code-keyword">return true</span>;</span><span class="code-line">        }</span></code></pre>
           </div>
           <div class="translation-english">
             <span class="translation-label">PLAIN ENGLISH</span>
             <div class="translation-lines">
-              <p class="tl">If this field holds numbers in this file...</p>
-              <p class="tl">&nbsp;</p>
-              <p class="tl">try to read the query's value (e.g. 500) as a number.</p>
-              <p class="tl">&nbsp;</p>
-              <p class="tl">If it isn't a number...</p>
+              <p class="tl">If the label has no smallest and biggest value (the file mixes numbers and text)...</p>
               <p class="tl">...answer "maybe it matches". Never skip on a guess.</p>
               <p class="tl">&nbsp;</p>
               <p class="tl">Otherwise, depending on the comparison:</p>
@@ -1158,7 +1154,6 @@
               <p class="tl"><code>price &lt; 10</code> can only match if the smallest price here is under 10.</p>
               <p class="tl">Same idea for "at most".</p>
               <p class="tl">Anything unexpected: "maybe", keep the file.</p>
-              <p class="tl">&nbsp;</p>
               <p class="tl">&nbsp;</p>
             </div>
           </div>
@@ -1379,7 +1374,7 @@
           <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-4)">
             <div class="pattern-icon" style="background: var(--color-actor-4)">🔤</div>
             <h4 class="pattern-title">Numbers stored as text</h4>
-            <p class="pattern-desc"><code>"price": "9"</code> (in quotes) is text, compared alphabetically. So "9" counts as greater than "10".</p>
+            <p class="pattern-desc"><code>"price": "9"</code> (in quotes) is text, compared character by character and never as a number. So "9" counts as greater than "10", and <code>price = 9</code> doesn't match it.</p>
           </div>
           <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)">
             <div class="pattern-icon" style="background: var(--color-actor-3)">🔠</div>
@@ -1482,7 +1477,7 @@
               <div class="chat-avatar" style="background: var(--color-actor-3)">AI</div>
               <div class="chat-bubble">
                 <span class="chat-sender" style="color: var(--color-actor-3)">AI assistant</span>
-                <p>I'll rewrite compareEquals in WhereEvaluator to trim whitespace and ignore case on both sides...</p>
+                <p>I'll rewrite Values.compare, which every comparison uses, to trim whitespace and ignore case on both sides...</p>
               </div>
             </div>
             <div class="chat-message" data-msg="2" data-sender="you" style="display:none">

@@ -1004,76 +1004,13 @@ public class QueryExecutor implements FieldAccessor {
      */
     private int compareNodes(JsonNode node1, JsonNode node2) {
         // NULL and missing values sort together, before everything else
-        boolean null1 = node1 == null || node1.isNull();
-        boolean null2 = node2 == null || node2.isNull();
+        boolean null1 = Values.isNull(node1);
+        boolean null2 = Values.isNull(node2);
         if (null1 && null2) return 0;
         if (null1) return -1;
         if (null2) return 1;
-        
-        // Handle numbers
-        if (node1.isNumber() && node2.isNumber()) {
-            return Double.compare(node1.asDouble(), node2.asDouble());
-        }
-        
-        // Handle booleans
-        if (node1.isBoolean() && node2.isBoolean()) {
-            return Boolean.compare(node1.asBoolean(), node2.asBoolean());
-        }
-        
-        // Handle text - try numeric comparison first, then lexicographic
-        String text1 = node1.asText();
-        String text2 = node2.asText();
-        
-        // Try to parse as numbers for numeric comparison
-        // Extract numeric part from strings like "15.6 inch" -> "15.6"
-        Double num1 = extractNumericValue(text1);
-        Double num2 = extractNumericValue(text2);
-        
-        if (num1 != null && num2 != null) {
-            return Double.compare(num1, num2);
-        } else {
-            // Not both numeric, use lexicographic comparison
-            return text1.compareTo(text2);
-        }
-    }
 
-    /**
-     * Extract numeric value from a string, handling units like "15.6 inch" -> 15.6
-     */
-    private Double extractNumericValue(String text) {
-        if (text == null || text.trim().isEmpty()) {
-            return null;
-        }
-        
-        // Try to parse the entire string as a number first
-        try {
-            return Double.parseDouble(text.trim());
-        } catch (NumberFormatException e) {
-            // If that fails, try to extract a number from the beginning
-            // This handles cases like "15.6 inch", "5.0 cm", etc.
-            String trimmed = text.trim();
-            StringBuilder numericPart = new StringBuilder();
-            
-            for (int i = 0; i < trimmed.length(); i++) {
-                char c = trimmed.charAt(i);
-                if (Character.isDigit(c) || c == '.' || c == '-' || c == '+') {
-                    numericPart.append(c);
-                } else {
-                    // Stop at first non-numeric character
-                    break;
-                }
-            }
-            
-            if (numericPart.length() > 0) {
-                try {
-                    return Double.parseDouble(numericPart.toString());
-                } catch (NumberFormatException ex) {
-                    return null;
-                }
-            }
-            
-            return null;
-        }
+        return Values.compare(node1, node2);
     }
 
     /**
@@ -1233,26 +1170,20 @@ public class QueryExecutor implements FieldAccessor {
     
     /**
      * Convert a JsonNode row to a canonical string key for duplicate detection.
-     * This sorts fields alphabetically to ensure consistent comparison.
+     * This sorts fields alphabetically to ensure consistent comparison, and gives equal
+     * values the same key, so 10 and 10.0 are duplicates.
      */
     private String rowToKey(JsonNode row) {
-        try {
-            // Create a sorted map of field names to values
-            Map<String, JsonNode> fieldMap = new TreeMap<>();
-            row.properties().forEach(entry -> {
-                fieldMap.put(entry.getKey(), entry.getValue());
-            });
-            
-            // Build sorted ObjectNode
-            ObjectNode sortedRow = objectMapper.createObjectNode();
-            fieldMap.forEach(sortedRow::set);
-            
-            // Serialize to JSON string for comparison
-            return objectMapper.writeValueAsString(sortedRow);
-        } catch (Exception e) {
-            // Fallback to toString if serialization fails
-            return row.toString();
-        }
+        Map<String, JsonNode> fieldMap = new TreeMap<>();
+        row.properties().forEach(entry -> fieldMap.put(entry.getKey(), entry.getValue()));
+
+        StringBuilder key = new StringBuilder();
+        fieldMap.forEach((name, value) -> {
+            String identity = Values.isNull(value) ? "null" : Values.identity(value);
+            key.append(name.length()).append(':').append(name)
+                .append(identity.length()).append(':').append(identity);
+        });
+        return key.toString();
     }
 
     /**

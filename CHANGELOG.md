@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+These changes will be in 3.0.0. They alter results for existing queries.
+
+### Breaking changes
+
+`WHERE`, `HAVING`, `ORDER BY`, `MIN`, `MAX`, `GROUP BY`, `DISTINCT`, `UNION` and joins now share one set of comparison rules. They used to differ, so `MIN(field)` could disagree with the first row of `ORDER BY field`.
+
+- Numbers compare exactly. `price = 10` used to match anything within 0.0001 of 10, such as `10.00005`.
+- Text never converts to a number. `price = '10'` no longer matches the number `10`, and `code = 10` no longer matches the text `"10"`.
+- Every number comes before every text value. `code > 5` now matches every row where `code` is text, where it used to compare `"5"` with the text alphabetically. `price > '5'` now matches no row where `price` is a number.
+- A join key that is a number no longer matches one that is text. `ON o.productId = p.id` finds nothing if one file has `1` and the other `"1"`.
+- `ORDER BY` sorts text character by character. It used to sort by a leading number, so `"9 inch"` came before `"15.6 inch"`, and `"9"` before `"10"`. Now `"15.6 inch"` and `"10"` come first.
+- A boolean compares as the text `true` or `false`, and with nothing else. `active = 'banana'`, `active = 0` and `active = 1` used to return the rows where `active` is `false`. They now return nothing.
+- `true` and the text `"true"` are equal, so they join, group and de-duplicate together. So are `false` and `"false"`.
+- `DISTINCT` and `UNION` treat `10` and `10.0` as duplicates, as `GROUP BY` already did.
+- Index pruning follows the same rules. Results don't depend on it, and existing indexes keep working.
+
+To find affected queries, look for:
+
+| Look for | To fix |
+|---|---|
+| A quoted number compared with a numeric field: `price = '10'`, `id IN ('1', '2')` | Remove the quotes |
+| An unquoted number compared with a text field: `zip = 10001` | Add quotes: `zip = '10001'` |
+| A join between a numeric id and a text id | Make the files agree on the type. A later 3.0 change will add `CAST` for this |
+| `ORDER BY` on text that starts with a number, such as `"15.6 inch"` | Store the number in its own field. A later 3.0 change will add `CAST` for this |
+| A boolean compared with `0` or `1` | Use `false` or `true` |
+
+`--describe <table>` shows whether a field holds numbers or text.
+
 ## 2.0.0 - 2026-10-30
 
 This release adds aggregates, and makes JsonSQL follow SQL where it used to differ. Several of those changes alter results for existing queries, so read [Upgrading from 1.x](#upgrading-from-1x) first.

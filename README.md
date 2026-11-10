@@ -829,14 +829,19 @@ WHERE status != 'cancelled'
 
 **Comparison behavior:**
 
-- For `>`, `<`, `>=`, `<=`, the stored field's JSON type decides the comparison: if the field is a JSON number it is compared numerically against the literal; if the field is text it is compared lexicographically (alphabetically), e.g. `WHERE name >= 'M'`. Boolean, array, and object fields never satisfy a range comparison.
-- A number stored as a JSON string (e.g. `"10"`) is treated as text and therefore compares lexicographically, not numerically.
-- Numeric equality (`=`, `!=`, `IN`) uses a tolerance of `0.0001`.
-- Boolean fields compare against `true`/`false` (the literal `'true'` also matches).
-- String equality is case-sensitive (use `ILIKE` for case-insensitive matching).
+Every comparison in JsonSQL follows the same rules, whether it is in `WHERE`, `HAVING`, `ORDER BY`, `MIN`/`MAX`, `GROUP BY`, `DISTINCT`, `UNION` or a join:
+
+- **Numbers compare exactly.** `10` equals `10.0`, and nothing else. There is no rounding or tolerance.
+- **Text compares character by character**, and is case-sensitive (use `ILIKE` for case-insensitive matching). So `'Apple' < 'Banana'`, and `"10"` comes before `"9"`.
+- **Text never converts to a number.** A number stored as a JSON string (`"10"`) is text, so `WHERE price = 10` does not match `"price": "10"`, and `WHERE price = '10'` does not match `"price": 10`.
+- **Every number comes before every text value.** So `WHERE code > 5` matches every row where `code` is text, and `WHERE price > 'abc'` matches no row where `price` is a number.
+- **A boolean compares as the text `true` or `false`.** `WHERE active = true` and `WHERE active = 'true'` both match `"active": true` and `"active": "true"`. Nothing else matches a boolean: not `1`, `0`, `'TRUE'` or `'yes'`.
+- Arrays and objects come after everything else, and are equal only when their JSON is identical.
 - SQL `NULL` values never satisfy a comparison, including inside `NOT`. Comparing with a literal `NULL` (`price = NULL`) never matches, so use `IS NULL`.
 
-**Unsupported WHERE expressions fail loudly:** WHERE constructs that are not implemented — such as subqueries (`IN (SELECT ...)`, `EXISTS (...)`) — raise a clear `Unsupported ...expression` error instead of silently returning zero rows. The check is on the operator, not its operands: a supported operator with an unsupported operand (`UPPER(name) = 'X'`, `20 < price`, `price > stock`) is evaluated as a field lookup that finds nothing and matches no rows (see [Known Limitations](#known-limitations)).
+These are SQLite's rules for values with no declared column type, apart from booleans, which SQLite doesn't have.
+
+**Unsupported WHERE expressions fail loudly:** WHERE constructs that are not implemented, such as subqueries (`IN (SELECT ...)`, `EXISTS (...)`), functions and arithmetic, raise a clear error instead of silently returning zero rows (see [Known Limitations](#known-limitations)).
 
 ### JOIN Clause
 
@@ -854,7 +859,7 @@ LEFT JOIN customers c ON o.customerId = c.id
 
 - Only a single **equi-join** is supported: the `ON` condition must be one `left = right` equality. Compound conditions (`... AND ...`) and range operators (`>`, `>=`, `<`, `<=`, etc.) in `ON` raise a clear error.
 - The two sides of `ON` can be written in either order (`o.productId = p.id` or `p.id = o.productId`).
-- Join keys use light type coercion: a numeric value matches its string representation (e.g. `5` matches `"5"`), so mismatched JSON types still join as expected.
+- Join keys match by the same rules as `=` in `WHERE` (see [Comparison behavior](#where-clause)): `5` matches `5.0` but not `"5"`. If one file stores an id as a number and another stores it as text, the join finds no matches.
 - SQL `NULL` join keys never match anything (including other nulls).
 - Unmatched `LEFT JOIN` rows return `null` for every selected right-hand column.
 - `INNER JOIN` and `LEFT OUTER JOIN` are accepted as synonyms for `JOIN` and `LEFT JOIN`.
@@ -878,7 +883,7 @@ SELECT DISTINCT category FROM products WHERE price > 100
 SELECT DISTINCT category FROM products ORDER BY category
 ```
 
-**Note:** DISTINCT removes duplicate rows based on all selected columns. Rows are considered duplicates if all their field values are identical. Because DISTINCT runs **before** `LIMIT`/`TOP`, a query like `SELECT DISTINCT category FROM products LIMIT 5` returns up to 5 *distinct* categories (de-duplication happens first, then the limit is applied).
+**Note:** DISTINCT removes duplicate rows based on all selected columns. Rows are considered duplicates if all their field values are equal, so `10` and `10.0` are duplicates but `10` and `"10"` are not. Because DISTINCT runs **before** `LIMIT`/`TOP`, a query like `SELECT DISTINCT category FROM products LIMIT 5` returns up to 5 *distinct* categories (de-duplication happens first, then the limit is applied).
 
 ### ORDER BY Clause
 
@@ -899,9 +904,9 @@ ORDER BY p.name, o.orderDate DESC
 
 **Note:** ORDER BY supports:
 
-- Numbers (sorted numerically)
-- Text (sorted alphabetically, case-sensitive). If both values start with a number, they are compared numerically by that leading number (e.g. `"15.6 inch"` sorts after `"9 inch"`).
-- Booleans (false < true)
+- Numbers (sorted numerically), which come before all text
+- Text (sorted character by character, case-sensitive). Text is never read as a number, so `"15.6 inch"` sorts before `"9 inch"`, and `"10"` before `"9"`.
+- Booleans, which sort as the text `false` and `true`
 - NULL and missing values sort together: first in ascending order, last with `DESC`.
 - Qualified column names (`p.price`, `o.quantity`) and nested paths (`vipStatus.points`)
 - Sorting is stable: rows that compare equal keep their source order
@@ -955,7 +960,7 @@ Rules:
 
 - Aggregates skip NULL and missing values. With no values, `COUNT` gives `0` and the others give `null`.
 - Without `GROUP BY`, the whole table is one group, so you always get one row, even if nothing matched.
-- NULL and missing values form one group. `1` and `1.0` are the same group; `1` and `"1"` are not.
+- NULL and missing values form one group. `1` and `1.0` are the same group; `1` and `"1"` are not. `true` and `"true"` are the same group.
 - Text in `SUM` and `AVG` counts as its leading number, or 0 if it has none, as in SQLite. So `"3.5kg"` counts as 3.5 and `"none"` as 0. Check text fields first if that isn't what you want.
 - Every selected field must be in `GROUP BY`. `SELECT category, name ... GROUP BY category` is rejected, because `name` would be an arbitrary row's value.
 - `GROUP BY` accepts a field, a SELECT alias or a position, but not an expression.
