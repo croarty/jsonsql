@@ -118,11 +118,12 @@ class GroupByAndAggregatesTest {
     }
 
     @Test
-    void numericTextInSumUsesItsLeadingNumber() throws Exception {
+    void numericTextInSumIsNotReadAsANumber() throws Exception {
         Files.writeString(new File(tempDir, "t.json").toPath(),
-            "{\"rows\": [{\"n\": \"12\"}, {\"n\": \"3.5kg\"}, {\"n\": \"none\"}, {\"n\": \".5\"}, {\"n\": \"1e2\"}, {\"n\": \"7.\"}]}");
+            "{\"rows\": [{\"n\": \"12\"}, {\"n\": \"3.5kg\"}, {\"n\": \"none\"}, {\"n\": \".5\"}, {\"n\": \"1e2\"}, {\"n\": \"7.\"}, {\"n\": 4}]}");
+        executor.setWarningSink(warning -> { });
 
-        assertEquals(123.0, query("SELECT SUM(n) AS s FROM t").get(0).get("s").asDouble());
+        assertEquals(4, query("SELECT SUM(n) AS s FROM t").get(0).get("s").asInt());
     }
 
     @Test
