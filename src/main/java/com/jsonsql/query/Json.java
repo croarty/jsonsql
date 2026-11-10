@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.databind.node.DecimalNode;
-import com.fasterxml.jackson.databind.node.DoubleNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ValueNode;
 
@@ -54,12 +53,14 @@ public final class Json {
 
     /**
      * The value of a number written in a query, such as 0.1 or 2e1.
+     *
+     * @throws IllegalArgumentException if the text isn't a decimal number
      */
     public static JsonNode number(String text) {
         try {
             return number(new BigDecimal(text.replace(" ", "")));
         } catch (NumberFormatException e) {
-            return DoubleNode.valueOf(Double.parseDouble(text));
+            throw new IllegalArgumentException("Not a number: " + text, e);
         }
     }
 

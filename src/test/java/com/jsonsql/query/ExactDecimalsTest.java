@@ -209,6 +209,24 @@ class ExactDecimalsTest {
     }
 
     @Test
+    void numbersWrittenInAQueryAreExact() {
+        assertEquals("0.1", Json.number("0.10").toString());
+        assertEquals("20.0", Json.number("2e1").toString());
+        assertEquals("-5.0", Json.number("- 5").toString());
+        assertEquals("0.5", Json.number(".5").toString());
+        assertEquals(LONG, Json.number(LONG).toString());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"abc", "1d", "0x10", "NaN", "Infinity", "1.2.3", "''"})
+    void textThatIsNotANumberIsRejectedClearly(String text) {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> Json.number(text));
+
+        assertEquals("Not a number: " + text, error.getMessage());
+        assertFalse(error instanceof NumberFormatException);
+    }
+
+    @Test
     void numbersInNestedValuesAreExactToo() throws Exception {
         data("[{\"id\":1,\"info\":{\"size\":" + LONG + ",\"sizes\":[1.50,2e1]}}]");
 
