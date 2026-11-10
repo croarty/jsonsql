@@ -2,9 +2,9 @@ package com.jsonsql.index;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.BigIntegerNode;
-import com.fasterxml.jackson.databind.node.DoubleNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.jsonsql.config.MappingManager;
+import com.jsonsql.query.Json;
 import com.jsonsql.query.ParsedQuery;
 import com.jsonsql.query.TableFileResolver;
 import com.jsonsql.query.TableInfo;
@@ -294,7 +294,7 @@ public class IndexPlanner {
             return BigIntegerNode.valueOf(((LongValue) e).getBigIntegerValue());
         }
         if (e instanceof DoubleValue) {
-            return DoubleNode.valueOf(((DoubleValue) e).getValue());
+            return Json.number(e.toString());
         }
         return null;
     }

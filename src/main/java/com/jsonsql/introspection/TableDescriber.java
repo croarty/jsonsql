@@ -1,5 +1,6 @@
 package com.jsonsql.introspection;
 
+import com.jsonsql.query.Json;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jsonsql.config.CacheManager;
@@ -40,7 +41,7 @@ public class TableDescriber {
                           MaterializedViewManager viewManager) {
         this.mappingManager = mappingManager;
         this.queryExecutor = new QueryExecutor(mappingManager, dataDirectory, cacheManager, null, viewManager);
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = Json.newMapper();
     }
 
     /**

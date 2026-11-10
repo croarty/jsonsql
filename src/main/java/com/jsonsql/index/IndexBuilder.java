@@ -1,5 +1,6 @@
 package com.jsonsql.index;
 
+import com.jsonsql.query.Json;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jsonsql.query.DataFileReader;
@@ -47,7 +48,7 @@ public class IndexBuilder {
         this.store = store;
         this.viewManager = viewManager;
         this.viewStore = viewStore;
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = Json.newMapper();
     }
 
     /**

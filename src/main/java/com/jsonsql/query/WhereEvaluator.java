@@ -3,8 +3,6 @@ package com.jsonsql.query;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.BigIntegerNode;
 import com.fasterxml.jackson.databind.node.BooleanNode;
-import com.fasterxml.jackson.databind.node.DecimalNode;
-import com.fasterxml.jackson.databind.node.DoubleNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import net.sf.jsqlparser.expression.*;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
@@ -12,7 +10,6 @@ import net.sf.jsqlparser.expression.operators.conditional.OrExpression;
 import net.sf.jsqlparser.expression.operators.relational.*;
 import net.sf.jsqlparser.schema.Column;
 
-import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -216,10 +213,10 @@ public class WhereEvaluator {
             return BigIntegerNode.valueOf(((LongValue) expr).getBigIntegerValue());
         }
         if (expr instanceof DoubleValue) {
-            return DoubleNode.valueOf(((DoubleValue) expr).getValue());
+            return Json.number(expr.toString());
         }
         if (expr instanceof SignedExpression) {
-            return DecimalNode.valueOf(new BigDecimal(expr.toString().replace(" ", "")));
+            return Json.number(expr.toString());
         }
         if (expr instanceof Column) {
             return resolveColumn(row, (Column) expr);

@@ -19,6 +19,15 @@ These changes will be in 3.0.0. They alter results for existing queries.
 - Index pruning follows the same rules. Results don't depend on it, and existing indexes keep working.
 - `SUM` and `AVG` leave out text, and say so in a warning on stderr. Text used to count as its leading number, or as 0, with no warning. So the `AVG` of `10`, `20` and `"none"` is now 15 where it was 10, and `"3.5kg"` no longer adds 3.5 to a `SUM`. Booleans, arrays and objects are left out in the same way.
 
+Decimals are now exact. They used to be read as floating-point numbers, which rounded anything beyond about 17 significant digits and gave results such as `0.19999999999999998`.
+
+- Long decimals keep every digit. `12345678901234567890.123456789` used to print as `1.2345678901234567E19`, and a comparison could not tell it from its neighbours.
+- `SUM` and `AVG` use decimal arithmetic. The average of `0.1`, `0.2` and `0.3` is `0.2` where it was `0.19999999999999998`.
+- An `AVG` that never ends keeps 16 significant digits. The average of `10`, `20` and `20` is `16.66666666666667` where it was `16.666666666666668`, so the last digit or two of such results can differ.
+- Numbers of ten million and above, and below 0.001, print in full where they used to use exponent form: `12345678.5` where it was `1.23456785E7`, and `0.0001` where it was `1.0E-4`. Exponent form now starts beyond 20 digits and below 0.000001, and is written `1E+25` where it was `1.0E25`.
+- `-0.0` prints as `0.0`.
+- Other numbers print exactly as before: `20.5`, `100.0`, `5`.
+
 To find affected queries, look for:
 
 | Look for | To fix |
@@ -29,8 +38,12 @@ To find affected queries, look for:
 | `ORDER BY` on text that starts with a number, such as `"15.6 inch"` | Store the number in its own field. A later 3.0 change will add `CAST` for this |
 | A boolean compared with `0` or `1` | Use `false` or `true` |
 | `SUM` or `AVG` on a field that holds some text | Run the query and read the warning. If the text should count, store it as a number |
+| Anything that reads numbers out of the results as text, such as a script matching `1.0E-4` | Parse the output as JSON or CSV numbers, which read both forms the same |
+| Materialized views built by an earlier version | Run `--rebuild-views`. Until then a view still holds the rounded numbers it was built with |
 
 `--describe <table>` shows whether a field holds numbers or text.
+
+Cache files from earlier versions are ignored, because they hold rounded numbers. `--clear-cache` removes them.
 
 ### Added
 

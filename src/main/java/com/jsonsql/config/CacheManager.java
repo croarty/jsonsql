@@ -1,5 +1,6 @@
 package com.jsonsql.config;
 
+import com.jsonsql.query.Json;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.type.CollectionType;
@@ -17,6 +18,8 @@ import java.util.List;
  * Caches are stored in a .jsonsql-cache directory and persist between executions.
  */
 public class CacheManager {
+    private static final String CACHE_FORMAT = "exact-decimals";
+
     private final File cacheDirectory;
     private final ObjectMapper objectMapper;
     private final TypeFactory typeFactory;
@@ -24,7 +27,7 @@ public class CacheManager {
     public CacheManager(File dataDirectory) {
         // Create cache directory in the data directory
         this.cacheDirectory = new File(dataDirectory, ".jsonsql-cache");
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = Json.newMapper();
         this.typeFactory = TypeFactory.defaultInstance();
         
         // Ensure cache directory exists
@@ -145,7 +148,9 @@ public class CacheManager {
      */
     private String hashPath(String cacheKey) throws NoSuchAlgorithmException {
         MessageDigest md = MessageDigest.getInstance("SHA-256");
-        byte[] hashBytes = md.digest(cacheKey.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        // The format is part of the key, so files written by a version that stored decimals
+        // as floating-point numbers are never read back
+        byte[] hashBytes = md.digest((CACHE_FORMAT + "|" + cacheKey).getBytes(java.nio.charset.StandardCharsets.UTF_8));
         
         StringBuilder sb = new StringBuilder();
         for (byte b : hashBytes) {

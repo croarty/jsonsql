@@ -844,6 +844,29 @@ Every comparison in JsonSQL follows the same rules, whether it is in `WHERE`, `H
 
 These are SQLite's rules for values with no declared column type, apart from booleans, which SQLite doesn't have.
 
+#### Numbers
+
+JsonSQL keeps decimals as decimals. It never turns them into floating-point numbers, so no digits are lost and no stray ones appear:
+
+- A number is read from a data file exactly, however long it is. `12345678901234567890.123456789` comes out as it went in.
+- Comparisons see every digit. `WHERE amount = 0.1` matches `0.1` and `0.10`, and nothing else.
+- `SUM` is exact: `0.1 + 0.2 + 0.3` is `0.6`, not `0.6000000000000001`.
+- `AVG` is exact when the division ends: the average of `0.1` and `0.2` is `0.15`. When it never ends, the result keeps 16 significant digits, so the average of `10`, `20` and `20` is `16.66666666666667`. If the total has more decimal places than that allows, it keeps as many as the total has.
+
+Each number has one spelling in the output:
+
+| In the data file | In the output |
+|---|---|
+| `5` | `5` |
+| `20.5`, `20.50` | `20.5` |
+| `100.0`, `1e2` | `100.0` |
+| `12345678.5` | `12345678.5` |
+| `0.0001` | `0.0001` |
+| `1.5e-7` | `1.5E-7` |
+| `1e25` | `1E+25` |
+
+Trailing zeros are dropped. A whole number that was written as a decimal keeps one decimal place, up to 20 digits; beyond that, and below `0.000001`, numbers use exponent form.
+
 **Unsupported WHERE expressions fail loudly:** WHERE constructs that are not implemented, such as subqueries (`IN (SELECT ...)`, `EXISTS (...)`), functions and arithmetic, raise a clear error instead of silently returning zero rows (see [Known Limitations](#known-limitations)).
 
 ### JOIN Clause
@@ -953,8 +976,8 @@ jsonsql --data-dir example-data --query "SELECT p.category, COUNT(*) AS orders, 
 |---|---|
 | `COUNT(*)` | Number of rows (`COUNT(1)` is the same) |
 | `COUNT(field)` | Number of values that aren't NULL |
-| `SUM(field)` | Total; a whole number if every value is |
-| `AVG(field)` | Average, always a decimal |
+| `SUM(field)` | Total; a whole number if every value is. Exact, so `0.1 + 0.2 + 0.3` is `0.6` |
+| `AVG(field)` | Average, always a decimal, so the average of `10` and `20` is `15.0`. See [Numbers](#numbers) for how many digits it keeps |
 | `MIN(field)`, `MAX(field)` | Lowest and highest; numbers sort before text |
 
 `DISTINCT` works in any of them, such as `SUM(DISTINCT price)`. Nested fields work too, such as `SUM(info.size)`.
@@ -1357,7 +1380,7 @@ These non-standard forms are accepted: single quotes, unquoted keys, trailing co
 
 Files must be UTF-8, with or without a byte order mark, or UTF-16 with one. Other encodings fail with `File is not valid UTF-8`, so re-save the file as UTF-8. Errors name the file, and for invalid JSON the line and column too.
 
-Decimals are read as doubles, so values with more than about 17 significant digits are rounded.
+Numbers are read exactly, however many digits they have. See [Numbers](#numbers).
 
 **"Invalid SQL syntax"**
 

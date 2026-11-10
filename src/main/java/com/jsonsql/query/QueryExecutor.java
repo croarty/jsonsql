@@ -67,7 +67,7 @@ public class QueryExecutor implements FieldAccessor {
         this.viewManager = viewManager;
         this.resolveMaterializedViews = resolveMaterializedViews;
         this.viewStore = viewManager != null ? new MaterializedViewStore(dataDirectory) : null;
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = Json.newMapper();
         this.queryParser = new QueryParser();
         this.fileResolver = new TableFileResolver(mappingManager, dataDirectory);
         this.indexPlanner = indexManager != null

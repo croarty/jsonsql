@@ -71,7 +71,14 @@ class JsonPathConfigTest {
 
     @Test
     void acceptsTrailingDecimalPoint() {
-        assertEquals(5.0, readId("{\"items\": [{\"id\": 5.}]}"));
+        assertEquals(new java.math.BigDecimal("5"), readId("{\"items\": [{\"id\": 5.}]}"));
+    }
+
+    @Test
+    void readsDecimalsExactly() {
+        assertEquals(new java.math.BigDecimal("12345678901234567890.123456789"),
+            readId("{\"items\": [{\"id\": 12345678901234567890.123456789}]}"));
+        assertEquals(new java.math.BigDecimal("0.1"), readId("{\"items\": [{\"id\": 0.1}]}"));
     }
 
     @Test

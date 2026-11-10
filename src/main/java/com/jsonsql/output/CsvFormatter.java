@@ -1,5 +1,6 @@
 package com.jsonsql.output;
 
+import com.jsonsql.query.Json;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -18,7 +19,7 @@ public class CsvFormatter {
     private final ObjectMapper objectMapper;
 
     public CsvFormatter() {
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = Json.newMapper();
     }
 
     CsvFormatter(ObjectMapper objectMapper) {

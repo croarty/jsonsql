@@ -26,7 +26,7 @@ import java.util.List;
  */
 public final class DataFileReader {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = Json.newMapper();
     private final Configuration jsonPathConfig = JsonPathConfig.create();
 
     /**
