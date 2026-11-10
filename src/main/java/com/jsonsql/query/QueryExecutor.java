@@ -19,6 +19,7 @@ import net.sf.jsqlparser.expression.Expression;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
+import java.util.function.Consumer;
 
 /**
  * Executes parsed SQL queries against JSON data.
@@ -35,6 +36,8 @@ public class QueryExecutor implements FieldAccessor {
     private final MaterializedViewManager viewManager;
     private final MaterializedViewStore viewStore;
     private final boolean resolveMaterializedViews;
+    private boolean strict;
+    private Consumer<String> warningSink = message -> System.err.println("Warning: " + message);
 
     public QueryExecutor(MappingManager mappingManager, File dataDirectory) {
         this(mappingManager, dataDirectory, null, null, null);
@@ -83,6 +86,20 @@ public class QueryExecutor implements FieldAccessor {
 
     public MaterializedViewManager getViewManager() {
         return viewManager;
+    }
+
+    /**
+     * In strict mode, data that would otherwise produce a warning fails the query instead.
+     */
+    public void setStrict(boolean strict) {
+        this.strict = strict;
+    }
+
+    /**
+     * Where warnings about the data go. By default they are written to stderr.
+     */
+    public void setWarningSink(Consumer<String> warningSink) {
+        this.warningSink = warningSink;
     }
 
     public File getDataDirectory() {
@@ -314,7 +331,13 @@ public class QueryExecutor implements FieldAccessor {
         // A grouped row holds each value directly under its key, which can contain dots
         FieldAccessor groupFields = (row, name) -> row.get(name);
 
-        List<JsonNode> groups = new Aggregator().group(rows, query, this);
+        Aggregator aggregator = new Aggregator();
+        List<JsonNode> groups = aggregator.group(rows, query, this);
+        if (strict && !aggregator.leftOut("found").isEmpty()) {
+            throw new IllegalStateException(String.join("; ", aggregator.leftOut("found")));
+        }
+        aggregator.leftOut("left out").forEach(warningSink);
+
         if (query.getHaving() != null) {
             WhereEvaluator evaluator = new WhereEvaluator(groupFields);
             groups = groups.stream().filter(group -> evaluator.evaluate(group, query.getHaving())).toList();
@@ -433,8 +456,9 @@ public class QueryExecutor implements FieldAccessor {
             if (cacheManager != null) {
                 cteCacheKey = generateCTECacheKey(cteName, cteQuery, cteCacheKeys);
                 cteCacheKeys.put(cteName, cteCacheKey);
-                cteData = cacheManager.getCachedCTE(cteCacheKey);
-                
+                // A cached result can't repeat its warnings, so strict mode always runs the query
+                cteData = strict ? null : cacheManager.getCachedCTE(cteCacheKey);
+
                 if (cteData != null) {
                     // Use cached CTE result
                     context.setCTEResult(cteName, cteData);

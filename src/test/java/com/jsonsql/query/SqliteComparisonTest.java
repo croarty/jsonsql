@@ -307,7 +307,7 @@ class SqliteComparisonTest {
         List<String> functions = List.of("COUNT(*)", "COUNT(price)", "COUNT(cat)", "COUNT(DISTINCT cat)", "COUNT(DISTINCT name)",
             "COUNT(1)", "count(*)", "SUM(price)", "SUM(qty)", "SUM(id)", "SUM(DISTINCT price)", "AVG(price)", "AVG(qty)",
             "AVG(DISTINCT qty)", "MIN(price)", "MAX(price)", "MIN(name)", "MAX(name)", "MIN(cat)", "MAX(cat)",
-            "SUM(name)", "AVG(name)", "SUM(cat)");
+            "SUM(DISTINCT qty)", "AVG(DISTINCT price)");
         for (String function : functions) {
             queries.add(any("SELECT " + function + " FROM p"));
             queries.add(any("SELECT " + function + " AS v FROM p WHERE id > 99"));

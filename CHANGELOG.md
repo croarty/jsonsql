@@ -17,6 +17,7 @@ These changes will be in 3.0.0. They alter results for existing queries.
 - `true` and the text `"true"` are equal, so they join, group and de-duplicate together. So are `false` and `"false"`.
 - `DISTINCT` and `UNION` treat `10` and `10.0` as duplicates, as `GROUP BY` already did.
 - Index pruning follows the same rules. Results don't depend on it, and existing indexes keep working.
+- `SUM` and `AVG` leave out text, and say so in a warning on stderr. Text used to count as its leading number, or as 0, with no warning. So the `AVG` of `10`, `20` and `"none"` is now 15 where it was 10, and `"3.5kg"` no longer adds 3.5 to a `SUM`. Booleans, arrays and objects are left out in the same way.
 
 To find affected queries, look for:
 
@@ -27,8 +28,13 @@ To find affected queries, look for:
 | A join between a numeric id and a text id | Make the files agree on the type. A later 3.0 change will add `CAST` for this |
 | `ORDER BY` on text that starts with a number, such as `"15.6 inch"` | Store the number in its own field. A later 3.0 change will add `CAST` for this |
 | A boolean compared with `0` or `1` | Use `false` or `true` |
+| `SUM` or `AVG` on a field that holds some text | Run the query and read the warning. If the text should count, store it as a number |
 
 `--describe <table>` shows whether a field holds numbers or text.
+
+### Added
+
+- `--strict`, which turns the `SUM` and `AVG` warning into an error with exit code 1
 
 ## 2.0.0 - 2026-10-30
 

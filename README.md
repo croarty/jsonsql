@@ -173,8 +173,9 @@ jsonsql --query "SELECT p.name, o.quantity FROM orders o LEFT JOIN products p ON
 Usage: jsonsql [-hV] [--clear-cache] [--clipboard] [--dry-run] [--enable-cache]
                [--list-indexes] [--list-materialized-views] [--list-queries]
                [--list-tables] [--no-index] [--pretty] [--rebuild-indexes]
-               [--rebuild-views] [-c=<configFile>] [-d=<dataDirectory>]
-               [--delete-query=<deleteQueryName>] [--describe=<describeTable>]
+               [--rebuild-views] [--strict] [-c=<configFile>]
+               [-d=<dataDirectory>] [--delete-query=<deleteQueryName>]
+               [--describe=<describeTable>]
                [--drop-materialized-view=<dropMaterializedViewName>]
                [--format=<outputFormat>] [--indexes-file=<indexesFile>]
                [--materialize-view=<materializeViewName>] [-o=<outputFile>]
@@ -195,6 +196,8 @@ Query & output:
       --pretty               Pretty-print JSON output
       --format=<format>      Output format: json (default) or csv
       --dry-run              Validate query syntax and table mappings without executing
+      --strict               Fail, instead of warning, when SUM or AVG meets a
+                             value that is not a number
       --param=<key=value>    Parameter value for parameterized queries (repeatable)
 
 Mappings & introspection:
@@ -961,7 +964,14 @@ Rules:
 - Aggregates skip NULL and missing values. With no values, `COUNT` gives `0` and the others give `null`.
 - Without `GROUP BY`, the whole table is one group, so you always get one row, even if nothing matched.
 - NULL and missing values form one group. `1` and `1.0` are the same group; `1` and `"1"` are not. `true` and `"true"` are the same group.
-- Text in `SUM` and `AVG` counts as its leading number, or 0 if it has none, as in SQLite. So `"3.5kg"` counts as 3.5 and `"none"` as 0. Check text fields first if that isn't what you want.
+- `SUM` and `AVG` leave out values that aren't numbers, just as they leave out NULL, because text is never read as a number. So the `AVG` of `10`, `20` and `"none"` is 15, and the `SUM` of `"3.5kg"` alone is `null`. `COUNT`, `MIN` and `MAX` still see every value.
+- When that happens, the query still succeeds and a warning goes to stderr, one line for each `SUM` or `AVG`:
+
+  ```
+  Warning: SUM(price) left out 3 values that are not numbers, such as "none"
+  ```
+
+  Add `--strict` to fail instead, with exit code `1` and nothing on stdout. Use it in scripts, where a warning on stderr is easy to miss. SQLite differs here: it would count `"none"` as 0 and `"3.5kg"` as 3.5, with no warning.
 - Every selected field must be in `GROUP BY`. `SELECT category, name ... GROUP BY category` is rejected, because `name` would be an arbitrary row's value.
 - `GROUP BY` accepts a field, a SELECT alias or a position, but not an expression.
 - `HAVING` can use grouped fields, aliases and aggregates. `ORDER BY` can use those and positions, including aggregates you didn't select.
@@ -1249,6 +1259,7 @@ How it works:
 - When `--enable-cache` is set, the rows extracted from each source file (per file + JSONPath) are stored under `<data-dir>/.jsonsql-cache/`. The flag must be passed on every run that should use the cache.
 - The cache is **freshness-aware**: each entry's key includes the source file's last-modified time and size, so a changed source file simply misses the cache and is re-read. Superseded entries are not deleted automatically; use `--clear-cache` to reclaim disk space.
 - CTE (`WITH`) results are also cached, keyed by the CTE's definition (FROM/JOIN tables, WHERE, UNNEST, SELECT list, ORDER BY, LIMIT/TOP, DISTINCT) and the freshness fingerprint of everything it reads: mapped tables' source files, a materialized view's stored row file, or — for a CTE built on an earlier CTE — that CTE's own cache key, so changes propagate through chains of CTEs. Empty CTE results are not cached.
+- A cached CTE result is returned without running the CTE again, so a warning from inside it (see [GROUP BY and Aggregates](#group-by-and-aggregates)) is only shown on the run that fills the cache. With `--strict`, cached CTE results are not used, so the check always runs.
 - Caching trades disk space for speed on repeated reads; it does not reduce the per-query memory needed to run a query.
 - `--clear-cache` deletes all `*.cache` files in `<data-dir>/.jsonsql-cache/` (so pass the same `--data-dir` you query with).
 

@@ -15,8 +15,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Turns rows into one row per group for GROUP BY and aggregates. Each grouped row holds the
@@ -24,14 +22,48 @@ import java.util.regex.Pattern;
  * ORDER BY and projection. Without GROUP BY, all rows form one group, even if there are none.
  *
  * Following SQL, NULL and missing values form one group, aggregates ignore them, and SUM
- * and AVG of no values are NULL. Following SQLite, text in SUM and AVG counts as its
- * leading number, or 0 if it has none.
+ * and AVG of no values are NULL. SUM and AVG also ignore values that aren't numbers, because
+ * text is never read as a number, and {@link #leftOut} reports them.
  */
 final class Aggregator {
 
-    private static final Pattern LEADING_NUMBER = Pattern.compile("^\\s*[-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?");
+    private static final int EXAMPLE_LENGTH = 40;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final Map<String, LeftOut> leftOutByAggregate = new LinkedHashMap<>();
+
+    /** The values one SUM or AVG could not use, across every group. */
+    private static final class LeftOut {
+        private long count;
+        private JsonNode example;
+
+        void add(JsonNode value) {
+            count++;
+            if (example == null) {
+                example = value;
+            }
+        }
+    }
+
+    /**
+     * One sentence for each SUM or AVG that met values that aren't numbers, such as
+     * {@code SUM(price) left out 3 values that are not numbers, such as "none"}.
+     *
+     * @param verb what happened to them: "left out" or "found"
+     */
+    List<String> leftOut(String verb) {
+        List<String> sentences = new ArrayList<>();
+        leftOutByAggregate.forEach((aggregate, leftOut) -> {
+            String example = leftOut.example.toString();
+            if (example.length() > EXAMPLE_LENGTH) {
+                example = example.substring(0, EXAMPLE_LENGTH) + "...";
+            }
+            sentences.add(aggregate + " " + verb + (leftOut.count == 1
+                ? " 1 value that is not a number: "
+                : " " + leftOut.count + " values that are not numbers, such as ") + example);
+        });
+        return sentences;
+    }
 
     List<JsonNode> group(List<JsonNode> rows, ParsedQuery query, FieldAccessor fields) {
         Map<String, Group> groups = new LinkedHashMap<>();
@@ -107,7 +139,7 @@ final class Aggregator {
         }
     }
 
-    private static final class Accumulator {
+    private final class Accumulator {
         private final AggregateCall call;
         private final Set<String> seen = new HashSet<>();
         private long count;
@@ -126,31 +158,36 @@ final class Aggregator {
                 count++;
                 return;
             }
-            if (isNull(value) || (call.distinct() && !seen.add(identity(value)))) {
+            if (isNull(value)) {
+                return;
+            }
+            if (needsNumbers() && !value.isNumber()) {
+                leftOutByAggregate.computeIfAbsent(call.key(), key -> new LeftOut()).add(value);
+                return;
+            }
+            if (call.distinct() && !seen.add(identity(value))) {
                 return;
             }
             count++;
-            addToSum(value);
+            if (needsNumbers()) {
+                addToSum(value);
+            }
             min = min == null || Values.compare(value, min) < 0 ? value : min;
             max = max == null || Values.compare(value, max) > 0 ? value : max;
         }
 
+        private boolean needsNumbers() {
+            return call.function().equals("SUM") || call.function().equals("AVG");
+        }
+
         private void addToSum(JsonNode value) {
-            if (value.isNumber() && !Double.isFinite(value.asDouble())) {
+            if (!Double.isFinite(value.asDouble()) && value.isFloatingPointNumber() && !value.isBigDecimal()) {
                 nonFinite = nonFinite == null ? value.asDouble() : nonFinite + value.asDouble();
                 allIntegers = false;
                 return;
             }
-            if (value.isNumber()) {
-                sum = sum.add(value.decimalValue());
-                allIntegers &= value.isIntegralNumber();
-                return;
-            }
-            allIntegers = false;
-            Matcher number = LEADING_NUMBER.matcher(value.asText());
-            if (number.find()) {
-                sum = sum.add(new BigDecimal(number.group().trim().replaceFirst("\\.$", "").replaceFirst("\\.([eE])", "$1")));
-            }
+            sum = sum.add(value.decimalValue());
+            allIntegers &= value.isIntegralNumber();
         }
 
         JsonNode result() {

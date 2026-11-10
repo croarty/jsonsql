@@ -94,6 +94,9 @@ public class JsonSqlCli implements Callable<Integer> {
     @Option(names = {"--dry-run"}, description = "Validate query syntax and table mappings without executing")
     private boolean dryRun;
 
+    @Option(names = {"--strict"}, description = "Fail, instead of warning, when SUM or AVG meets a value that is not a number")
+    private boolean strict;
+
     @Option(names = {"--indexes-file"}, description = "Path to declared-index definitions file", defaultValue = ".jsonsql-indexes.json")
     private File indexesFile;
 
@@ -318,6 +321,7 @@ public class JsonSqlCli implements Callable<Integer> {
                 MaterializedViewManager viewManager = loadViewManagerQuietly();
                 QueryExecutor executor = new QueryExecutor(mappingManager, dataDirectory, cacheManager,
                     indexManager, viewManager);
+                executor.setStrict(strict);
                 if (dryRun) {
                     System.out.println(DryRunReporter.format(executor.dryRunValidate(query), mappingManager));
                     return 0;

@@ -188,6 +188,34 @@ class JsonSqlCliTest {
     }
 
     @Test
+    void testTextInSumWarnsOnStderrAndStillSucceeds() throws Exception {
+        CliResult r = runCli(withConfig("-q", "SELECT SUM(id) AS ids, SUM(name) AS names FROM products"));
+
+        assertEquals(0, r.exitCode());
+        assertEquals(3, objectMapper.readTree(r.out()).get(0).get("ids").asInt());
+        assertTrue(objectMapper.readTree(r.out()).get(0).get("names").isNull());
+        assertEquals("Warning: SUM(name) left out 2 values that are not numbers, such as \"Widget\"", r.err().trim());
+    }
+
+    @Test
+    void testStrictTurnsTheWarningIntoAnError() {
+        CliResult r = runCli(withConfig("-q", "SELECT SUM(id) AS ids, SUM(name) AS names FROM products", "--strict"));
+
+        assertEquals(1, r.exitCode());
+        assertEquals("", r.out());
+        assertEquals("Error executing query: SUM(name) found 2 values that are not numbers, such as \"Widget\"", r.err().trim());
+    }
+
+    @Test
+    void testStrictChangesNothingWhenTheDataIsClean() throws Exception {
+        CliResult r = runCli(withConfig("-q", "SELECT SUM(id) AS ids FROM products", "--strict"));
+
+        assertEquals(0, r.exitCode());
+        assertEquals(3, objectMapper.readTree(r.out()).get(0).get("ids").asInt());
+        assertEquals("", r.err());
+    }
+
+    @Test
     void testCsvFormatOutputsHeaderAndRows() {
         CliResult r = runCli(withConfig("-q", "SELECT name, id FROM products", "--format", "csv"));
         assertEquals(0, r.exitCode());
