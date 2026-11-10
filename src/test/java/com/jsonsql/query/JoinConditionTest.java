@@ -60,8 +60,8 @@ class JoinConditionTest {
     }
 
     @Test
-    void testNumberMatchesNumericString() throws Exception {
-        // Left key is a number, right key is a numeric string - they should match via coercion
+    void testNumberDoesNotMatchNumericString() throws Exception {
+        // Left key is a number, right key is a numeric string - text never converts to a number
         writeData("orders.json", """
             {"orders": [{"orderId": 1, "productId": 1}]}
             """, "orders", "$.orders");
@@ -71,12 +71,11 @@ class JoinConditionTest {
 
         JsonNode result = run(
             "SELECT o.orderId, p.name FROM orders o JOIN products p ON o.productId = p.id");
-        assertEquals(1, result.size());
-        assertEquals("Widget", result.get(0).get("name").asText());
+        assertEquals(0, result.size());
     }
 
     @Test
-    void testStringMatchesNumber() throws Exception {
+    void testStringDoesNotMatchNumber() throws Exception {
         // Reverse direction: string key on left, number on right
         writeData("orders.json", """
             {"orders": [{"orderId": 1, "productId": "2"}]}
@@ -87,8 +86,7 @@ class JoinConditionTest {
 
         JsonNode result = run(
             "SELECT o.orderId, p.name FROM orders o JOIN products p ON o.productId = p.id");
-        assertEquals(1, result.size());
-        assertEquals("Gadget", result.get(0).get("name").asText());
+        assertEquals(0, result.size());
     }
 
     @Test

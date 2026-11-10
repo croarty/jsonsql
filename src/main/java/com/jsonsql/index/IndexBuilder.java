@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jsonsql.query.DataFileReader;
 import com.jsonsql.config.MappingManager;
 import com.jsonsql.query.TableFileResolver;
+import com.jsonsql.query.Values;
 import com.jsonsql.view.MaterializedViewBuilder;
 import com.jsonsql.view.MaterializedViewManager;
 import com.jsonsql.view.MaterializedViewStore;
@@ -137,8 +138,8 @@ public class IndexBuilder {
         if ("number".equals(valueType) || "string".equals(valueType)) {
             JsonNode min = null, max = null;
             for (JsonNode v : distinct.values()) {
-                if (min == null || compare(v, min, valueType) < 0) min = v;
-                if (max == null || compare(v, max, valueType) > 0) max = v;
+                if (min == null || Values.compare(v, min) < 0) min = v;
+                if (max == null || Values.compare(v, max) > 0) max = v;
             }
             summary.setMin(min);
             summary.setMax(max);
@@ -213,13 +214,6 @@ public class IndexBuilder {
         if (str) return "string";
         if (bool) return "boolean";
         return "other";
-    }
-
-    private int compare(JsonNode a, JsonNode b, String valueType) {
-        if ("number".equals(valueType)) {
-            return Double.compare(a.asDouble(), b.asDouble());
-        }
-        return a.asText().compareTo(b.asText());
     }
 
     private List<JsonNode> loadRows(File file, String jsonPath) throws IOException {

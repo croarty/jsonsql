@@ -12,8 +12,8 @@ import java.nio.file.Files;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Which join key values match each other: numbers compare numerically, a number matches
- * its text form, and NULL never matches anything.
+ * Which join key values match each other: numbers compare exactly, a number never matches
+ * text, a boolean matches the text true or false, and NULL never matches anything.
  */
 class JoinKeyMatchingTest {
 
@@ -38,14 +38,13 @@ class JoinKeyMatchingTest {
         "1.5         | 1.5",
         "-2          | -2",
         "0           | 0.0",
-        "1           | \"1\"",
-        "\"1\"       | 1",
-        "1.5         | \"1.5\"",
-        "1           | \"1.0\"",
+        "1e2         | 100",
         "\"abc\"     | \"abc\"",
         "\"\"        | \"\"",
         "true        | true",
         "false       | false",
+        "true        | \"true\"",
+        "\"false\"   | false",
     })
     void keysThatMatch(String left, String right) throws Exception {
         assertEquals(1, matches(left, right));
@@ -55,6 +54,15 @@ class JoinKeyMatchingTest {
     @CsvSource(delimiter = '|', quoteCharacter = '`', value = {
         "1           | 2",
         "1           | 1.5",
+        "1           | 1.00001",
+        "9007199254740993 | 9007199254740992",
+        "1           | \"1\"",
+        "\"1\"       | 1",
+        "1.5         | \"1.5\"",
+        "1           | \"1.0\"",
+        "true        | 1",
+        "false       | 0",
+        "true        | \"TRUE\"",
         "1           | \"2\"",
         "1           | \"abc\"",
         "\"abc\"     | 1",

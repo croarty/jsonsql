@@ -66,19 +66,15 @@ public class WhereEvaluator {
         }
     }
 
-    /** One side of a comparison: its value (null for SQL NULL), and whether it came from a field. */
-    private record Operand(JsonNode value, boolean isField) {
-    }
-
     private final FieldAccessor fieldAccessor;
     // Cache of compiled LIKE/ILIKE patterns, keyed by regex + case-insensitivity, so the
     // pattern is compiled once per evaluator (one per WHERE filter) instead of once per row.
     private final Map<String, Pattern> patternCache = new HashMap<>();
-    
+
     public WhereEvaluator(FieldAccessor fieldAccessor) {
         this.fieldAccessor = fieldAccessor;
     }
-    
+
     /**
      * Evaluate an expression against a JSON row. Returns true only if the expression is
      * TRUE; both FALSE and UNKNOWN exclude the row.
@@ -136,7 +132,7 @@ public class WhereEvaluator {
         if (expression instanceof MinorThanEquals) {
             return evaluateComparison(row, (MinorThanEquals) expression, "<=");
         }
-        
+
         // Handle LIKE operator
         if (expression instanceof LikeExpression) {
             LikeExpression likeExpr = (LikeExpression) expression;
@@ -145,12 +141,12 @@ public class WhereEvaluator {
             boolean caseInsensitive = likeExpr.getLikeKeyWord() == LikeExpression.KeyWord.ILIKE;
             return evaluateLike(row, likeExpr, caseInsensitive);
         }
-        
+
         // Handle IS NULL / IS NOT NULL
         if (expression instanceof IsNullExpression) {
             return evaluateIsNull(row, (IsNullExpression) expression);
         }
-        
+
         // Handle BETWEEN / NOT BETWEEN
         if (expression instanceof Between) {
             return evaluateBetween(row, (Between) expression);
@@ -160,16 +156,16 @@ public class WhereEvaluator {
         if (expression instanceof InExpression) {
             return evaluateIn(row, (InExpression) expression);
         }
-        
+
         // Unsupported expression type - fail loudly instead of silently excluding all rows
         throw new UnsupportedExpressionException(
             "Unsupported WHERE expression: " + expression +
             " (type: " + expression.getClass().getSimpleName() + ")"
         );
     }
-    
+
     private Truth evaluateComparison(JsonNode row, ComparisonOperator comparison, String operator) {
-        return compareOperands(resolve(row, comparison.getLeftExpression()), operator,
+        return compare(resolve(row, comparison.getLeftExpression()), operator,
             resolve(row, comparison.getRightExpression()));
     }
 
@@ -177,166 +173,87 @@ public class WhereEvaluator {
      * x BETWEEN a AND b means x >= a AND x <= b, including how NULL behaves.
      */
     private Truth evaluateBetween(JsonNode row, Between between) {
-        Operand value = resolve(row, between.getLeftExpression());
-        Truth inRange = compareOperands(value, ">=", resolve(row, between.getBetweenExpressionStart()))
-            .and(() -> compareOperands(value, "<=", resolve(row, between.getBetweenExpressionEnd())));
+        JsonNode value = resolve(row, between.getLeftExpression());
+        Truth inRange = compare(value, ">=", resolve(row, between.getBetweenExpressionStart()))
+            .and(() -> compare(value, "<=", resolve(row, between.getBetweenExpressionEnd())));
         return between.isNot() ? inRange.not() : inRange;
     }
 
-    private Truth compareOperands(Operand left, String operator, Operand right) {
+    private Truth compare(JsonNode left, String operator, JsonNode right) {
         // In SQL, any comparison with NULL is UNKNOWN, whichever side the NULL is on.
         // This includes both missing fields and present but null fields.
-        if (left.value() == null || right.value() == null) {
+        if (left == null || right == null) {
             return Truth.UNKNOWN;
         }
-
-        // Compare with the field on the left, so 20 < price behaves like price > 20
-        if (!left.isField() && right.isField()) {
-            return compare(right.value(), flip(operator), left.value());
-        }
-        return compare(left.value(), operator, right.value());
-    }
-
-    private Truth compare(JsonNode left, String operator, JsonNode right) {
-        if (right.isContainerNode()) {
-            return Truth.FALSE;
-        }
-        String compareValue = right.asText();
-
+        int order = Values.compare(left, right);
         return Truth.of(switch (operator) {
-            case "=" -> compareEquals(left, compareValue);
-            case "!=" -> !compareEquals(left, compareValue);
-            case ">" -> compareGreater(left, compareValue);
-            case "<" -> compareLess(left, compareValue);
-            case ">=" -> compareGreater(left, compareValue) || compareEquals(left, compareValue);
-            case "<=" -> compareLess(left, compareValue) || compareEquals(left, compareValue);
+            case "=" -> order == 0;
+            case "!=" -> order != 0;
+            case ">" -> order > 0;
+            case "<" -> order < 0;
+            case ">=" -> order >= 0;
+            case "<=" -> order <= 0;
             default -> false;
         });
     }
 
-    private static String flip(String operator) {
-        return switch (operator) {
-            case ">" -> "<";
-            case "<" -> ">";
-            case ">=" -> "<=";
-            case "<=" -> ">=";
-            default -> operator;
-        };
-    }
-
     /**
-     * Resolve one side of a condition. The parser has already rejected anything that isn't
-     * a field or a literal. As in SQLite, a double-quoted name that isn't a field is read as text.
+     * Resolve one side of a condition to its value, or null for SQL NULL. The parser has
+     * already rejected anything that isn't a field or a literal. As in SQLite, a
+     * double-quoted name that isn't a field is read as text.
      */
-    private Operand resolve(JsonNode row, Expression expr) {
+    private JsonNode resolve(JsonNode row, Expression expr) {
         if (expr instanceof Parenthesis) {
             return resolve(row, ((Parenthesis) expr).getExpression());
         }
         if (expr instanceof NullValue) {
-            return new Operand(null, false);
+            return null;
         }
         if (expr instanceof StringValue) {
-            return new Operand(TextNode.valueOf(((StringValue) expr).getNotExcapedValue()), false);
+            return TextNode.valueOf(((StringValue) expr).getNotExcapedValue());
         }
         if (expr instanceof LongValue) {
-            return new Operand(BigIntegerNode.valueOf(((LongValue) expr).getBigIntegerValue()), false);
+            return BigIntegerNode.valueOf(((LongValue) expr).getBigIntegerValue());
         }
         if (expr instanceof DoubleValue) {
-            return new Operand(DoubleNode.valueOf(((DoubleValue) expr).getValue()), false);
+            return DoubleNode.valueOf(((DoubleValue) expr).getValue());
         }
         if (expr instanceof SignedExpression) {
-            return new Operand(DecimalNode.valueOf(new BigDecimal(expr.toString().replace(" ", ""))), false);
+            return DecimalNode.valueOf(new BigDecimal(expr.toString().replace(" ", "")));
         }
         if (expr instanceof Column) {
             return resolveColumn(row, (Column) expr);
         }
         if (AggregateCall.isAggregate(expr)) {
             // Only reachable from HAVING, where each row already holds its aggregate results
-            JsonNode value = fieldAccessor.getFieldValue(row, QueryParser.fieldName(expr));
-            return new Operand(value == null || value.isNull() ? null : value, true);
+            return orNull(fieldAccessor.getFieldValue(row, QueryParser.fieldName(expr)));
         }
         throw new UnsupportedExpressionException(
             "Unsupported WHERE expression: " + expr + " (type: " + expr.getClass().getSimpleName() + ")"
         );
     }
 
-    private Operand resolveColumn(JsonNode row, Column column) {
+    private JsonNode resolveColumn(JsonNode row, Column column) {
         String name = QueryParser.fieldName(column);
         if (column.getTable() == null) {
             if (name.equalsIgnoreCase("true")) {
-                return new Operand(BooleanNode.TRUE, false);
+                return BooleanNode.TRUE;
             }
             if (name.equalsIgnoreCase("false")) {
-                return new Operand(BooleanNode.FALSE, false);
+                return BooleanNode.FALSE;
             }
         }
         JsonNode value = fieldAccessor.getFieldValue(row, name);
         if (value == null && column.toString().startsWith("\"")) {
-            return new Operand(TextNode.valueOf(name), false);
+            return TextNode.valueOf(name);
         }
-        return new Operand(value == null || value.isNull() ? null : value, true);
+        return orNull(value);
     }
 
-    private boolean compareEquals(JsonNode fieldValue, String compareValue) {
-        // Handle null values - in SQL, NULL = anything is always false
-        if (fieldValue.isNull()) {
-            return false;
-        }
-        
-        if (fieldValue.isTextual()) {
-            return fieldValue.asText().equals(compareValue);
-        } else if (fieldValue.isNumber()) {
-            try {
-                return Math.abs(fieldValue.asDouble() - Double.parseDouble(compareValue)) < 0.0001;
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        } else if (fieldValue.isBoolean()) {
-            return fieldValue.asBoolean() == Boolean.parseBoolean(compareValue);
-        }
-        return false;
+    private static JsonNode orNull(JsonNode value) {
+        return Values.isNull(value) ? null : value;
     }
-    
-    private boolean compareGreater(JsonNode fieldValue, String compareValue) {
-        // Handle null values - in SQL, NULL > anything is always false
-        if (fieldValue.isNull()) {
-            return false;
-        }
-        
-        if (fieldValue.isNumber()) {
-            try {
-                return fieldValue.asDouble() > Double.parseDouble(compareValue);
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        }
-        // Fall back to lexicographic comparison for textual values
-        if (fieldValue.isTextual()) {
-            return fieldValue.asText().compareTo(compareValue) > 0;
-        }
-        return false;
-    }
-    
-    private boolean compareLess(JsonNode fieldValue, String compareValue) {
-        // Handle null values - in SQL, NULL < anything is always false
-        if (fieldValue.isNull()) {
-            return false;
-        }
-        
-        if (fieldValue.isNumber()) {
-            try {
-                return fieldValue.asDouble() < Double.parseDouble(compareValue);
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        }
-        // Fall back to lexicographic comparison for textual values
-        if (fieldValue.isTextual()) {
-            return fieldValue.asText().compareTo(compareValue) < 0;
-        }
-        return false;
-    }
-    
+
     /**
      * Evaluate LIKE expression for pattern matching.
      * Supports SQL wildcards: % (any characters) and _ (single character).
@@ -346,7 +263,7 @@ public class WhereEvaluator {
         // Get field value
         String fieldPath = QueryParser.fieldName(likeExpr.getLeftExpression());
         JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
-        JsonNode patternValue = resolve(row, likeExpr.getRightExpression()).value();
+        JsonNode patternValue = resolve(row, likeExpr.getRightExpression());
 
         // LIKE only applies to strings, so anything else is UNKNOWN. That excludes it from
         // NOT LIKE as well as LIKE, and from NOT (x LIKE ...).
@@ -366,17 +283,17 @@ public class WhereEvaluator {
 
         // Convert SQL LIKE pattern to regex
         String regexPattern = convertLikePatternToRegex(pattern, escape);
-        
+
         // Evaluate pattern match using a cached compiled pattern (we already lowercased above
         // when case-insensitive, so no flags are needed here).
         String cacheKey = (caseInsensitive ? "i:" : "s:") + regexPattern;
         Pattern compiled = patternCache.computeIfAbsent(cacheKey, k -> Pattern.compile(regexPattern));
         boolean matches = compiled.matcher(fieldText).matches();
-        
+
         // Handle NOT LIKE / NOT ILIKE
         return Truth.of(likeExpr.isNot() ? !matches : matches);
     }
-    
+
     /**
      * Evaluate IS NULL / IS NOT NULL expression.
      * A field is considered NULL if:
@@ -387,14 +304,14 @@ public class WhereEvaluator {
         // Get field value
         String fieldPath = QueryParser.fieldName(isNullExpr.getLeftExpression());
         JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
-        
+
         // Check if field is null (missing or explicitly null)
         boolean isNull = (fieldValue == null || fieldValue.isNull());
-        
+
         // Handle IS NOT NULL
         return Truth.of(isNullExpr.isNot() ? !isNull : isNull);
     }
-    
+
     /**
      * Evaluate IN / NOT IN expression.
      * Checks if a field value matches any value in a list.
@@ -404,29 +321,29 @@ public class WhereEvaluator {
         // Get field value
         String fieldPath = QueryParser.fieldName(inExpr.getLeftExpression());
         JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
-        
+
         // In SQL, NULL IN (...) and NULL NOT IN (...) are both UNKNOWN
         // This means NULL values are ALWAYS excluded from IN/NOT IN results
         if (fieldValue == null || fieldValue.isNull()) {
             return Truth.UNKNOWN;
         }
-        
+
         // Get the list of values to check against
         var rightExpression = inExpr.getRightExpression();
-        
+
         // Handle ExpressionList (the typical case)
         if (rightExpression instanceof ParenthesedExpressionList) {
             ParenthesedExpressionList<?> expressionList = (ParenthesedExpressionList<?>) rightExpression;
-            
+
             // ExpressionList extends List directly (getExpressions() is deprecated)
             boolean listHasNull = false;
             for (var expr : expressionList) {
-                JsonNode listValue = resolve(row, (Expression) expr).value();
+                JsonNode listValue = resolve(row, (Expression) expr);
                 if (listValue == null) {
                     listHasNull = true;
                     continue;
                 }
-                if (compareEqualsForIn(fieldValue, listValue.asText())) {
+                if (Values.equal(fieldValue, listValue)) {
                     // Found a match
                     return Truth.of(!inExpr.isNot()); // IN returns true, NOT IN returns false
                 }
@@ -435,35 +352,14 @@ public class WhereEvaluator {
             // No match found: a NULL in the list could have matched, so the answer is UNKNOWN
             return listHasNull ? Truth.UNKNOWN : Truth.of(inExpr.isNot());
         }
-        
+
         // Unsupported right expression type - fail loudly instead of silently excluding all rows
         throw new UnsupportedExpressionException(
             "Unsupported IN expression right-hand side: " + inExpr +
             " (type: " + (rightExpression == null ? "null" : rightExpression.getClass().getSimpleName()) + ")"
         );
     }
-    
-    /**
-     * Compare values for IN operator (similar to equals but optimized for IN).
-     */
-    private boolean compareEqualsForIn(JsonNode fieldValue, String compareValue) {
-        if (fieldValue.isTextual()) {
-            return fieldValue.asText().equals(compareValue);
-        } else if (fieldValue.isNumber()) {
-            try {
-                // Always use double comparison for flexibility with both int and decimal
-                double fieldDouble = fieldValue.asDouble();
-                double compareDouble = Double.parseDouble(compareValue);
-                return Math.abs(fieldDouble - compareDouble) < 0.0001;
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        } else if (fieldValue.isBoolean()) {
-            return fieldValue.asBoolean() == Boolean.parseBoolean(compareValue);
-        }
-        return false;
-    }
-    
+
     /**
      * Convert SQL LIKE pattern to Java regex pattern.
      * - % matches zero or more characters (converted to .*)
@@ -513,7 +409,7 @@ public class WhereEvaluator {
                     regex.append(c);
             }
         }
-        
+
         return regex.toString();
     }
 }

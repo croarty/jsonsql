@@ -1,11 +1,15 @@
 package com.jsonsql.index;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.BigIntegerNode;
+import com.fasterxml.jackson.databind.node.DoubleNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.jsonsql.config.MappingManager;
 import com.jsonsql.query.ParsedQuery;
 import com.jsonsql.query.TableFileResolver;
 import com.jsonsql.query.TableInfo;
 import com.jsonsql.query.UnnestInfo;
+import com.jsonsql.query.Values;
 import com.jsonsql.view.MaterializedViewBuilder;
 import com.jsonsql.view.MaterializedViewManager;
 import net.sf.jsqlparser.expression.DoubleValue;
@@ -46,8 +50,8 @@ public class IndexPlanner {
         Op op;
         String fieldRaw;      // the raw WHERE column reference (e.g. "p.category", "review.rating")
         String rangeOp;       // ">", ">=", "<", "<=" when op == RANGE
-        String value;         // for EQ / RANGE
-        List<String> values;  // for IN
+        JsonNode value;         // for EQ / RANGE
+        List<JsonNode> values;  // for IN
         TableIndex index;
     }
 
@@ -214,7 +218,7 @@ public class IndexPlanner {
         Expression right = op.getRightExpression();
 
         String column = columnName(left);
-        String literal = literal(right);
+        JsonNode literal = literal(right);
         boolean reversed = false;
         if (column == null || literal == null) {
             column = columnName(right);
@@ -249,9 +253,9 @@ public class IndexPlanner {
         if (!(right instanceof ParenthesedExpressionList)) {
             return null;
         }
-        List<String> values = new ArrayList<>();
+        List<JsonNode> values = new ArrayList<>();
         for (Object o : (ParenthesedExpressionList<?>) right) {
-            String v = literal((Expression) o);
+            JsonNode v = literal((Expression) o);
             if (v == null) {
                 return null;
             }
@@ -281,15 +285,16 @@ public class IndexPlanner {
         return (e instanceof Column) ? e.toString() : null;
     }
 
-    private String literal(Expression e) {
+    /** The literal as the value WHERE compares with, or null if it isn't a plain literal. */
+    private JsonNode literal(Expression e) {
         if (e instanceof StringValue) {
-            return ((StringValue) e).getValue();
+            return TextNode.valueOf(((StringValue) e).getNotExcapedValue());
         }
         if (e instanceof LongValue) {
-            return String.valueOf(((LongValue) e).getValue());
+            return BigIntegerNode.valueOf(((LongValue) e).getBigIntegerValue());
         }
         if (e instanceof DoubleValue) {
-            return String.valueOf(((DoubleValue) e).getValue());
+            return DoubleNode.valueOf(((DoubleValue) e).getValue());
         }
         return null;
     }
@@ -355,7 +360,7 @@ public class IndexPlanner {
             case EQ:
                 return valueCanEqual(summary, pred.value);
             case IN:
-                for (String v : pred.values) {
+                for (JsonNode v : pred.values) {
                     if (valueCanEqual(summary, v)) {
                         return true;
                     }
@@ -368,10 +373,10 @@ public class IndexPlanner {
         }
     }
 
-    private boolean valueCanEqual(FileSummary summary, String value) {
+    private boolean valueCanEqual(FileSummary summary, JsonNode value) {
         if (!summary.isValuesOmitted() && summary.getDistinctValues() != null) {
             for (JsonNode v : summary.getDistinctValues()) {
-                if (equalsValue(v, value)) {
+                if (Values.equal(v, value)) {
                     return true;
                 }
             }
@@ -381,77 +386,32 @@ public class IndexPlanner {
         return withinMinMax(summary, value);
     }
 
-    private boolean equalsValue(JsonNode node, String value) {
-        if (node.isTextual()) {
-            return node.asText().equals(value);
-        }
-        if (node.isNumber()) {
-            try {
-                return Math.abs(node.asDouble() - Double.parseDouble(value)) < 0.0001;
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        }
-        if (node.isBoolean()) {
-            return node.asBoolean() == Boolean.parseBoolean(value);
-        }
-        return false;
-    }
+    // min and max are only stored when every value in the file is a number, or every value
+    // is text. Values.compare orders a literal of the other kind entirely before or after
+    // them, which is also how WHERE treats it, so no type check is needed here.
 
-    private boolean withinMinMax(FileSummary summary, String value) {
+    private boolean withinMinMax(FileSummary summary, JsonNode value) {
         JsonNode min = summary.getMin();
         JsonNode max = summary.getMax();
         if (min == null || max == null) {
             return true;
         }
-        if ("number".equals(summary.getValueType())) {
-            try {
-                double v = Double.parseDouble(value);
-                return v >= min.asDouble() && v <= max.asDouble();
-            } catch (NumberFormatException e) {
-                return true;
-            }
-        }
-        if ("string".equals(summary.getValueType())) {
-            return value.compareTo(min.asText()) >= 0 && value.compareTo(max.asText()) <= 0;
-        }
-        return true;
+        return Values.compare(value, min) >= 0 && Values.compare(value, max) <= 0;
     }
 
-    private boolean rangeCanMatch(FileSummary summary, String op, String value) {
-        String type = summary.getValueType();
+    private boolean rangeCanMatch(FileSummary summary, String op, JsonNode value) {
         JsonNode min = summary.getMin();
         JsonNode max = summary.getMax();
         if (min == null || max == null) {
             return true; // cannot prune (e.g. mixed/boolean types have no min/max)
         }
-        if ("number".equals(type)) {
-            double v;
-            try {
-                v = Double.parseDouble(value);
-            } catch (NumberFormatException e) {
-                return true;
-            }
-            switch (op) {
-                case ">":  return max.asDouble() > v;
-                case ">=": return max.asDouble() >= v;
-                case "<":  return min.asDouble() < v;
-                case "<=": return min.asDouble() <= v;
-                default:   return true;
-            }
+        switch (op) {
+            case ">":  return Values.compare(max, value) > 0;
+            case ">=": return Values.compare(max, value) >= 0;
+            case "<":  return Values.compare(min, value) < 0;
+            case "<=": return Values.compare(min, value) <= 0;
+            default:   return true;
         }
-        if ("string".equals(type)) {
-            int cmpMax = max.asText().compareTo(value);
-            int cmpMin = min.asText().compareTo(value);
-            switch (op) {
-                case ">":  return cmpMax > 0;
-                case ">=": return cmpMax >= 0;
-                case "<":  return cmpMin < 0;
-                case "<=": return cmpMin <= 0;
-                default:   return true;
-            }
-        }
-        return true;
     }
 
     private boolean isMaterializedView(String table) {

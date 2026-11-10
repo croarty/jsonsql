@@ -225,6 +225,10 @@ Any deviation keeps the file:
 - **Changed mapping JSONPath** → the index no longer applies → full scan.
 - **Mixed value types** in a file → no reliable `min`/`max` → ranges don't prune that file.
 
+Pruning compares values exactly as `WHERE` does: numbers are exact, text is never read as
+a number, and every number comes before every text value. So `WHERE price = '10'` skips a
+file whose prices are all numbers, because no row in it could match.
+
 `--list-indexes` reports `FRESH` only when the current file set and every fingerprint
 match the built summary; otherwise it reports `STALE`, and you should
 `--rebuild-index`/`--rebuild-indexes`.

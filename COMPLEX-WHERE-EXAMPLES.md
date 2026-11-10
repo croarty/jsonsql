@@ -636,9 +636,9 @@ Following standard SQL rules:
 
 ### Data Type Handling
 
-- **Numbers**: Compared numerically (e.g., `10 < 100`); equality uses a `0.0001` tolerance
-- **Strings**: Compared lexicographically and case-sensitively (e.g., `'Apple' < 'Banana'`). A number stored as a JSON string (`"10"`) is compared as text.
-- **Booleans**: `true` and `false` values (equality only; range operators never match booleans)
+- **Numbers**: Compared exactly (e.g., `10 < 100`, and `10 = 10.0`), with no tolerance
+- **Strings**: Compared character by character and case-sensitively (e.g., `'Apple' < 'Banana'`). A number stored as a JSON string (`"10"`) is text: it never equals the number `10`, and every number comes before every string.
+- **Booleans**: Compared as the text `true` or `false`, so `active = true` and `active = 'true'` both match `true` and `"true"`. `active = 1` matches nothing.
 - **Null**: Null values evaluate to false in comparisons (see the `NOT` caveat above)
 
 ## Examples with Real Data

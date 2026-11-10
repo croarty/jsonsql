@@ -59,17 +59,11 @@ final class Aggregator {
 
     /** A text form that's equal for equal values: 1 and 1.0 match, 1 and "1" don't. */
     private static String identity(JsonNode value) {
-        if (isNull(value)) {
-            return "null";
-        }
-        if (value.isNumber()) {
-            return "n" + (value.asDouble() + 0.0);
-        }
-        return value.isTextual() ? "s" + value.asText() : "o" + value;
+        return isNull(value) ? "null" : Values.identity(value);
     }
 
     private static boolean isNull(JsonNode value) {
-        return value == null || value.isNull();
+        return Values.isNull(value);
     }
 
     private final class Group {
@@ -137,8 +131,8 @@ final class Aggregator {
             }
             count++;
             addToSum(value);
-            min = min == null || compare(value, min) < 0 ? value : min;
-            max = max == null || compare(value, max) > 0 ? value : max;
+            min = min == null || Values.compare(value, min) < 0 ? value : min;
+            max = max == null || Values.compare(value, max) > 0 ? value : max;
         }
 
         private void addToSum(JsonNode value) {
@@ -157,16 +151,6 @@ final class Aggregator {
             if (number.find()) {
                 sum = sum.add(new BigDecimal(number.group().trim().replaceFirst("\\.$", "").replaceFirst("\\.([eE])", "$1")));
             }
-        }
-
-        private static int compare(JsonNode a, JsonNode b) {
-            if (a.isNumber() && b.isNumber()) {
-                return Double.compare(a.asDouble(), b.asDouble());
-            }
-            if (a.isNumber() != b.isNumber()) {
-                return a.isNumber() ? -1 : 1;
-            }
-            return a.asText().compareTo(b.asText());
         }
 
         JsonNode result() {

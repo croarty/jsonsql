@@ -31,6 +31,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * reference. The data is deliberately awkward: missing fields as well as nulls, duplicates,
  * empty strings, zeros, negative numbers, and % and _ inside strings.
  *
+ * The SQLite columns have no declared type, like JSON fields. A typed column would make
+ * SQLite convert values before comparing them, which JsonSQL never does.
+ *
  * Differences that are intended aren't compared. Field names are case-sensitive here, and
  * SQLite's LIKE is switched to case-sensitive to match.
  */
@@ -66,6 +69,13 @@ class SqliteComparisonTest {
         """;
     private static final String KINDS = """
         [{"cat": "Tools"}, {"cat": "Toys"}, {"cat": null}, {"cat": "Tools"}]
+        """;
+    /** One column holding numbers and text together, which JSON allows and typed SQL columns don't. */
+    private static final String MIXED = """
+        [{"id": 1, "v": 10}, {"id": 2, "v": "10"}, {"id": 3, "v": 9}, {"id": 4, "v": "9"},
+         {"id": 5, "v": "abc"}, {"id": 6, "v": 10.0}, {"id": 7, "v": null}, {"id": 8},
+         {"id": 9, "v": ""}, {"id": 10, "v": 2.5}, {"id": 11, "v": "Abc"}, {"id": 12, "v": -1},
+         {"id": 13, "v": "2.5x"}]
         """;
 
     private static final List<String> ATOMS = List.of(
@@ -108,15 +118,17 @@ class SqliteComparisonTest {
         sqlite = DriverManager.getConnection("jdbc:sqlite::memory:");
         try (Statement statement = sqlite.createStatement()) {
             statement.execute("PRAGMA case_sensitive_like = ON");
-            statement.execute("CREATE TABLE p (id INTEGER, name TEXT, price REAL, cat TEXT, qty INTEGER)");
-            statement.execute("CREATE TABLE o (id INTEGER, pid INTEGER, n INTEGER, st TEXT)");
-            statement.execute("CREATE TABLE c (id INTEGER, st TEXT, label TEXT)");
-            statement.execute("CREATE TABLE k (cat TEXT)");
+            statement.execute("CREATE TABLE p (id, name, price, cat, qty)");
+            statement.execute("CREATE TABLE o (id, pid, n, st)");
+            statement.execute("CREATE TABLE c (id, st, label)");
+            statement.execute("CREATE TABLE k (cat)");
+            statement.execute("CREATE TABLE m (id, v)");
         }
         load(mappings, "p", PRODUCTS, "id", "name", "price", "cat", "qty");
         load(mappings, "o", ORDERS, "id", "pid", "n", "st");
         load(mappings, "c", CODES, "id", "st", "label");
         load(mappings, "k", KINDS, "cat");
+        load(mappings, "m", MIXED, "id", "v");
         jsonSql = new QueryExecutor(mappings, dataDir);
     }
 
@@ -343,6 +355,39 @@ class SqliteComparisonTest {
         queries.add(any("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat UNION SELECT cat, COUNT(*) FROM k GROUP BY cat"));
         queries.add(any("SELECT COUNT(*) AS n FROM p UNION ALL SELECT COUNT(*) FROM o"));
         return queries.stream();
+    }
+
+    static Stream<Query> mixedTypeQueries() {
+        List<Query> queries = new ArrayList<>();
+        for (String atom : List.of("v = 10", "v = '10'", "v != 10", "v <> '10'", "v > 5", "v >= 10", "v < 5", "v > '5'", "v < 'a'",
+                "v >= ''", "v = ''", "v IN (10, '9')", "v NOT IN (10, '9')", "v IN ('10', 9, 'abc')", "v BETWEEN 9 AND 10",
+                "v BETWEEN 9 AND 'A'", "v BETWEEN '0' AND 'a'", "v NOT BETWEEN 0 AND 100", "10 = v", "'abc' > v", "v = 10.0",
+                "v = 2.5", "v > 2.5", "v = v", "v = id", "v > id")) {
+            queries.add(any("SELECT id FROM m WHERE " + atom));
+            queries.add(any("SELECT id FROM m WHERE NOT (" + atom + ")"));
+        }
+        queries.add(ordered("SELECT id, v FROM m ORDER BY v, id", "v", "id"));
+        queries.add(ordered("SELECT id, v FROM m ORDER BY v DESC, id", "v", "id"));
+        queries.add(ordered("SELECT id, v FROM m WHERE v > 0 ORDER BY v, id DESC", "v", "id"));
+        for (String function : List.of("MIN(v)", "MAX(v)", "COUNT(v)", "COUNT(DISTINCT v)")) {
+            queries.add(any("SELECT " + function + " AS r FROM m"));
+            queries.add(any("SELECT " + function + " AS r FROM m WHERE id > 3"));
+        }
+        queries.add(any("SELECT v, COUNT(*) AS n FROM m GROUP BY v"));
+        queries.add(any("SELECT v, MIN(id) AS a, MAX(id) AS b FROM m GROUP BY v HAVING COUNT(*) > 1"));
+        queries.add(any("SELECT DISTINCT v FROM m"));
+        queries.add(any("SELECT a.id AS x, b.id AS y FROM m a JOIN m b ON a.v = b.v"));
+        queries.add(any("SELECT a.id AS x, b.id AS y FROM m a LEFT JOIN m b ON b.v = a.v"));
+        queries.add(any("SELECT m.id AS x, p.id AS y FROM m JOIN p ON m.v = p.price"));
+        queries.add(any("SELECT v FROM m UNION SELECT v FROM m WHERE id > 5"));
+        queries.add(ordered("SELECT v FROM m UNION SELECT id FROM m ORDER BY v", "v"));
+        return queries.stream();
+    }
+
+    @ParameterizedTest
+    @MethodSource("mixedTypeQueries")
+    void mixedTypesMatchSqlite(Query query) throws Exception {
+        assertMatchesSqlite(query);
     }
 
     @ParameterizedTest

@@ -5,7 +5,7 @@
 JsonSQL is a well-architected SQL-like query engine for JSON data. This document provides a thorough review of existing functionality and prioritized suggestions for new features.
 
 **Current Status:**
-- **Test Coverage**: 2507 tests across 70 test classes, all passing ✅
+- **Test Coverage**: 2707 tests across 73 test classes, all passing ✅
 - **Core Features**: Fully functional SQL-like query engine
 - **Recent Additions**: DISTINCT, ILIKE, CTEs, `UNION` / `UNION ALL`, CSV output, schema introspection (`--describe`), dry-run validation (`--dry-run`), declared indexes / file-level pruning (`--add-index`), materialized CTE views (`--materialize-view`)
 - **Architecture**: Clean separation of concerns, well-structured, maintainable
@@ -98,10 +98,11 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - Qualified column names
   - Nested field sorting
   - Numeric, text, and boolean sorting
-- **Strengths**: Handles mixed types intelligently
+  - NULL and missing values sort together
+- **Strengths**: Uses the same comparison as WHERE, MIN/MAX, GROUP BY, DISTINCT and joins (`Values`): numbers are exact, numbers sort before text, and text is never read as a number
 - **Limitations**:
   - Expressions in ORDER BY are rejected; a position needs an explicit column list
-  - Explicit JSON `null` sorts as the string `"null"`; only missing fields sort first
+  - No way yet to sort text such as `"15.6 inch"` by its leading number (needs `CAST`)
 
 #### TOP / LIMIT
 - **Status**: Fully Implemented
@@ -202,7 +203,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Strengths
 - Clean separation of concerns
 - Well-structured packages
-- Comprehensive test coverage (2507 tests, all passing)
+- Comprehensive test coverage (2707 tests, all passing)
 - Good error handling
 - Flexible field accessor pattern
 - Efficient JSONPath integration
@@ -216,6 +217,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - `QueryParser.java` - SQL parsing (JSqlParser integration), including `UNION` and `WITH`
   - `QueryExecutor.java` - Query execution engine (also dry-run validation)
   - `WhereEvaluator.java` - WHERE clause evaluation
+  - `Values.java` - The one definition of equal and less than, shared by WHERE, ORDER BY, MIN/MAX, GROUP BY, DISTINCT, joins and index pruning
   - `FieldAccessor.java` - Field access interface
   - `QueryExecutionContext.java` - CTE execution context
   - `TableFileResolver.java` - Resolves a mapping to its backing file(s), shared with indexing
@@ -564,7 +566,7 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 - DISTINCT implementation uses canonical JSON string representation
 
 ### 6.2 Testing Strategy
-- Maintain high test coverage (currently 2507 tests, all passing)
+- Maintain high test coverage (currently 2707 tests, all passing)
 - Add integration tests for new features
 - Test edge cases (nulls, empty arrays, etc.)
 - Test files organized by feature:
@@ -574,6 +576,8 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
   - `UnnestJoinTest.java` - UNNEST + JOIN combinations
   - `UnionTest.java` - UNION / UNION ALL
   - `UnsupportedSyntaxTest.java` - parse-time rejection of unimplemented SQL
+  - `ValuesTest.java` / `StrictComparisonTest.java` / `IndexPruningComparisonTest.java` - one comparison rule everywhere
+  - `SqliteComparisonTest.java` - results checked against SQLite, including a column that mixes numbers and text
   - `DebugModeTest.java` - `DEBUG` environment-variable parsing
   - `IndexManagerTest.java` / `IndexBuilderTest.java` / `IndexPlannerTest.java` / `IndexPathResolutionTest.java` - declared indexes & file pruning
   - `MaterializedViewManagerTest.java` / `MaterializedViewBuilderTest.java` / `SourceFingerprintTest.java` / `QueryExecutorMaterializedViewTest.java` / `JsonSqlCliMaterializedViewTest.java` - materialized views & freshness
@@ -624,6 +628,6 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 
 JsonSQL is a solid foundation with excellent core functionality. Recent additions of DISTINCT, ILIKE, CTEs, UNION, indexes, and materialized views demonstrate the system's extensibility. The suggested enhancements would transform it from a good tool into a comprehensive SQL-like query engine for JSON data. The prioritized roadmap focuses on high-impact features that provide the most value to users.
 
-**Current Test Status**: ✅ 2507 tests passing
+**Current Test Status**: ✅ 2707 tests passing
 **Code Quality**: ✅ High - Clean architecture, good separation of concerns
 **Documentation**: ✅ Comprehensive - README, examples, saved queries reference
