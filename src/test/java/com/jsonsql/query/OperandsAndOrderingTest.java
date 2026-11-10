@@ -124,19 +124,19 @@ class OperandsAndOrderingTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-        "price + 1 > 20", "price > qty + 1", "LOWER(name) = 'widget'", "name = UPPER('x')",
-        "LENGTH(name) > 3", "price * 2 = 20", "-price < 3", "LOWER(name) LIKE 'w%'",
+        "LOWER(name) = 'widget'", "name = UPPER('x')", "price + LENGTH(name) > 1",
+        "LENGTH(name) > 3", "-LENGTH(name) < 3", "LOWER(name) LIKE 'w%'",
         "LOWER(name) IS NULL", "LOWER(name) IN ('widget')", "name IN (UPPER('x'))",
-        "NOT (price + 1 > 20)", "id = 1 AND price + 1 > 20", "id = 1 OR LOWER(name) = 'x'",
+        "NOT (LENGTH(name) > 20)", "id = 1 AND LENGTH(name) > 20", "id = 1 OR LOWER(name) = 'x'",
     })
-    void arithmeticAndFunctionsAreRejected(String condition) {
+    void functionsAreRejected(String condition) {
         Exception e = assertThrows(QueryParseException.class, () -> where(condition));
         assertTrue(e.getMessage().contains("not supported"), e.getMessage());
     }
 
     @Test
     void unsupportedWhereFailsEvenWithNoMatchingRows() {
-        assertThrows(QueryParseException.class, () -> where("id = 999 AND price + 1 > 20"));
+        assertThrows(QueryParseException.class, () -> where("id = 999 AND LENGTH(name) > 20"));
     }
 
     @Test
@@ -175,7 +175,7 @@ class OperandsAndOrderingTest {
     @ParameterizedTest
     @ValueSource(strings = {
         "SELECT id FROM t ORDER BY 2", "SELECT id FROM t ORDER BY 0", "SELECT * FROM t ORDER BY 1",
-        "SELECT id FROM t ORDER BY price * 2", "SELECT id FROM t ORDER BY LOWER(name)",
+        "SELECT id FROM t ORDER BY price * LENGTH(name)", "SELECT id FROM t ORDER BY LOWER(name)",
     })
     void invalidOrderByIsRejected(String sql) {
         assertThrows(QueryParseException.class, () -> query(sql));

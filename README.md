@@ -548,7 +548,7 @@ jsonsql --query "SELECT * FROM products WHERE ((category = 'Electronics' AND pri
 - Operator precedence follows standard SQL rules
 - SQL comments (`-- ...` and `/* ... */`) are accepted anywhere in the query
 
-**Operands:** each side of a comparison can be a field or a literal, in either order, so `price > 20`, `20 < price` and `price > stock` all work. Text needs single quotes: an unquoted word is a field, so `category = Tools` compares two fields. Double-quoted names are fields, or text if no such field exists. Field names are case-sensitive, and a field that doesn't exist reads as NULL. Arithmetic and functions (`price + 1 > 20`, `LOWER(name) = 'x'`) are rejected.
+**Operands:** each side of a comparison can be a field or a literal, in either order, so `price > 20`, `20 < price` and `price > stock` all work. Text needs single quotes: an unquoted word is a field, so `category = Tools` compares two fields. Double-quoted names are fields, or text if no such field exists. Field names are case-sensitive, and a field that doesn't exist reads as NULL. Either side can also be a calculation, such as `price * stock > 5000` (see [Calculations in WHERE and ORDER BY](#calculations-in-where-and-order-by)). Functions (`LOWER(name) = 'x'`) are rejected.
 
 **Pattern Matching with LIKE:**
 
@@ -864,13 +864,51 @@ Rules:
   With `--strict` the query fails instead. A boolean, an array or an object in arithmetic is treated the same way.
 - **`CAST` is how you ask for a conversion**, and it never warns. `CAST(x AS REAL)` and `CAST(x AS INTEGER)` read the number at the start of text, so `"15.6 inch"` gives `15.6` and `15`. Text with no number at the start gives `null`; SQLite would give `0`. `CAST(x AS INTEGER)` drops the decimal part, so `-3.9` gives `-3`. `CAST(x AS TEXT)` gives a number or boolean as it prints.
 - **An unnamed column is named after its expression**, as JsonSQL writes it: `SELECT price * 2` gives the key `"price * 2"`. Give it an alias with `AS` for a tidier name.
-- `ORDER BY` can sort by a calculated column through its alias or position: `SELECT price * stock AS value ... ORDER BY value`. Writing the calculation in `ORDER BY` itself is not supported yet.
-- Calculated columns can't yet be combined with `GROUP BY` or aggregates, and can't be used in `WHERE`. Put the calculation in a CTE and group or filter its result:
+- `ORDER BY` can sort by a calculated column through its alias or position: `SELECT price * stock AS value ... ORDER BY value`.
+- Calculated columns can't yet be combined with `GROUP BY` or aggregates. Put the calculation in a CTE and group its result:
 
   ```sql
   WITH lines AS (SELECT category, price * stock AS value FROM products)
-  SELECT category, SUM(value) AS total FROM lines WHERE value > 1000 GROUP BY category
+  SELECT category, SUM(value) AS total FROM lines GROUP BY category
   ```
+
+#### Calculations in WHERE and ORDER BY
+
+The same calculations work in `WHERE` and `ORDER BY`:
+
+```bash
+# Filter and sort by a calculation
+jsonsql --data-dir example-data --query "SELECT name, price, stock FROM products WHERE price * stock > 5000 ORDER BY price * stock DESC"
+```
+
+```json
+[{"name":"USB-C Hub","price":34.99,"stock":200},{"name":"Mechanical Keyboard","price":89.99,"stock":75}]
+```
+
+```bash
+# Put one group first with CASE, then sort within it
+jsonsql --data-dir example-data --query "SELECT name, price FROM products ORDER BY CASE WHEN category = 'Office' THEN 0 ELSE 1 END, price DESC LIMIT 3"
+```
+
+```json
+[{"name":"Desk Lamp","price":29.99},{"name":"Mechanical Keyboard","price":89.99},{"name":"Webcam HD","price":79.99}]
+```
+
+```bash
+# Compare text by the number it starts with
+jsonsql --data-dir example-data --query "SELECT name FROM products WHERE CAST(specifications.battery AS INTEGER) >= 12"
+```
+
+```json
+[{"name":"Wireless Mouses"}]
+```
+
+- In `WHERE`, a calculation can go on either side of `=`, `<`, `>`, `BETWEEN`, `IN`, `LIKE` and `IS NULL`: `price * 2 BETWEEN 20 AND 50`, `name || ' ' || brand LIKE '%Logitech'`, `CAST(size AS REAL) IS NULL`.
+- In `ORDER BY`, a calculation can use a SELECT alias: `SELECT price * 2 AS doubled ... ORDER BY doubled + stock`. As for a plain `ORDER BY`, an alias takes priority over a field with the same name. The sort key is not added to the output.
+- `WHERE` can't see a SELECT alias, as in SQL, because it runs before the SELECT list. `WHERE doubled > 5` looks for a field called `doubled`.
+- The rules are the same as for calculated columns: dividing by zero gives `null`, and arithmetic on text gives `null` with a warning on stderr, or an error with `--strict`. A `null` never satisfies a comparison, so those rows are left out.
+- A calculation can't use a declared index, so `WHERE price * 2 > 100` reads every file where `WHERE price > 50` could skip some. A plain condition beside it, as in `category = 'Tools' AND price * 2 > 100`, still uses its index.
+- Not yet supported: calculations in `ORDER BY` after a `UNION` or in a query with `GROUP BY` or aggregates, and in `HAVING` and `GROUP BY`.
 
 ### FROM Clause
 
@@ -940,7 +978,7 @@ Each number has one spelling in the output:
 
 Trailing zeros are dropped. A whole number that was written as a decimal keeps one decimal place, up to 20 digits; beyond that, and below `0.000001`, numbers use exponent form.
 
-**Unsupported WHERE expressions fail loudly:** WHERE constructs that are not implemented, such as subqueries (`IN (SELECT ...)`, `EXISTS (...)`), functions and arithmetic, raise a clear error instead of silently returning zero rows (see [Known Limitations](#known-limitations)).
+**Unsupported WHERE expressions fail loudly:** WHERE constructs that are not implemented, such as subqueries (`IN (SELECT ...)`, `EXISTS (...)`) and functions, raise a clear error instead of silently returning zero rows (see [Known Limitations](#known-limitations)).
 
 ### JOIN Clause
 
@@ -1004,13 +1042,13 @@ ORDER BY p.name, o.orderDate DESC
 **Note:** ORDER BY supports:
 
 - Numbers (sorted numerically), which come before all text
-- Text (sorted character by character, case-sensitive). Text is never read as a number, so `"15.6 inch"` sorts before `"9 inch"`, and `"10"` before `"9"`. To sort by the number, select it with `CAST` and order by that: `SELECT name, CAST(size AS REAL) AS inches ... ORDER BY inches`.
+- Text (sorted character by character, case-sensitive). Text is never read as a number, so `"15.6 inch"` sorts before `"9 inch"`, and `"10"` before `"9"`. To sort by the number, use `CAST`: `ORDER BY CAST(size AS REAL)`.
 - Booleans, which sort as the text `false` and `true`
 - NULL and missing values sort together: first in ascending order, last with `DESC`.
 - Qualified column names (`p.price`, `o.quantity`) and nested paths (`vipStatus.points`)
 - Sorting is stable: rows that compare equal keep their source order
 
-Sorting runs *before* projection, so `ORDER BY` can use a source field you did not select. It also accepts a SELECT alias (`SELECT price AS cost ... ORDER BY cost`) or a column position (`ORDER BY 2`). An alias takes priority over a field with the same name. A position needs an explicit column list, not `SELECT *`. Expressions such as `ORDER BY price * 2` are rejected. (In a `UNION`, see below.)
+Sorting runs *before* projection, so `ORDER BY` can use a source field you did not select. It also accepts a SELECT alias (`SELECT price AS cost ... ORDER BY cost`) or a column position (`ORDER BY 2`). An alias takes priority over a field with the same name. A position needs an explicit column list, not `SELECT *`. It can also sort by a calculation, such as `ORDER BY price * stock DESC` (see [Calculations in WHERE and ORDER BY](#calculations-in-where-and-order-by)). (In a `UNION`, see below.)
 
 ### GROUP BY and Aggregates
 
@@ -1183,8 +1221,10 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 | `RIGHT`, `FULL [OUTER]`, `CROSS` (except with `UNNEST`), `NATURAL` joins | `RIGHT JOIN is not supported`, ... |
 | `INTERSECT`, `EXCEPT`, `MINUS` | `INTERSECT is not supported (only UNION and UNION ALL are supported)` |
 | `IN (SELECT ...)`, `EXISTS` in WHERE | `Unsupported WHERE expression: ...` |
-| Arithmetic and functions in WHERE | `Expression in WHERE: price + 1 is not supported (...)` |
-| Expressions in `ORDER BY` | `Expression in ORDER BY: price * 2 is not supported (...)` |
+| Functions in WHERE and ORDER BY | `Function in WHERE: UPPER(name) = 'X' is not supported (functions are not available)` |
+| An aggregate in WHERE | `Function in WHERE: COUNT(*) > 1 is not supported (use HAVING to filter on an aggregate)` |
+| Calculations in `ORDER BY` after a `UNION`, or with `GROUP BY` or aggregates | `Expression in ORDER BY: price * 2 is not supported (...)` |
+| Calculations in `HAVING` and `GROUP BY` | `Expression in HAVING: ...`, `Expression in GROUP BY: ...` |
 | Derived tables (`FROM (SELECT ...) t`) | `No mapping or materialized view found for table: ...` |
 
 These checks run at parse time, so `--dry-run` reports them too, and they apply inside CTE bodies and UNION branches as well.
@@ -1541,7 +1581,8 @@ Planned features for future releases, organized by priority:
 
 - Subqueries (e.g., `WHERE price > (SELECT AVG(price) FROM products)`) and derived tables in `FROM`
 - ✅ Calculated fields in SELECT (e.g., `SELECT price * 1.1 AS price_with_tax`), with `||`, `CASE` and `CAST` - **IMPLEMENTED**
-- Calculations in `WHERE`, `ORDER BY`, `GROUP BY` and inside aggregates (e.g., `SUM(price * qty)`)
+- ✅ Calculations in `WHERE` and `ORDER BY` (e.g., `WHERE price * stock > 5000 ORDER BY price * stock DESC`) - **IMPLEMENTED**
+- Calculations in `GROUP BY` and `HAVING`, and inside and around aggregates (e.g., `SUM(price * qty)`)
 - ✅ **Unsupported SQL fails loudly** — `RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`, and non-column SELECT items are rejected at parse time instead of being silently ignored - **IMPLEMENTED**
 - ✅ `ORDER BY` on a SELECT alias or column position - **IMPLEMENTED**
 

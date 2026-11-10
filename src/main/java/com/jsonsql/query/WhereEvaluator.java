@@ -9,6 +9,7 @@ import net.sf.jsqlparser.expression.operators.relational.*;
 import net.sf.jsqlparser.schema.Column;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -234,14 +235,31 @@ public class WhereEvaluator {
     }
 
     /**
+     * The left side of LIKE, IN or IS NULL: a field as it is stored, or a calculated value.
+     */
+    private JsonNode leftValue(JsonNode row, Expression left) {
+        if (left instanceof Column || AggregateCall.isAggregate(left)) {
+            return fieldAccessor.getFieldValue(row, QueryParser.fieldName(left));
+        }
+        return expressions.evaluate(row, left);
+    }
+
+    /**
+     * One sentence for each piece of arithmetic that met values that aren't numbers.
+     *
+     * @param verb what happened to them: "left out" or "found"
+     */
+    List<String> leftOut(String verb) {
+        return expressions.leftOut(verb);
+    }
+
+    /**
      * Evaluate LIKE expression for pattern matching.
      * Supports SQL wildcards: % (any characters) and _ (single character).
      * @param caseInsensitive If true, performs case-insensitive matching (ILIKE behavior)
      */
     private Truth evaluateLike(JsonNode row, LikeExpression likeExpr, boolean caseInsensitive) {
-        // Get field value
-        String fieldPath = QueryParser.fieldName(likeExpr.getLeftExpression());
-        JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
+        JsonNode fieldValue = leftValue(row, likeExpr.getLeftExpression());
         JsonNode patternValue = resolve(row, likeExpr.getRightExpression());
 
         // LIKE only applies to strings, so anything else is UNKNOWN. That excludes it from
@@ -280,9 +298,7 @@ public class WhereEvaluator {
      * 2. The field exists but is explicitly set to null (fieldValue.isNull())
      */
     private Truth evaluateIsNull(JsonNode row, IsNullExpression isNullExpr) {
-        // Get field value
-        String fieldPath = QueryParser.fieldName(isNullExpr.getLeftExpression());
-        JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
+        JsonNode fieldValue = leftValue(row, isNullExpr.getLeftExpression());
 
         // Check if field is null (missing or explicitly null)
         boolean isNull = (fieldValue == null || fieldValue.isNull());
@@ -297,9 +313,7 @@ public class WhereEvaluator {
      * Example: WHERE category IN ('Electronics', 'Tools', 'Furniture')
      */
     private Truth evaluateIn(JsonNode row, InExpression inExpr) {
-        // Get field value
-        String fieldPath = QueryParser.fieldName(inExpr.getLeftExpression());
-        JsonNode fieldValue = fieldAccessor.getFieldValue(row, fieldPath);
+        JsonNode fieldValue = leftValue(row, inExpr.getLeftExpression());
 
         // In SQL, NULL IN (...) and NULL NOT IN (...) are both UNKNOWN
         // This means NULL values are ALWAYS excluded from IN/NOT IN results

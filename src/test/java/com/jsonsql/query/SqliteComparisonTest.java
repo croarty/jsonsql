@@ -432,6 +432,31 @@ class SqliteComparisonTest {
         queries.add(any("SELECT price * 2 AS v FROM p UNION ALL SELECT price + price FROM p"));
         queries.add(any("WITH x AS (SELECT id, price * qty AS total FROM p) SELECT id, total / 2 AS half FROM x WHERE total > 20"));
         queries.add(any("WITH x AS (SELECT cat, price * 2 AS d FROM p) SELECT cat, SUM(d) AS s, AVG(d) AS a FROM x GROUP BY cat"));
+
+        for (String condition : List.of(
+                "price * qty > 50", "price + qty = 15", "price - qty < 10", "price / 4 >= 5", "qty % 2 = 0", "-price > 0",
+                "price * 2 BETWEEN 20 AND 45", "qty BETWEEN price / 10 AND price", "qty * 2 IN (0, 10, 14)", "qty * 2 NOT IN (0, 10)",
+                "price + qty IS NULL", "price + qty IS NOT NULL", "price / qty > 3", "price / qty IS NULL",
+                "price * qty = qty * price", "id * 2 > price", "20 < price * 2",
+                "name || cat = 'WidgetTools'", "name || '!' LIKE 'W%!'", "cat || name IN ('ToolsWidget', 'ToysDoohickey')",
+                "name || cat IS NULL", "cat || name NOT LIKE 'Tools%'",
+                "CASE WHEN qty > 3 THEN price ELSE 0 END > 5", "CASE cat WHEN 'Tools' THEN 1 ELSE 0 END = 1",
+                "price > CASE WHEN qty > 3 THEN 15 ELSE 100 END",
+                "CAST(price AS INTEGER) = 20", "CAST(price AS INTEGER) IN (10, 99)", "CAST(price AS INTEGER) IS NULL",
+                "price * 2 > 30 OR qty + 1 = 1", "cat = 'Tools' AND price * qty >= 50")) {
+            queries.add(any("SELECT id FROM p WHERE " + condition));
+            queries.add(any("SELECT id FROM p WHERE NOT (" + condition + ")"));
+        }
+        for (String orderBy : List.of(
+                "price * qty, id", "price * qty DESC, id", "price * -1, id", "qty % 2 DESC, id DESC", "name || cat, id",
+                "CASE WHEN cat = 'Tools' THEN 0 ELSE 1 END, id", "CASE cat WHEN 'Toys' THEN 1 WHEN 'Tools' THEN 2 END, id DESC",
+                "CAST(price AS INTEGER) DESC, id", "price / qty, id", "cat, price * qty DESC, id", "price > 15, id")) {
+            queries.add(ordered("SELECT id FROM p ORDER BY " + orderBy, "id"));
+        }
+        queries.add(ordered("SELECT id, price * 2 AS d FROM p ORDER BY d + qty, id", "id"));
+        queries.add(ordered("SELECT id, price AS cost FROM p ORDER BY cost * -1, id", "id"));
+        queries.add(ordered("SELECT id FROM p WHERE price * qty > 10 ORDER BY price / qty, id LIMIT 3", "id"));
+        queries.add(ordered("SELECT o.id AS oi FROM o JOIN p ON o.pid = p.id WHERE o.n * p.price > 15 ORDER BY o.n * p.price DESC, o.id", "oi"));
         return queries.stream();
     }
 

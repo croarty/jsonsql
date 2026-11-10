@@ -37,7 +37,20 @@ public class ColumnInfo {
      * @param name     its alias, or null to name it after the expression
      */
     static ColumnInfo computed(int position, Expression expression, String name) {
-        return new ColumnInfo(COMPUTED_PREFIX + position, name == null ? expression.toString() : name, expression);
+        return new ColumnInfo(calculatedKey(position), name == null ? expression.toString() : name, expression);
+    }
+
+    /**
+     * The key a calculated value is kept under in its row.
+     *
+     * @param position a number no other calculation in the query uses
+     */
+    static String calculatedKey(int position) {
+        return COMPUTED_PREFIX + position;
+    }
+
+    static boolean isCalculatedKey(String name) {
+        return name.startsWith(COMPUTED_PREFIX);
     }
 
     public String getExpression() {

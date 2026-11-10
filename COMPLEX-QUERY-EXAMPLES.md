@@ -232,7 +232,7 @@ The following analytics features are **not implemented yet**. They are listed he
 |---|---|
 | A calculated column together with `GROUP BY` or an aggregate, or an aggregate inside a calculation (`SUM(price) * 2`) | Error: `Expression in SELECT with GROUP BY or an aggregate: ... is not supported`. Put the calculation in a CTE and group its result |
 | SQL functions in SELECT: string (`UPPER`, `LOWER`, `CONCAT`, ...), date (`DATE_FORMAT`, `MONTH`, `NOW`, ...), JSON (`JSON_CONTAINS`, `JSON_LENGTH`, ...) | Error: `Function or aggregate in SELECT list: ... is not supported` |
-| Arithmetic and functions in WHERE (`WHERE price * 2 > 50`, `WHERE UPPER(name) = 'X'`) | Error: `Expression in WHERE: ... is not supported` |
+| Functions in WHERE and ORDER BY (`WHERE UPPER(name) = 'X'`) | Error: `Function in WHERE: ... is not supported` |
 | `FETCH` | Error: `FETCH is not supported` |
 | `RIGHT JOIN`, `FULL OUTER JOIN` | Error: `RIGHT JOIN is not supported` / `FULL OUTER JOIN is not supported` |
 | `INTERSECT`, `EXCEPT` | Error: `INTERSECT is not supported (...)` |

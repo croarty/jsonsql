@@ -28,7 +28,11 @@ import net.sf.jsqlparser.schema.Column;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -39,7 +43,7 @@ import java.util.regex.Pattern;
  *
  * NULL passes through arithmetic and ||, as in SQL. Arithmetic on a value that isn't a
  * number also gives NULL, because text is never read as a number, and the value is
- * recorded in {@link #leftOut()} so the caller can warn about it. CAST is the way to ask
+ * recorded for {@link #leftOut} so the caller can warn about it. CAST is the way to ask
  * for a conversion.
  */
 final class ExpressionEvaluator {
@@ -55,7 +59,8 @@ final class ExpressionEvaluator {
 
     private final FieldAccessor fields;
     private final WhereEvaluator conditions;
-    private final LeftOut leftOut = new LeftOut();
+    /** The values each piece of arithmetic could not use, across every row evaluated so far. */
+    private final Map<Expression, LeftOut> leftOut = new LinkedHashMap<>();
 
     ExpressionEvaluator(FieldAccessor fields) {
         this.fields = fields;
@@ -67,9 +72,16 @@ final class ExpressionEvaluator {
         this.conditions = conditions;
     }
 
-    /** The values arithmetic could not use, across every row evaluated so far. */
-    LeftOut leftOut() {
-        return leftOut;
+    /**
+     * One sentence for each piece of arithmetic that met values that aren't numbers, such as
+     * {@code price * 2 left out 3 values that are not numbers, such as "none"}.
+     *
+     * @param verb what happened to them: "left out" or "found"
+     */
+    List<String> leftOut(String verb) {
+        List<String> sentences = new ArrayList<>();
+        leftOut.forEach((calculation, values) -> sentences.add(values.describe(calculation.toString(), verb)));
+        return sentences;
     }
 
     JsonNode evaluate(JsonNode row, Expression expression) {
@@ -147,9 +159,9 @@ final class ExpressionEvaluator {
     private JsonNode sign(JsonNode row, SignedExpression signed) {
         JsonNode value = evaluate(row, signed.getExpression());
         if (value == null || signed.getSign() != '-') {
-            return number(value);
+            return number(value, signed);
         }
-        if (number(value) == null) {
+        if (number(value, signed) == null) {
             return null;
         }
         if (isNotFinite(value)) {
@@ -158,18 +170,21 @@ final class ExpressionEvaluator {
         return value.isIntegralNumber() ? integer(value.bigIntegerValue().negate()) : Json.number(value.decimalValue().negate());
     }
 
-    /** The value if it is a number. Otherwise NULL, noting any value that had to be left out. */
-    private JsonNode number(JsonNode value) {
+    /**
+     * The value if it is a number. Otherwise NULL, noting against the calculation any value
+     * that had to be left out.
+     */
+    private JsonNode number(JsonNode value, Expression calculation) {
         if (value == null || value.isNumber()) {
             return value;
         }
-        leftOut.add(value);
+        leftOut.computeIfAbsent(calculation, key -> new LeftOut()).add(value);
         return null;
     }
 
     private JsonNode arithmetic(BinaryExpression operator, JsonNode left, JsonNode right) {
-        left = number(left);
-        right = number(right);
+        left = number(left, operator);
+        right = number(right, operator);
         if (left == null || right == null) {
             return null;
         }
