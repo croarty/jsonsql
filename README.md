@@ -6,6 +6,7 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
 
 - **SQL-like Query Syntax**: Write familiar SQL queries against JSON data
   - `SELECT` / `SELECT DISTINCT` - Project specific fields or all fields with `*`, with `AS` aliases
+  - Calculated columns - arithmetic (`price * 1.2`), text joined with `||`, `CASE`, `CAST`, and conditions as true or false
   - `FROM` - Specify data sources with table aliases
   - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses, LIKE, ILIKE, IN, IS NULL)
   - `JOIN` / `LEFT JOIN` - Combine data from multiple sources (single equi-join condition)
@@ -196,8 +197,8 @@ Query & output:
       --pretty               Pretty-print JSON output
       --format=<format>      Output format: json (default) or csv
       --dry-run              Validate query syntax and table mappings without executing
-      --strict               Fail, instead of warning, when SUM or AVG meets a
-                             value that is not a number
+      --strict               Fail, instead of warning, when a calculation meets
+                             a value that is not a number
       --param=<key=value>    Parameter value for parameterized queries (repeatable)
 
 Mappings & introspection:
@@ -781,7 +782,7 @@ jsonsql --query "SELECT * FROM products" --output results.json --pretty
 
 ## SQL Syntax Support
 
-> **Query phase order:** clauses are applied in the order **FROM → UNNEST → JOIN → WHERE → ORDER BY → projection (SELECT list) → DISTINCT → LIMIT/TOP**. This means sorting happens against the full source rows (you can `ORDER BY` a column you do not select, as well as a SELECT alias or position), `DISTINCT` is applied to the projected columns, and `LIMIT`/`TOP` is applied last (after de-duplication).
+> **Query phase order:** clauses are applied in the order **FROM → UNNEST → JOIN → WHERE → calculated columns → ORDER BY → projection (SELECT list) → DISTINCT → LIMIT/TOP**. This means sorting happens against the full source rows (you can `ORDER BY` a column you do not select, as well as a SELECT alias or position, including a calculated one), `DISTINCT` is applied to the projected columns, and `LIMIT`/`TOP` is applied last (after de-duplication).
 
 ### SELECT Clause
 
@@ -797,7 +798,79 @@ jsonsql --query "SELECT * FROM products" --output results.json --pretty
 
 **Output column names:** an unaliased column uses its last path segment (`p.name` → `name`). If two selected columns would produce the same name, both fall back to their full expression (`SELECT o.id, p.id` → keys `o.id` and `p.id`). With `SELECT *` over a JOIN, all tables' fields are merged into one object and a later table's field overwrites an earlier one with the same name — alias the columns explicitly if names collide.
 
-**Only plain field references, `*` and aggregates are supported in the SELECT list.** `t.*`, literals, arithmetic (`price * 2`), string concatenation, functions (`UPPER(name)`), and `CASE` are rejected with an error such as `Function or aggregate in SELECT list: UPPER(name) is not supported`.
+`t.*` and functions such as `UPPER(name)` are rejected with an error such as `Function or aggregate in SELECT list: UPPER(name) is not supported`.
+
+#### Calculated columns
+
+A SELECT column can be worked out from other values:
+
+```bash
+# Arithmetic
+jsonsql --data-dir example-data --query "SELECT name, price, price * 1.2 AS with_tax FROM products ORDER BY with_tax DESC LIMIT 3"
+```
+
+```json
+[{"name":"Mechanical Keyboard","price":89.99,"with_tax":107.988},{"name":"Webcam HD","price":79.99,"with_tax":95.988},{"name":"Laptop Stand","price":45.5,"with_tax":54.6}]
+```
+
+```bash
+# CASE
+jsonsql --data-dir example-data --query "SELECT name, CASE WHEN price >= 80 THEN 'premium' WHEN price >= 40 THEN 'standard' ELSE 'budget' END AS band FROM products ORDER BY name LIMIT 3"
+```
+
+```json
+[{"name":"Desk Lamp","band":"budget"},{"name":"Laptop Stand","band":"standard"},{"name":"Mechanical Keyboard","band":"premium"}]
+```
+
+```bash
+# Text joined with ||, and a condition as a value
+jsonsql --data-dir example-data --query "SELECT name || ' (' || category || ')' AS label, price > 50 AS over_50 FROM products LIMIT 2"
+```
+
+```json
+[{"label":"Wireless Mouses (Electronics)","over_50":false},{"label":"Mechanical Keyboard (Electronics)","over_50":true}]
+```
+
+```bash
+# CAST reads the number at the start of some text
+jsonsql --data-dir example-data --query "SELECT name, specifications.battery, CAST(specifications.battery AS INTEGER) AS months FROM products WHERE specifications.battery IS NOT NULL"
+```
+
+```json
+[{"name":"Wireless Mouses","battery":"12 months","months":12}]
+```
+
+| You can use | Notes |
+|---|---|
+| `+`, `-`, `*`, `/`, `%`, and a leading `-` | Exact decimal arithmetic. See [Numbers](#numbers) |
+| Literals: `'text'`, `5`, `1.5`, `NULL` | Inside a calculation, `true` and `false` too |
+| `a \|\| b` | Joins text. Numbers and booleans join as they print |
+| `CASE WHEN condition THEN value ... ELSE value END` | Without `ELSE`, no match gives `null` |
+| `CASE value WHEN value THEN value ... END` | Compares with `=`, so `NULL` never matches |
+| `CAST(value AS type)` | `INTEGER`, `REAL` or `TEXT`. `INT`, `BIGINT`, `DECIMAL`, `NUMERIC`, `DOUBLE`, `FLOAT`, `VARCHAR`, `CHAR` and `STRING` also work |
+| A condition: `price > 50`, `qty BETWEEN 1 AND 5`, `name LIKE 'W%'`, `cat IN (...)`, `cat IS NULL` | Gives `true`, `false`, or `null` when a value is NULL. Put `AND`, `OR` and `NOT` in parentheses: `(a > 1 AND b > 2) AS both` |
+
+Rules:
+
+- **Division always gives a decimal.** `7 / 2` is `3.5` and `6 / 2` is `3.0`. SQLite and PostgreSQL would give `3` for both. `+`, `-`, `*` and `%` on whole numbers give a whole number.
+- **Dividing by zero gives `null`**, as does `%` by zero.
+- **NULL in gives NULL out.** `price + NULL`, and `name || NULL`, are `null`.
+- **Text is never read as a number.** Arithmetic on text gives `null`, and a warning on stderr for each column it happened in:
+
+  ```
+  Warning: specifications.battery * 2 left out 1 value that is not a number: "12 months"
+  ```
+
+  With `--strict` the query fails instead. A boolean, an array or an object in arithmetic is treated the same way.
+- **`CAST` is how you ask for a conversion**, and it never warns. `CAST(x AS REAL)` and `CAST(x AS INTEGER)` read the number at the start of text, so `"15.6 inch"` gives `15.6` and `15`. Text with no number at the start gives `null`; SQLite would give `0`. `CAST(x AS INTEGER)` drops the decimal part, so `-3.9` gives `-3`. `CAST(x AS TEXT)` gives a number or boolean as it prints.
+- **An unnamed column is named after its expression**, as JsonSQL writes it: `SELECT price * 2` gives the key `"price * 2"`. Give it an alias with `AS` for a tidier name.
+- `ORDER BY` can sort by a calculated column through its alias or position: `SELECT price * stock AS value ... ORDER BY value`. Writing the calculation in `ORDER BY` itself is not supported yet.
+- Calculated columns can't yet be combined with `GROUP BY` or aggregates, and can't be used in `WHERE`. Put the calculation in a CTE and group or filter its result:
+
+  ```sql
+  WITH lines AS (SELECT category, price * stock AS value FROM products)
+  SELECT category, SUM(value) AS total FROM lines WHERE value > 1000 GROUP BY category
+  ```
 
 ### FROM Clause
 
@@ -885,7 +958,7 @@ LEFT JOIN customers c ON o.customerId = c.id
 
 - Only a single **equi-join** is supported: the `ON` condition must be one `left = right` equality. Compound conditions (`... AND ...`) and range operators (`>`, `>=`, `<`, `<=`, etc.) in `ON` raise a clear error.
 - The two sides of `ON` can be written in either order (`o.productId = p.id` or `p.id = o.productId`).
-- Join keys match by the same rules as `=` in `WHERE` (see [Comparison behavior](#where-clause)): `5` matches `5.0` but not `"5"`. If one file stores an id as a number and another stores it as text, the join finds no matches.
+- Join keys match by the same rules as `=` in `WHERE` (see [Comparison behavior](#where-clause)): `5` matches `5.0` but not `"5"`. If one file stores an id as a number and another stores it as text, the join finds no matches. Convert one side in a CTE first: `WITH o AS (SELECT orderId, CAST(productId AS INTEGER) AS productId FROM orders) SELECT ... FROM o JOIN products p ON o.productId = p.id`.
 - SQL `NULL` join keys never match anything (including other nulls).
 - Unmatched `LEFT JOIN` rows return `null` for every selected right-hand column.
 - `INNER JOIN` and `LEFT OUTER JOIN` are accepted as synonyms for `JOIN` and `LEFT JOIN`.
@@ -931,7 +1004,7 @@ ORDER BY p.name, o.orderDate DESC
 **Note:** ORDER BY supports:
 
 - Numbers (sorted numerically), which come before all text
-- Text (sorted character by character, case-sensitive). Text is never read as a number, so `"15.6 inch"` sorts before `"9 inch"`, and `"10"` before `"9"`.
+- Text (sorted character by character, case-sensitive). Text is never read as a number, so `"15.6 inch"` sorts before `"9 inch"`, and `"10"` before `"9"`. To sort by the number, select it with `CAST` and order by that: `SELECT name, CAST(size AS REAL) AS inches ... ORDER BY inches`.
 - Booleans, which sort as the text `false` and `true`
 - NULL and missing values sort together: first in ascending order, last with `DESC`.
 - Qualified column names (`p.price`, `o.quantity`) and nested paths (`vipStatus.points`)
@@ -1100,7 +1173,10 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 
 | Construct | Error |
 |---|---|
-| Functions, arithmetic, literals, `CASE`, `\|\|` in SELECT | `Function or aggregate in SELECT list: UPPER(name) is not supported (...)` |
+| Functions in SELECT, such as `UPPER(name)` | `Function or aggregate in SELECT list: UPPER(name) is not supported (...)` |
+| An aggregate inside a calculation, such as `SUM(price) * 2` | `Function or aggregate in SELECT list: SUM(price) * 2 is not supported (...)` |
+| A calculated column with `GROUP BY` or an aggregate | `Expression in SELECT with GROUP BY or an aggregate: price * 2 is not supported (...)` |
+| `CAST` to a type other than a number or text | `CAST to DATE in SELECT list: ... is not supported (use INTEGER, REAL or TEXT)` |
 | Expressions inside aggregates, such as `SUM(price * 2)` | `Aggregate argument is not supported: ...` |
 | `SELECT t.*` | `SELECT t.* is not supported (use SELECT * or list the columns)` |
 | `FETCH` | `FETCH is not supported (use LIMIT and OFFSET)` |
@@ -1464,7 +1540,8 @@ Planned features for future releases, organized by priority:
 **Query Features:**
 
 - Subqueries (e.g., `WHERE price > (SELECT AVG(price) FROM products)`) and derived tables in `FROM`
-- Calculated fields in SELECT (e.g., `SELECT price * 1.1 AS price_with_tax`)
+- ✅ Calculated fields in SELECT (e.g., `SELECT price * 1.1 AS price_with_tax`), with `||`, `CASE` and `CAST` - **IMPLEMENTED**
+- Calculations in `WHERE`, `ORDER BY`, `GROUP BY` and inside aggregates (e.g., `SUM(price * qty)`)
 - ✅ **Unsupported SQL fails loudly** — `RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`, and non-column SELECT items are rejected at parse time instead of being silently ignored - **IMPLEMENTED**
 - ✅ `ORDER BY` on a SELECT alias or column position - **IMPLEMENTED**
 
@@ -1485,7 +1562,7 @@ Planned features for future releases, organized by priority:
 
 **Conditional Logic:**
 
-- `CASE/WHEN/ELSE/END` expressions for conditional values
+- ✅ `CASE/WHEN/ELSE/END` expressions for conditional values - **IMPLEMENTED** (in SELECT)
 - `IF` function for simple conditionals
 
 **Pagination & Limiting:**

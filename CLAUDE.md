@@ -21,7 +21,7 @@ The course in `jsonsql-course/` is generated. Edit `modules/`, `_base.html` or `
 `src/main/java/com/jsonsql/`:
 
 - `JsonSqlCli` - Picocli options and command wiring
-- `query/` - parsing (`QueryParser`), execution (`QueryExecutor`), filtering (`WhereEvaluator`)
+- `query/` - parsing (`QueryParser`), execution (`QueryExecutor`), filtering (`WhereEvaluator`), calculated values (`ExpressionEvaluator`)
 - `config/` - mappings, saved queries, parameters, cache
 - `index/` - declared indexes and file-level pruning
 - `view/` - materialized CTE views

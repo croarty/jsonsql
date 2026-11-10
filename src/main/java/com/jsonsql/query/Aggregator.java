@@ -27,24 +27,11 @@ import java.util.Set;
  */
 final class Aggregator {
 
-    private static final int EXAMPLE_LENGTH = 40;
     private static final int MAX_EXACT_SCALE = 10_000;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    /** The values each SUM or AVG could not use, across every group. */
     private final Map<String, LeftOut> leftOutByAggregate = new LinkedHashMap<>();
-
-    /** The values one SUM or AVG could not use, across every group. */
-    private static final class LeftOut {
-        private long count;
-        private JsonNode example;
-
-        void add(JsonNode value) {
-            count++;
-            if (example == null) {
-                example = value;
-            }
-        }
-    }
 
     /**
      * One sentence for each SUM or AVG that met values that aren't numbers, such as
@@ -54,15 +41,7 @@ final class Aggregator {
      */
     List<String> leftOut(String verb) {
         List<String> sentences = new ArrayList<>();
-        leftOutByAggregate.forEach((aggregate, leftOut) -> {
-            String example = leftOut.example.toString();
-            if (example.length() > EXAMPLE_LENGTH) {
-                example = example.substring(0, EXAMPLE_LENGTH) + "...";
-            }
-            sentences.add(aggregate + " " + verb + (leftOut.count == 1
-                ? " 1 value that is not a number: "
-                : " " + leftOut.count + " values that are not numbers, such as ") + example);
-        });
+        leftOutByAggregate.forEach((aggregate, leftOut) -> sentences.add(leftOut.describe(aggregate, verb)));
         return sentences;
     }
 

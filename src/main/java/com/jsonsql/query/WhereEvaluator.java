@@ -1,9 +1,7 @@
 package com.jsonsql.query;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.BigIntegerNode;
 import com.fasterxml.jackson.databind.node.BooleanNode;
-import com.fasterxml.jackson.databind.node.TextNode;
 import net.sf.jsqlparser.expression.*;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.conditional.OrExpression;
@@ -68,8 +66,37 @@ public class WhereEvaluator {
     // pattern is compiled once per evaluator (one per WHERE filter) instead of once per row.
     private final Map<String, Pattern> patternCache = new HashMap<>();
 
+    private final ExpressionEvaluator expressions;
+
     public WhereEvaluator(FieldAccessor fieldAccessor) {
         this.fieldAccessor = fieldAccessor;
+        this.expressions = new ExpressionEvaluator(fieldAccessor, this);
+    }
+
+    WhereEvaluator(FieldAccessor fieldAccessor, ExpressionEvaluator expressions) {
+        this.fieldAccessor = fieldAccessor;
+        this.expressions = expressions;
+    }
+
+    /**
+     * Whether an expression is a condition this class evaluates, rather than a value.
+     */
+    static boolean isCondition(Expression expression) {
+        return expression instanceof AndExpression || expression instanceof OrExpression
+            || expression instanceof NotExpression || expression instanceof ComparisonOperator
+            || expression instanceof LikeExpression || expression instanceof IsNullExpression
+            || expression instanceof Between || expression instanceof InExpression;
+    }
+
+    /**
+     * A condition as a value: true, false, or null when it is UNKNOWN.
+     */
+    JsonNode value(JsonNode row, Expression condition) {
+        return switch (test(row, condition)) {
+            case TRUE -> BooleanNode.TRUE;
+            case FALSE -> BooleanNode.FALSE;
+            case UNKNOWN -> null;
+        };
     }
 
     /**
@@ -195,60 +222,15 @@ public class WhereEvaluator {
     }
 
     /**
-     * Resolve one side of a condition to its value, or null for SQL NULL. The parser has
-     * already rejected anything that isn't a field or a literal. As in SQLite, a
-     * double-quoted name that isn't a field is read as text.
+     * Resolve one side of a condition to its value, or null for SQL NULL.
      */
     private JsonNode resolve(JsonNode row, Expression expr) {
-        if (expr instanceof Parenthesis) {
-            return resolve(row, ((Parenthesis) expr).getExpression());
-        }
-        if (expr instanceof NullValue) {
-            return null;
-        }
-        if (expr instanceof StringValue) {
-            return TextNode.valueOf(((StringValue) expr).getNotExcapedValue());
-        }
-        if (expr instanceof LongValue) {
-            return BigIntegerNode.valueOf(((LongValue) expr).getBigIntegerValue());
-        }
-        if (expr instanceof DoubleValue) {
-            return Json.number(expr.toString());
-        }
-        if (expr instanceof SignedExpression) {
-            return Json.number(expr.toString());
-        }
-        if (expr instanceof Column) {
-            return resolveColumn(row, (Column) expr);
-        }
         if (AggregateCall.isAggregate(expr)) {
             // Only reachable from HAVING, where each row already holds its aggregate results
-            return orNull(fieldAccessor.getFieldValue(row, QueryParser.fieldName(expr)));
+            JsonNode value = fieldAccessor.getFieldValue(row, QueryParser.fieldName(expr));
+            return Values.isNull(value) ? null : value;
         }
-        throw new UnsupportedExpressionException(
-            "Unsupported WHERE expression: " + expr + " (type: " + expr.getClass().getSimpleName() + ")"
-        );
-    }
-
-    private JsonNode resolveColumn(JsonNode row, Column column) {
-        String name = QueryParser.fieldName(column);
-        if (column.getTable() == null) {
-            if (name.equalsIgnoreCase("true")) {
-                return BooleanNode.TRUE;
-            }
-            if (name.equalsIgnoreCase("false")) {
-                return BooleanNode.FALSE;
-            }
-        }
-        JsonNode value = fieldAccessor.getFieldValue(row, name);
-        if (value == null && column.toString().startsWith("\"")) {
-            return TextNode.valueOf(name);
-        }
-        return orNull(value);
-    }
-
-    private static JsonNode orNull(JsonNode value) {
-        return Values.isNull(value) ? null : value;
+        return expressions.evaluate(row, expr);
     }
 
     /**
