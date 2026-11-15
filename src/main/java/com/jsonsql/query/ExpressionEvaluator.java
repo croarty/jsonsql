@@ -11,6 +11,7 @@ import net.sf.jsqlparser.expression.CaseExpression;
 import net.sf.jsqlparser.expression.CastExpression;
 import net.sf.jsqlparser.expression.DoubleValue;
 import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.NullValue;
 import net.sf.jsqlparser.expression.Parenthesis;
@@ -61,15 +62,32 @@ final class ExpressionEvaluator {
     private final WhereEvaluator conditions;
     /** The values each piece of arithmetic could not use, across every row evaluated so far. */
     private final Map<Expression, LeftOut> leftOut = new LinkedHashMap<>();
+    /** The text of each GROUP BY calculation, such as qty % 2, whose value a grouped row holds. */
+    private final Set<String> groupCalculations;
 
     ExpressionEvaluator(FieldAccessor fields) {
+        this(fields, Set.of());
+    }
+
+    /**
+     * For rows that are groups. A group holds the value of each aggregate under its key, and
+     * of each GROUP BY calculation under its text, so those are read and not worked out.
+     */
+    ExpressionEvaluator(FieldAccessor fields, Set<String> groupCalculations) {
         this.fields = fields;
         this.conditions = new WhereEvaluator(fields, this);
+        this.groupCalculations = groupCalculations;
     }
 
     ExpressionEvaluator(FieldAccessor fields, WhereEvaluator conditions) {
         this.fields = fields;
         this.conditions = conditions;
+        this.groupCalculations = Set.of();
+    }
+
+    /** Evaluates conditions with this evaluator working out their operands. */
+    WhereEvaluator conditions() {
+        return conditions;
     }
 
     /**
@@ -85,6 +103,13 @@ final class ExpressionEvaluator {
     }
 
     JsonNode evaluate(JsonNode row, Expression expression) {
+        if (!groupCalculations.isEmpty() && groupCalculations.contains(expression.toString())) {
+            return held(row, expression.toString());
+        }
+        if (AggregateCall.isAggregate(expression)) {
+            // Only reachable for a group, which already holds its aggregate results
+            return held(row, AggregateCall.keyOf((Function) expression));
+        }
         if (expression instanceof Parenthesis parenthesis) {
             return evaluate(row, parenthesis.getExpression());
         }
@@ -124,6 +149,11 @@ final class ExpressionEvaluator {
         }
         throw new UnsupportedExpressionException(
             "Unsupported expression: " + expression + " (type: " + expression.getClass().getSimpleName() + ")");
+    }
+
+    private JsonNode held(JsonNode row, String key) {
+        JsonNode value = fields.getFieldValue(row, key);
+        return Values.isNull(value) ? null : value;
     }
 
     static boolean isArithmetic(Expression expression) {

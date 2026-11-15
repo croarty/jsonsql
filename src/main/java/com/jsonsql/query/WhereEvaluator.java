@@ -226,11 +226,6 @@ public class WhereEvaluator {
      * Resolve one side of a condition to its value, or null for SQL NULL.
      */
     private JsonNode resolve(JsonNode row, Expression expr) {
-        if (AggregateCall.isAggregate(expr)) {
-            // Only reachable from HAVING, where each row already holds its aggregate results
-            JsonNode value = fieldAccessor.getFieldValue(row, QueryParser.fieldName(expr));
-            return Values.isNull(value) ? null : value;
-        }
         return expressions.evaluate(row, expr);
     }
 
@@ -238,7 +233,7 @@ public class WhereEvaluator {
      * The left side of LIKE, IN or IS NULL: a field as it is stored, or a calculated value.
      */
     private JsonNode leftValue(JsonNode row, Expression left) {
-        if (left instanceof Column || AggregateCall.isAggregate(left)) {
+        if (left instanceof Column) {
             return fieldAccessor.getFieldValue(row, QueryParser.fieldName(left));
         }
         return expressions.evaluate(row, left);

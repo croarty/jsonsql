@@ -466,6 +466,69 @@ class SqliteComparisonTest {
         assertMatchesSqlite(query);
     }
 
+    /**
+     * Calculations with grouping. Left out on purpose, as well as what expressionQueries
+     * leaves out: whole-number division such as COUNT(*) / 2, which SQLite rounds down.
+     */
+    static Stream<Query> groupedExpressionQueries() {
+        List<Query> queries = new ArrayList<>();
+        for (String value : List.of(
+                "SUM(price * qty)", "AVG(price * qty)", "MIN(price - qty)", "MAX(price + qty)", "COUNT(price * qty)",
+                "SUM(CASE WHEN qty > 3 THEN 1 ELSE 0 END)", "COUNT(CASE WHEN cat = 'Tools' THEN 1 END)",
+                "SUM(DISTINCT qty * 2)", "COUNT(DISTINCT qty % 2)", "MAX(CAST(price AS INTEGER))", "SUM(1)", "MIN(name || '!')",
+                "SUM(price) * 2", "SUM(price) / COUNT(*)", "MAX(price) - MIN(price)", "COUNT(*) * 2", "COUNT(*) / 2.0",
+                "SUM(price * qty) / SUM(qty)", "CASE WHEN COUNT(*) > 1 THEN 'many' ELSE 'one' END", "CAST(AVG(price) AS INTEGER)",
+                "SUM(qty) + COUNT(*) - 1", "-SUM(qty)", "COUNT(*) + COUNT(price)", "AVG(price) * AVG(qty)")) {
+            queries.add(any("SELECT " + value + " AS v FROM p"));
+            queries.add(any("SELECT " + value + " AS v FROM p WHERE id > 99"));
+            queries.add(any("SELECT cat, " + value + " AS v FROM p GROUP BY cat"));
+            queries.add(any("SELECT name, qty, " + value + " AS v FROM p WHERE price > 0 GROUP BY name, qty"));
+        }
+        queries.add(any("SELECT cat || '-' AS c, COUNT(*) AS n FROM p GROUP BY cat"));
+        queries.add(any("SELECT qty % 2 AS k, COUNT(*) AS n FROM p GROUP BY qty % 2"));
+        queries.add(any("SELECT COUNT(*) AS n, SUM(price) AS s FROM p GROUP BY qty > 3"));
+        String band = "CASE WHEN price > 15 THEN 'high' ELSE 'low' END";
+        queries.add(any("SELECT " + band + " AS band, COUNT(*) AS n, AVG(price) AS a FROM p GROUP BY " + band));
+        queries.add(any("SELECT " + band + " AS band, COUNT(*) AS n FROM p GROUP BY band"));
+        queries.add(any("SELECT " + band + " AS band, COUNT(*) AS n FROM p GROUP BY 1"));
+        queries.add(any("SELECT " + band + " || '!' AS band, COUNT(*) AS n FROM p GROUP BY " + band));
+        queries.add(any("SELECT cat, qty % 2 AS k, COUNT(*) AS n FROM p GROUP BY cat, qty % 2"));
+        queries.add(any("SELECT price * 2 AS d, COUNT(*) AS n FROM p GROUP BY price * 2"));
+        queries.add(any("SELECT CAST(price AS INTEGER) AS whole, COUNT(*) AS n FROM p GROUP BY CAST(price AS INTEGER)"));
+        queries.add(any("SELECT name || cat AS k, COUNT(*) AS n FROM p GROUP BY name || cat"));
+        queries.add(any("SELECT COUNT(*) AS n FROM p GROUP BY qty % 2 HAVING qty % 2 = 1"));
+        queries.add(ordered("SELECT qty % 2 AS k, COUNT(*) AS n FROM p GROUP BY qty % 2 ORDER BY qty % 2 DESC", "k"));
+
+        for (String condition : List.of(
+                "SUM(price) * 2 > 50", "SUM(qty) / COUNT(*) >= 3", "COUNT(*) + 1 > 2", "MAX(price) - MIN(price) BETWEEN 5 AND 15",
+                "SUM(price * qty) > 60", "cat || 'x' = 'Toolsx'", "n * 2 > 2", "CASE WHEN COUNT(*) > 1 THEN 1 ELSE 0 END = 1",
+                "SUM(qty) + 0 IN (10, 3)", "SUM(price) + SUM(qty) IS NULL", "NOT (COUNT(*) * 2 > 2)",
+                "COUNT(*) * 2 > 2 OR cat IS NULL", "AVG(price * 2) > 30", "cat || '' LIKE 'T%'")) {
+            queries.add(any("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat HAVING " + condition));
+        }
+        queries.add(any("SELECT COUNT(*) AS n FROM p HAVING COUNT(*) * 2 > 5"));
+        queries.add(any("SELECT COUNT(*) AS n FROM p HAVING SUM(price * qty) < 0"));
+
+        for (String orderBy : List.of(
+                "COUNT(*) * -1, cat", "SUM(qty) * 2 DESC, cat", "n * -1, cat", "MAX(price) - MIN(price), cat",
+                "CASE WHEN cat IS NULL THEN 1 ELSE 0 END, cat", "SUM(price * qty) DESC, cat", "COUNT(*) + SUM(qty), cat")) {
+            queries.add(ordered("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat ORDER BY " + orderBy, "cat"));
+        }
+        queries.add(ordered("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat ORDER BY SUM(qty) * 2 DESC, cat LIMIT 2 OFFSET 1", "cat"));
+
+        queries.add(any("SELECT p.cat, SUM(o.n * p.price) AS v, COUNT(*) * 2 AS c FROM p JOIN o ON p.id = o.pid GROUP BY p.cat"));
+        queries.add(any("SELECT p.name, SUM(o.n) * 10 AS units FROM p LEFT JOIN o ON o.pid = p.id GROUP BY p.name HAVING COUNT(o.id) + 1 > 1"));
+        queries.add(any("WITH x AS (SELECT cat, SUM(price * qty) AS v FROM p GROUP BY cat) SELECT cat, v / 2 AS half FROM x WHERE v > 10"));
+        queries.add(any("SELECT COUNT(*) * 2 AS v FROM p UNION ALL SELECT SUM(n) + 1 FROM o"));
+        return queries.stream();
+    }
+
+    @ParameterizedTest
+    @MethodSource("groupedExpressionQueries")
+    void groupedExpressionsMatchSqlite(Query query) throws Exception {
+        assertMatchesSqlite(query);
+    }
+
     @ParameterizedTest
     @MethodSource("aggregateQueries")
     void aggregatesMatchSqlite(Query query) throws Exception {

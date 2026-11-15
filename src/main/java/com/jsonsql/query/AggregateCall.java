@@ -11,14 +11,15 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * One aggregate in a query, such as COUNT(*) or SUM(DISTINCT price). Its key identifies it in
- * grouped rows, so count(*) and COUNT(*) share a single result.
+ * One aggregate in a query, such as COUNT(*), SUM(DISTINCT price) or SUM(price * qty). Its
+ * key identifies it in grouped rows, so count(*) and COUNT(*) share a single result.
  *
- * @param function the upper-case function name
- * @param field    the field to aggregate, or null for COUNT(*)
- * @param distinct whether repeated values are counted once
+ * @param function    the upper-case function name
+ * @param field       what to aggregate, as text: a field, a calculation, or null for COUNT(*)
+ * @param distinct    whether repeated values are counted once
+ * @param calculation the expression to work out for each row, or null when aggregating a field
  */
-record AggregateCall(String function, String field, boolean distinct) {
+record AggregateCall(String function, String field, boolean distinct, Expression calculation) {
 
     private static final Set<String> FUNCTIONS = Set.of("COUNT", "SUM", "AVG", "MIN", "MAX");
 
@@ -27,19 +28,26 @@ record AggregateCall(String function, String field, boolean distinct) {
             && FUNCTIONS.contains(function.getName().toUpperCase(Locale.ROOT));
     }
 
+    /**
+     * The aggregate a function call stands for. A calculation as its argument still has to
+     * be checked by the parser.
+     */
     static AggregateCall from(Function function) throws QueryParseException {
         String name = function.getName().toUpperCase(Locale.ROOT);
         Expression argument = onlyArgument(function);
-        boolean allRows = function.isAllColumns() || argument instanceof AllColumns || argument instanceof LongValue;
+        boolean everyRow = function.isAllColumns() || argument instanceof AllColumns;
 
-        if (allRows && name.equals("COUNT") && !function.isDistinct()) {
-            return new AggregateCall(name, null, false);
+        if ((everyRow || argument instanceof LongValue) && name.equals("COUNT") && !function.isDistinct()) {
+            return new AggregateCall(name, null, false, null);
         }
         if (argument instanceof Column) {
-            return new AggregateCall(name, QueryParser.fieldName(argument), function.isDistinct());
+            return new AggregateCall(name, QueryParser.fieldName(argument), function.isDistinct(), null);
         }
-        throw new QueryParseException(
-            "Aggregate argument is not supported: " + function + " (use a single field, or COUNT(*))");
+        if (argument == null || everyRow) {
+            throw new QueryParseException(
+                "Aggregate argument is not supported: " + function + " (use a single value, or COUNT(*))");
+        }
+        return new AggregateCall(name, argument.toString(), function.isDistinct(), argument);
     }
 
     private static Expression onlyArgument(Function function) {

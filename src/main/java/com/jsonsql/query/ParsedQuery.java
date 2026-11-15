@@ -4,6 +4,7 @@ import net.sf.jsqlparser.expression.Expression;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,7 @@ public class ParsedQuery {
     private Long top;
     private Long offset;
     private List<String> groupBy = new ArrayList<>();
+    private final Map<String, Expression> groupCalculations = new LinkedHashMap<>();
     private Expression having;
     private final Map<String, AggregateCall> aggregates = new LinkedHashMap<>();
     private boolean distinct = false;
@@ -88,6 +90,24 @@ public class ParsedQuery {
 
     public void setGroupBy(List<String> groupBy) {
         this.groupBy = groupBy;
+    }
+
+    /**
+     * The GROUP BY keys that are calculations, such as {@code qty % 2}, by their text. A key
+     * that isn't here is a field.
+     */
+    Map<String, Expression> getGroupCalculations() {
+        return Collections.unmodifiableMap(groupCalculations);
+    }
+
+    /**
+     * Record a GROUP BY key that is a calculation.
+     *
+     * @return its key, which is the calculation's text
+     */
+    String addGroupCalculation(Expression calculation) {
+        groupCalculations.put(calculation.toString(), calculation);
+        return calculation.toString();
     }
 
     public Expression getHaving() {

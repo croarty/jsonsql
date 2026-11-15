@@ -230,7 +230,7 @@ The following analytics features are **not implemented yet**. They are listed he
 
 | Feature | Current behavior |
 |---|---|
-| A calculated column together with `GROUP BY` or an aggregate, or an aggregate inside a calculation (`SUM(price) * 2`) | Error: `Expression in SELECT with GROUP BY or an aggregate: ... is not supported`. Put the calculation in a CTE and group its result |
+| A calculation in the `ORDER BY` after a `UNION` | Error: `Expression in ORDER BY: ... is not supported`. Sort by a column of the result |
 | SQL functions in SELECT: string (`UPPER`, `LOWER`, `CONCAT`, ...), date (`DATE_FORMAT`, `MONTH`, `NOW`, ...), JSON (`JSON_CONTAINS`, `JSON_LENGTH`, ...) | Error: `Function or aggregate in SELECT list: ... is not supported` |
 | Functions in WHERE and ORDER BY (`WHERE UPPER(name) = 'X'`) | Error: `Function in WHERE: ... is not supported` |
 | `FETCH` | Error: `FETCH is not supported` |

@@ -865,12 +865,7 @@ Rules:
 - **`CAST` is how you ask for a conversion**, and it never warns. `CAST(x AS REAL)` and `CAST(x AS INTEGER)` read the number at the start of text, so `"15.6 inch"` gives `15.6` and `15`. Text with no number at the start gives `null`; SQLite would give `0`. `CAST(x AS INTEGER)` drops the decimal part, so `-3.9` gives `-3`. `CAST(x AS TEXT)` gives a number or boolean as it prints.
 - **An unnamed column is named after its expression**, as JsonSQL writes it: `SELECT price * 2` gives the key `"price * 2"`. Give it an alias with `AS` for a tidier name.
 - `ORDER BY` can sort by a calculated column through its alias or position: `SELECT price * stock AS value ... ORDER BY value`.
-- Calculated columns can't yet be combined with `GROUP BY` or aggregates. Put the calculation in a CTE and group its result:
-
-  ```sql
-  WITH lines AS (SELECT category, price * stock AS value FROM products)
-  SELECT category, SUM(value) AS total FROM lines GROUP BY category
-  ```
+- Calculations also work with grouping, such as `SUM(price * stock)` and `SUM(price) * 2`. See [Calculations with grouping](#calculations-with-grouping).
 
 #### Calculations in WHERE and ORDER BY
 
@@ -908,7 +903,7 @@ jsonsql --data-dir example-data --query "SELECT name FROM products WHERE CAST(sp
 - `WHERE` can't see a SELECT alias, as in SQL, because it runs before the SELECT list. `WHERE doubled > 5` looks for a field called `doubled`.
 - The rules are the same as for calculated columns: dividing by zero gives `null`, and arithmetic on text gives `null` with a warning on stderr, or an error with `--strict`. A `null` never satisfies a comparison, so those rows are left out.
 - A calculation can't use a declared index, so `WHERE price * 2 > 100` reads every file where `WHERE price > 50` could skip some. A plain condition beside it, as in `category = 'Tools' AND price * 2 > 100`, still uses its index.
-- Not yet supported: calculations in `ORDER BY` after a `UNION` or in a query with `GROUP BY` or aggregates, and in `HAVING` and `GROUP BY`.
+- Not yet supported: a calculation in the `ORDER BY` after a `UNION`. Sort by a column of the result, or put the `UNION` in a CTE.
 
 ### FROM Clause
 
@@ -1107,10 +1102,57 @@ Rules:
 
   Add `--strict` to fail instead, with exit code `1` and nothing on stdout. Use it in scripts, where a warning on stderr is easy to miss. SQLite differs here: it would count `"none"` as 0 and `"3.5kg"` as 3.5, with no warning.
 - Every selected field must be in `GROUP BY`. `SELECT category, name ... GROUP BY category` is rejected, because `name` would be an arbitrary row's value.
-- `GROUP BY` accepts a field, a SELECT alias or a position, but not an expression.
-- `HAVING` can use grouped fields, aliases and aggregates. `ORDER BY` can use those and positions, including aggregates you didn't select.
+- `GROUP BY` accepts a field, a SELECT alias, a position or a calculation.
+- `HAVING` can use grouped fields, aliases and aggregates. `ORDER BY` can use those and positions, including aggregates you didn't select. Both can use calculations built from them.
 - Aggregates are not allowed in `WHERE`, which runs before grouping. Use `HAVING`.
 - Without an alias, a column is named as written, such as `COUNT(*)`. Use `AS` for easier names.
+
+#### Calculations with grouping
+
+A calculation can go inside an aggregate, around aggregates, and in `GROUP BY`, `HAVING` and `ORDER BY`:
+
+```bash
+# Inside and around aggregates
+jsonsql --data-dir example-data --query "SELECT category, SUM(price * stock) AS stock_value, MAX(price) - MIN(price) AS price_spread FROM products GROUP BY category ORDER BY stock_value DESC"
+```
+
+```json
+[{"category":"Electronics","stock_value":17495.75,"price_spread":65.0},{"category":"Office","stock_value":3598.8,"price_spread":0.0},{"category":"Accessories","stock_value":2275.0,"price_spread":0.0}]
+```
+
+```bash
+# Group by a calculation, through its alias
+jsonsql --data-dir example-data --query "SELECT CASE WHEN price >= 50 THEN 'premium' ELSE 'standard' END AS band, COUNT(*) AS products, SUM(stock) AS units FROM products GROUP BY band ORDER BY band"
+```
+
+```json
+[{"band":"premium","products":2,"units":75},{"band":"standard","products":4,"units":520}]
+```
+
+```bash
+# Filter and sort groups by a calculation
+jsonsql --data-dir example-data --query "SELECT category, COUNT(*) AS products FROM products GROUP BY category HAVING SUM(price * stock) > 3000 ORDER BY SUM(price * stock) DESC"
+```
+
+```json
+[{"category":"Electronics","products":4},{"category":"Office","products":1}]
+```
+
+```bash
+# Count the rows that meet a condition
+jsonsql --data-dir example-data --query "SELECT COUNT(*) AS products, SUM(CASE WHEN inStock = true THEN 1 ELSE 0 END) AS in_stock, SUM(price * stock) / SUM(stock) AS value_per_unit FROM products"
+```
+
+```json
+[{"products":6,"in_stock":5,"value_per_unit":39.27655462184874}]
+```
+
+- **Inside an aggregate**, a calculation is worked out for each row first: `SUM(price * stock)`, `MAX(CAST(size AS REAL))`, `COUNT(CASE WHEN stock = 0 THEN 1 END)`. `COUNT` counts the rows where it isn't `null`. An aggregate can't go inside another.
+- **Around aggregates**, a calculation is worked out once for each group: `SUM(price) * 2`, `SUM(price * stock) / SUM(stock)`, `CASE WHEN COUNT(*) > 1 THEN 'many' ELSE 'one' END`. Besides aggregates it can use the group's own fields, as in `category || '!'`.
+- **In `GROUP BY`**, a calculation makes the groups: `GROUP BY stock % 2`, or `GROUP BY band` where `band` is a calculated SELECT column. To select it, write the same calculation in the SELECT list or give it an alias. Another calculation can build on it, as in `SELECT (stock % 2) + 10 ... GROUP BY stock % 2`.
+- **In `HAVING` and `ORDER BY`**, a calculation can use aggregates, grouped fields and SELECT aliases: `HAVING SUM(price) * 2 > 100`, `ORDER BY n * -1` where `n` is `COUNT(*) AS n`.
+- A field that isn't grouped is rejected wherever it appears outside an aggregate, as before: `SELECT category, price * 2 ... GROUP BY category` gives `Column 'price' must be in GROUP BY or inside an aggregate`.
+- The rules for calculations are the same as elsewhere. Arithmetic on text gives `null` with a warning, or an error with `--strict`. This is separate from `SUM` and `AVG` leaving text out: `SUM(price * 2)` warns about `price * 2`, and `SUM(price)` warns about `SUM(price)`.
 - Without `ORDER BY`, groups appear in the order they were first seen.
 
 Clauses run in this order: **WHERE → GROUP BY → HAVING → ORDER BY → SELECT → DISTINCT → OFFSET/LIMIT**.
@@ -1212,19 +1254,19 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 | Construct | Error |
 |---|---|
 | Functions in SELECT, such as `UPPER(name)` | `Function or aggregate in SELECT list: UPPER(name) is not supported (...)` |
-| An aggregate inside a calculation, such as `SUM(price) * 2` | `Function or aggregate in SELECT list: SUM(price) * 2 is not supported (...)` |
-| A calculated column with `GROUP BY` or an aggregate | `Expression in SELECT with GROUP BY or an aggregate: price * 2 is not supported (...)` |
+| An aggregate inside another, such as `SUM(COUNT(id))` | `Function or aggregate in SELECT list: SUM(COUNT(id)) is not supported (an aggregate can't be used here)` |
+| A field that isn't grouped, used with `GROUP BY` or an aggregate | `Column 'price' must be in GROUP BY or inside an aggregate` |
 | `CAST` to a type other than a number or text | `CAST to DATE in SELECT list: ... is not supported (use INTEGER, REAL or TEXT)` |
-| Expressions inside aggregates, such as `SUM(price * 2)` | `Aggregate argument is not supported: ...` |
+| `SUM(*)`, or an aggregate with several arguments | `Aggregate argument is not supported: SUM(*) (use a single value, or COUNT(*))` |
 | `SELECT t.*` | `SELECT t.* is not supported (use SELECT * or list the columns)` |
 | `FETCH` | `FETCH is not supported (use LIMIT and OFFSET)` |
 | `RIGHT`, `FULL [OUTER]`, `CROSS` (except with `UNNEST`), `NATURAL` joins | `RIGHT JOIN is not supported`, ... |
 | `INTERSECT`, `EXCEPT`, `MINUS` | `INTERSECT is not supported (only UNION and UNION ALL are supported)` |
 | `IN (SELECT ...)`, `EXISTS` in WHERE | `Unsupported WHERE expression: ...` |
-| Functions in WHERE and ORDER BY | `Function in WHERE: UPPER(name) = 'X' is not supported (functions are not available)` |
+| Functions in WHERE, GROUP BY, HAVING and ORDER BY | `Function in WHERE: UPPER(name) = 'X' is not supported (functions are not available)` |
 | An aggregate in WHERE | `Function in WHERE: COUNT(*) > 1 is not supported (use HAVING to filter on an aggregate)` |
-| Calculations in `ORDER BY` after a `UNION`, or with `GROUP BY` or aggregates | `Expression in ORDER BY: price * 2 is not supported (...)` |
-| Calculations in `HAVING` and `GROUP BY` | `Expression in HAVING: ...`, `Expression in GROUP BY: ...` |
+| An aggregate in GROUP BY | `Function in GROUP BY: COUNT(*) + 1 is not supported (an aggregate can't be used here)` |
+| A calculation in the `ORDER BY` after a `UNION` | `Expression in ORDER BY: price * 2 is not supported (...)` |
 | Derived tables (`FROM (SELECT ...) t`) | `No mapping or materialized view found for table: ...` |
 
 These checks run at parse time, so `--dry-run` reports them too, and they apply inside CTE bodies and UNION branches as well.
@@ -1582,7 +1624,8 @@ Planned features for future releases, organized by priority:
 - Subqueries (e.g., `WHERE price > (SELECT AVG(price) FROM products)`) and derived tables in `FROM`
 - ✅ Calculated fields in SELECT (e.g., `SELECT price * 1.1 AS price_with_tax`), with `||`, `CASE` and `CAST` - **IMPLEMENTED**
 - ✅ Calculations in `WHERE` and `ORDER BY` (e.g., `WHERE price * stock > 5000 ORDER BY price * stock DESC`) - **IMPLEMENTED**
-- Calculations in `GROUP BY` and `HAVING`, and inside and around aggregates (e.g., `SUM(price * qty)`)
+- ✅ Calculations in `GROUP BY` and `HAVING`, and inside and around aggregates (e.g., `SUM(price * qty)`, `SUM(price) * 2`) - **IMPLEMENTED**
+- Calculations in the `ORDER BY` after a `UNION`
 - ✅ **Unsupported SQL fails loudly** — `RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`, and non-column SELECT items are rejected at parse time instead of being silently ignored - **IMPLEMENTED**
 - ✅ `ORDER BY` on a SELECT alias or column position - **IMPLEMENTED**
 
