@@ -124,19 +124,19 @@ class OperandsAndOrderingTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-        "LOWER(name) = 'widget'", "name = UPPER('x')", "price + LENGTH(name) > 1",
-        "LENGTH(name) > 3", "-LENGTH(name) < 3", "LOWER(name) LIKE 'w%'",
-        "LOWER(name) IS NULL", "LOWER(name) IN ('widget')", "name IN (UPPER('x'))",
-        "NOT (LENGTH(name) > 20)", "id = 1 AND LENGTH(name) > 20", "id = 1 OR LOWER(name) = 'x'",
+        "REVERSE(name) = 'widget'", "name = SOUNDEX('x')", "price + HEX(name) > 1",
+        "HEX(name) > 3", "-HEX(name) < 3", "REVERSE(name) LIKE 'w%'",
+        "REVERSE(name) IS NULL", "REVERSE(name) IN ('widget')", "name IN (SOUNDEX('x'))",
+        "NOT (HEX(name) > 20)", "id = 1 AND HEX(name) > 20", "id = 1 OR REVERSE(name) = 'x'",
     })
-    void functionsAreRejected(String condition) {
+    void unknownFunctionsAreRejected(String condition) {
         Exception e = assertThrows(QueryParseException.class, () -> where(condition));
         assertTrue(e.getMessage().contains("not supported"), e.getMessage());
     }
 
     @Test
     void unsupportedWhereFailsEvenWithNoMatchingRows() {
-        assertThrows(QueryParseException.class, () -> where("id = 999 AND LENGTH(name) > 20"));
+        assertThrows(QueryParseException.class, () -> where("id = 999 AND HEX(name) > 20"));
     }
 
     @Test
@@ -175,7 +175,7 @@ class OperandsAndOrderingTest {
     @ParameterizedTest
     @ValueSource(strings = {
         "SELECT id FROM t ORDER BY 2", "SELECT id FROM t ORDER BY 0", "SELECT * FROM t ORDER BY 1",
-        "SELECT id FROM t ORDER BY price * LENGTH(name)", "SELECT id FROM t ORDER BY LOWER(name)",
+        "SELECT id FROM t ORDER BY price * HEX(name)", "SELECT id FROM t ORDER BY REVERSE(name)",
     })
     void invalidOrderByIsRejected(String sql) {
         assertThrows(QueryParseException.class, () -> query(sql));

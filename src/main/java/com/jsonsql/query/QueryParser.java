@@ -13,6 +13,7 @@ import net.sf.jsqlparser.statement.select.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Parses and validates SQL queries.
@@ -326,10 +327,18 @@ public class QueryParser {
             }
         } else if (WhereEvaluator.isCondition(expression)) {
             validateValueCondition(expression, whole, clause, grouped);
+        } else if (expression instanceof Function function && !AggregateCall.isAggregate(function)
+                && Functions.isFunction(function.getName())) {
+            validateFunction(function, whole, clause, grouped);
+        } else if (expression instanceof TrimFunction trim) {
+            validateValue(trim.getExpression(), whole, clause, grouped);
+            if (trim.getFromExpression() != null) {
+                validateValue(trim.getFromExpression(), whole, clause, grouped);
+            }
         } else if (!(expression instanceof Column || expression instanceof StringValue || expression instanceof LongValue
                 || expression instanceof DoubleValue || expression instanceof NullValue)) {
             if (expression instanceof Function) {
-                String hint = "functions are not available";
+                String hint = "available functions: " + Functions.names();
                 if (AggregateCall.isAggregate(expression)) {
                     hint = clause.equals(WHERE) ? "use HAVING to filter on an aggregate" : "an aggregate can't be used here";
                 }
@@ -337,6 +346,25 @@ public class QueryParser {
                 throw unsupported(kind + " in " + clause + ": " + whole, hint);
             }
             throw unsupported("Expression in " + clause + ": " + whole, "use fields, literals, arithmetic, ||, CASE and CAST");
+        }
+    }
+
+    /**
+     * A call to one of the functions in {@link Functions}, such as UPPER(name).
+     */
+    private void validateFunction(Function function, Expression whole, String clause, ParsedQuery grouped)
+            throws QueryParseException {
+        String name = function.getName().toUpperCase(Locale.ROOT);
+        if (function.isDistinct()) {
+            throw unsupported("DISTINCT in " + name, "DISTINCT belongs inside an aggregate");
+        }
+        int count = function.getParameters() == null ? 0 : function.getParameters().size();
+        String problem = Functions.arityProblem(name, count);
+        if (problem != null) {
+            throw new QueryParseException(problem + ": " + function);
+        }
+        for (Object argument : function.getParameters()) {
+            validateValue((Expression) argument, whole, clause, grouped);
         }
     }
 

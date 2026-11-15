@@ -5,11 +5,11 @@
 JsonSQL is a well-architected SQL-like query engine for JSON data. This document provides a thorough review of existing functionality and prioritized suggestions for new features.
 
 **Current Status:**
-- **Test Coverage**: 3327 tests across 78 test classes, all passing ✅
+- **Test Coverage**: 3742 tests across 79 test classes, all passing ✅
 - **Core Features**: Fully functional SQL-like query engine
 - **Recent Additions**: DISTINCT, ILIKE, CTEs, `UNION` / `UNION ALL`, CSV output, schema introspection (`--describe`), dry-run validation (`--dry-run`), declared indexes / file-level pruning (`--add-index`), materialized CTE views (`--materialize-view`)
 - **Architecture**: Clean separation of concerns, well-structured, maintainable
-- **Error handling**: unimplemented SQL (functions in SELECT, `RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`) is rejected at parse time, as are functions in WHERE and ORDER BY — see [Part 2.0](#20-unsupported-syntax-handling-high-priority)
+- **Error handling**: unimplemented SQL (`RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`) is rejected at parse time, as is a function that is not available — see [Part 2.0](#20-unsupported-syntax-handling-high-priority)
 
 ---
 
@@ -31,7 +31,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 - **Limitations**:
   - Calculated fields (✅ **IMPLEMENTED**): arithmetic, literals, `||`, `CASE`, `CAST` and conditions as values, e.g. `SELECT price * 1.1 AS total`
   - With grouping (✅ **IMPLEMENTED**): inside aggregates (`SUM(price * qty)`), around them (`SUM(price) * 2`), and in GROUP BY, HAVING and ORDER BY
-  - No functions in SELECT (e.g., `SELECT UPPER(name)`) — rejected with an error
+  - Functions (✅ **IMPLEMENTED**): `UPPER`, `LOWER`, `LENGTH`, `SUBSTR`, `TRIM`, `REPLACE`, `ROUND`, `ABS`, `COALESCE`, `IFNULL`, `NULLIF`; any other is rejected with an error
   - No `t.*` projection — rejected with an error (use `SELECT *`)
 
 #### FROM Clause
@@ -63,7 +63,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 - **Limitations**:
   - No subqueries in WHERE (raises a clear error)
   - Calculations (✅ **IMPLEMENTED**): arithmetic, `||`, `CASE` and `CAST` on either side of a condition
-  - Functions in WHERE are rejected
+  - Functions (✅ **IMPLEMENTED**), such as `WHERE LOWER(name) LIKE 'w%'`
 
 #### JOIN Operations
 - **Status**: Partially Implemented
@@ -206,7 +206,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Strengths
 - Clean separation of concerns
 - Well-structured packages
-- Comprehensive test coverage (3327 tests, all passing)
+- Comprehensive test coverage (3742 tests, all passing)
 - Good error handling
 - Flexible field accessor pattern
 - Efficient JSONPath integration
@@ -221,6 +221,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - `QueryExecutor.java` - Query execution engine (also dry-run validation)
   - `WhereEvaluator.java` - WHERE clause evaluation
   - `ExpressionEvaluator.java` - The value of an expression for one row: arithmetic, `||`, `CASE`, `CAST` and conditions as values
+  - `Functions.java` - The functions that work on one value, such as UPPER and ROUND
   - `Values.java` - The one definition of equal and less than, shared by WHERE, ORDER BY, MIN/MAX, GROUP BY, DISTINCT, joins and index pruning
   - `Json.java` - Exact decimals: the mapper every row passes through, number creation, and the division rule
   - `FieldAccessor.java` - Field access interface
@@ -270,7 +271,8 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 | `GROUP BY`, `HAVING`, aggregates | ✅ Implemented |
 | Arithmetic, literals, `\|\|`, `CASE`, `CAST` in SELECT | ✅ Implemented |
 | Calculations inside and around aggregates, and in GROUP BY and HAVING | ✅ Implemented |
-| Functions and `t.*` in SELECT; an aggregate inside another | Rejected |
+| `UPPER`, `LOWER`, `LENGTH`, `SUBSTR`, `TRIM`, `REPLACE`, `ROUND`, `ABS`, `COALESCE`, `IFNULL`, `NULLIF` in every clause | ✅ Implemented |
+| Other functions, and `t.*` in SELECT; an aggregate inside another | Rejected |
 | `OFFSET` / `LIMIT m, n` | ✅ Implemented |
 | `FETCH` | Rejected |
 | `RIGHT`, `FULL`, `CROSS` (non-`UNNEST`), `NATURAL` joins | Rejected |
@@ -280,7 +282,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 | `ORDER BY alias` / `ORDER BY 2` | ✅ Implemented |
 | `20 < price`, `price > stock` in WHERE | ✅ Implemented |
 | Arithmetic, `||`, `CASE`, `CAST` in WHERE and ORDER BY | ✅ Implemented |
-| Functions in WHERE, GROUP BY, HAVING and ORDER BY; calculations in ORDER BY after a UNION | Rejected |
+| Calculations in ORDER BY after a UNION | Rejected |
 | `LIKE ... ESCAPE` | ✅ Implemented |
 
 **Implementation Complexity**: Low
@@ -300,13 +302,12 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 - `CASE WHEN ... THEN ... ELSE ... END`, in both forms
 - `CAST(x AS INTEGER | REAL | TEXT)`
 - Arithmetic on text gives NULL with a warning on stderr, or an error with `--strict`
+- Functions (`Functions`, covered by `ScalarFunctionsTest`): `UPPER`, `LOWER`, `LENGTH`, `SUBSTR`/`SUBSTRING`, `TRIM`/`LTRIM`/`RTRIM`, `REPLACE`, `ROUND`, `ABS`, `COALESCE`, `IFNULL`, `NULLIF`, following SQLite
 
 **Missing Features**:
 - Calculations in the ORDER BY after a UNION
-- String functions: `UPPER()`, `LOWER()`, `CONCAT()`, `SUBSTRING()`, `LENGTH()`, `TRIM()`
-- Numeric functions: `ROUND()`, `FLOOR()`, `CEIL()`, `ABS()`, `POWER()`
+- More functions: `FLOOR()`, `CEIL()`, `POWER()`, `CONCAT()` (`||` joins text today)
 - Date/Time functions: `YEAR()`, `MONTH()`, `DAY()`, `DATE()`, `DATEADD()`, `DATEDIFF()`
-- Null handling: `COALESCE()`, `IFNULL()`
 
 **Use Cases**:
 ```sql
@@ -314,9 +315,9 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 SELECT name, price, price * 1.1 AS price_with_tax FROM products
 
 -- String manipulation
-SELECT UPPER(name) AS name_upper, CONCAT(name, ' - ', category) AS full_name FROM products
+SELECT UPPER(name) AS name_upper, name || ' - ' || category AS full_name FROM products
 
--- Date extraction
+-- Date extraction (not implemented)
 SELECT orderDate, YEAR(orderDate) AS order_year FROM orders
 
 -- Null handling
@@ -519,7 +520,7 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
    - High value
 
 ### Phase 2: Enhanced Functionality (Medium Impact)
-4. **String & Numeric Functions** ⭐⭐
+4. **String & Numeric Functions** ✅ DONE (`UPPER`, `LOWER`, `LENGTH`, `SUBSTR`, `TRIM`, `REPLACE`, `ROUND`, `ABS`, `COALESCE`, `IFNULL`, `NULLIF`)
    - Complements calculated fields
    - Medium complexity
    - High value
@@ -560,7 +561,7 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 (Parameterized queries — previously listed here — are now implemented.)
 
 ### 5.2 Medium-Term Goals
-1. **String/Numeric functions** - Common use cases
+1. **Date functions** - For time-series data
 2. **TSV/Table output** - Better usability (CSV already shipped)
 
 ### 5.3 Long-Term Goals
@@ -580,7 +581,7 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 - DISTINCT implementation uses canonical JSON string representation
 
 ### 6.2 Testing Strategy
-- Maintain high test coverage (currently 3327 tests, all passing)
+- Maintain high test coverage (currently 3742 tests, all passing)
 - Add integration tests for new features
 - Test edge cases (nulls, empty arrays, etc.)
 - Test files organized by feature:
@@ -595,6 +596,7 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
   - `SelectExpressionsTest.java` - calculated SELECT columns, their warnings and strict mode
   - `WhereAndOrderByExpressionsTest.java` - calculations in WHERE and ORDER BY
   - `GroupedExpressionsTest.java` - calculations inside and around aggregates, and in GROUP BY, HAVING and grouped ORDER BY
+  - `ScalarFunctionsTest.java` - the functions, their warnings and strict mode
   - `SqliteComparisonTest.java` - results checked against SQLite, including a column that mixes numbers and text
   - `DebugModeTest.java` - `DEBUG` environment-variable parsing
   - `IndexManagerTest.java` / `IndexBuilderTest.java` / `IndexPlannerTest.java` / `IndexPathResolutionTest.java` - declared indexes & file pruning
@@ -631,7 +633,7 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 ✅ Clean, maintainable architecture
 
 ### Key Gaps
-❌ No functions
+❌ No date functions
 ❌ Limited output formats (JSON and CSV only; no TSV/table/XML)
 ❌ No subqueries or derived tables
 ❌ No RIGHT JOIN or FULL OUTER JOIN
@@ -646,6 +648,6 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 
 JsonSQL is a solid foundation with excellent core functionality. Recent additions of DISTINCT, ILIKE, CTEs, UNION, indexes, and materialized views demonstrate the system's extensibility. The suggested enhancements would transform it from a good tool into a comprehensive SQL-like query engine for JSON data. The prioritized roadmap focuses on high-impact features that provide the most value to users.
 
-**Current Test Status**: ✅ 3327 tests passing
+**Current Test Status**: ✅ 3742 tests passing
 **Code Quality**: ✅ High - Clean architecture, good separation of concerns
 **Documentation**: ✅ Comprehensive - README, examples, saved queries reference

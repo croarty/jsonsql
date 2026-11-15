@@ -7,6 +7,7 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
 - **SQL-like Query Syntax**: Write familiar SQL queries against JSON data
   - `SELECT` / `SELECT DISTINCT` - Project specific fields or all fields with `*`, with `AS` aliases
   - Calculated columns - arithmetic (`price * 1.2`), text joined with `||`, `CASE`, `CAST`, and conditions as true or false
+  - Functions - `UPPER`, `LOWER`, `LENGTH`, `SUBSTR`, `TRIM`, `REPLACE`, `ROUND`, `ABS`, `COALESCE`, `IFNULL`, `NULLIF`
   - `FROM` - Specify data sources with table aliases
   - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses, LIKE, ILIKE, IN, IS NULL)
   - `JOIN` / `LEFT JOIN` - Combine data from multiple sources (single equi-join condition)
@@ -319,7 +320,7 @@ Use this before writing queries to discover field names and nesting. Schema is i
 jsonsql --query "SELECT p.name, o.orderId FROM orders o JOIN products p ON o.productId = p.id" --data-dir example-data --dry-run
 ```
 
-Validates SQL syntax, confirms every referenced table has a mapping (or is a CTE or materialized view), and checks that backing JSON files exist — without loading data or returning results. Unsupported syntax that is rejected at parse time (`RIGHT JOIN`, `FETCH`, functions in SELECT, an ungrouped column with `GROUP BY`, ...) also fails the dry run. It does **not** check that referenced *fields* exist (see [Known Limitations](#known-limitations)):
+Validates SQL syntax, confirms every referenced table has a mapping (or is a CTE or materialized view), and checks that backing JSON files exist — without loading data or returning results. Unsupported syntax that is rejected at parse time (`RIGHT JOIN`, `FETCH`, a function that isn't available, an ungrouped column with `GROUP BY`, ...) also fails the dry run. It does **not** check that referenced *fields* exist (see [Known Limitations](#known-limitations)):
 
 ```
 Dry run OK.
@@ -548,7 +549,7 @@ jsonsql --query "SELECT * FROM products WHERE ((category = 'Electronics' AND pri
 - Operator precedence follows standard SQL rules
 - SQL comments (`-- ...` and `/* ... */`) are accepted anywhere in the query
 
-**Operands:** each side of a comparison can be a field or a literal, in either order, so `price > 20`, `20 < price` and `price > stock` all work. Text needs single quotes: an unquoted word is a field, so `category = Tools` compares two fields. Double-quoted names are fields, or text if no such field exists. Field names are case-sensitive, and a field that doesn't exist reads as NULL. Either side can also be a calculation, such as `price * stock > 5000` (see [Calculations in WHERE and ORDER BY](#calculations-in-where-and-order-by)). Functions (`LOWER(name) = 'x'`) are rejected.
+**Operands:** each side of a comparison can be a field or a literal, in either order, so `price > 20`, `20 < price` and `price > stock` all work. Text needs single quotes: an unquoted word is a field, so `category = Tools` compares two fields. Double-quoted names are fields, or text if no such field exists. Field names are case-sensitive, and a field that doesn't exist reads as NULL. Either side can also be a calculation, such as `price * stock > 5000` (see [Calculations in WHERE and ORDER BY](#calculations-in-where-and-order-by)), or use a function, such as `LOWER(name) = 'widget'` (see [Functions](#functions)).
 
 **Pattern Matching with LIKE:**
 
@@ -798,7 +799,7 @@ jsonsql --query "SELECT * FROM products" --output results.json --pretty
 
 **Output column names:** an unaliased column uses its last path segment (`p.name` → `name`). If two selected columns would produce the same name, both fall back to their full expression (`SELECT o.id, p.id` → keys `o.id` and `p.id`). With `SELECT *` over a JOIN, all tables' fields are merged into one object and a later table's field overwrites an earlier one with the same name — alias the columns explicitly if names collide.
 
-`t.*` and functions such as `UPPER(name)` are rejected with an error such as `Function or aggregate in SELECT list: UPPER(name) is not supported`.
+`t.*` is rejected with `SELECT t.* is not supported (use SELECT * or list the columns)`.
 
 #### Calculated columns
 
@@ -849,6 +850,7 @@ jsonsql --data-dir example-data --query "SELECT name, specifications.battery, CA
 | `CASE value WHEN value THEN value ... END` | Compares with `=`, so `NULL` never matches |
 | `CAST(value AS type)` | `INTEGER`, `REAL` or `TEXT`. `INT`, `BIGINT`, `DECIMAL`, `NUMERIC`, `DOUBLE`, `FLOAT`, `VARCHAR`, `CHAR` and `STRING` also work |
 | A condition: `price > 50`, `qty BETWEEN 1 AND 5`, `name LIKE 'W%'`, `cat IN (...)`, `cat IS NULL` | Gives `true`, `false`, or `null` when a value is NULL. Put `AND`, `OR` and `NOT` in parentheses: `(a > 1 AND b > 2) AS both` |
+| A function: `UPPER(name)`, `ROUND(price, 2)`, `COALESCE(note, 'none')` | See [Functions](#functions) |
 
 Rules:
 
@@ -866,6 +868,80 @@ Rules:
 - **An unnamed column is named after its expression**, as JsonSQL writes it: `SELECT price * 2` gives the key `"price * 2"`. Give it an alias with `AS` for a tidier name.
 - `ORDER BY` can sort by a calculated column through its alias or position: `SELECT price * stock AS value ... ORDER BY value`.
 - Calculations also work with grouping, such as `SUM(price * stock)` and `SUM(price) * 2`. See [Calculations with grouping](#calculations-with-grouping).
+
+#### Functions
+
+Functions work on one value at a time, anywhere a calculation can go: the SELECT list, `WHERE`, `GROUP BY`, `HAVING`, `ORDER BY`, and inside or around an aggregate.
+
+```bash
+# In the SELECT list and ORDER BY
+jsonsql --data-dir example-data --query "SELECT UPPER(name) AS name, ROUND(price * 1.2, 2) AS with_tax, COALESCE(specifications.battery, 'mains') AS power FROM products ORDER BY LENGTH(name) LIMIT 3"
+```
+
+```json
+[{"name":"USB-C HUB","with_tax":41.99,"power":"mains"},{"name":"WEBCAM HD","with_tax":95.99,"power":"mains"},{"name":"DESK LAMP","with_tax":35.99,"power":"mains"}]
+```
+
+```bash
+# Around and inside aggregates
+jsonsql --data-dir example-data --query "SELECT category, ROUND(AVG(price), 2) AS average, MAX(LENGTH(name)) AS longest_name FROM products GROUP BY category ORDER BY category"
+```
+
+```json
+[{"category":"Accessories","average":45.5,"longest_name":12},{"category":"Electronics","average":57.49,"longest_name":19},{"category":"Office","average":29.99,"longest_name":9}]
+```
+
+```bash
+# In WHERE
+jsonsql --data-dir example-data --query "SELECT name FROM products WHERE LOWER(name) LIKE '%keyboard%' OR SUBSTR(brand, 1, 1) = 'A'"
+```
+
+```json
+[{"name":"Mechanical Keyboard"},{"name":"USB-C Hub"}]
+```
+
+```bash
+# In GROUP BY, through an alias
+jsonsql --data-dir example-data --query "SELECT SUBSTR(name, 1, 1) AS initial, COUNT(*) AS products FROM products GROUP BY initial ORDER BY initial"
+```
+
+```json
+[{"initial":"D","products":1},{"initial":"L","products":1},{"initial":"M","products":1},{"initial":"U","products":1},{"initial":"W","products":2}]
+```
+
+| Function | Result |
+|---|---|
+| `UPPER(x)`, `LOWER(x)` | The text in upper or lower case |
+| `LENGTH(x)` | The number of characters |
+| `SUBSTR(x, start)`, `SUBSTR(x, start, length)` | Part of the text. `start` counts from 1, or back from the end when negative, so `SUBSTR('Widget', -3)` is `get`. A negative `length` takes the characters before `start`. `SUBSTRING` is the same |
+| `TRIM(x)`, `LTRIM(x)`, `RTRIM(x)` | The text without spaces at both ends, the start, or the end |
+| `TRIM(x, chars)`, `LTRIM(x, chars)`, `RTRIM(x, chars)` | The same, removing any of the characters in `chars`. `TRIM(BOTH chars FROM x)`, with `LEADING` or `TRAILING`, also works |
+| `REPLACE(x, find, with)` | The text with every `find` changed to `with` |
+| `ROUND(x)`, `ROUND(x, places)` | The number rounded to that many decimal places, a half going away from zero: `ROUND(2.5)` is `3.0` and `ROUND(-2.5)` is `-3.0`. Always a decimal |
+| `ABS(x)` | The number without its sign |
+| `COALESCE(a, b, ...)` | The first value that isn't NULL. `IFNULL(a, b)` is the same with two values |
+| `NULLIF(a, b)` | NULL if `a` equals `b`, otherwise `a` |
+
+Rules:
+
+- **NULL in gives NULL out**, except for `COALESCE`, `IFNULL` and `NULLIF`, which exist to deal with NULL.
+- **Text functions take a number or boolean as it prints**, as `||` does. `UPPER(5)` is `"5"` and `LENGTH(20.5)` is `4`.
+- **Number functions don't read text as a number.** `ROUND`, `ABS`, and the `start` and `length` of `SUBSTR`, give `null` for text, with a warning on stderr:
+
+  ```
+  Warning: ROUND(specifications.battery) left out 1 value that is not a number: "12 months"
+  ```
+
+  With `--strict` the query fails instead. Use `CAST` to convert first: `ROUND(CAST(size AS REAL))`.
+- `ROUND` is exact, because numbers are decimals: `ROUND(2.675, 2)` is `2.68`. SQLite, working in floating point, gives `2.67`.
+- `UPPER` and `LOWER` change every letter, including ones outside ASCII: `UPPER('é')` is `É`. SQLite leaves those alone.
+- `LENGTH` and `SUBSTR` count characters, so an emoji counts as one.
+- A function with the wrong number of values, or one that isn't in the table, is rejected before the query runs:
+
+  ```
+  UPPER takes 1 argument, got 2: UPPER(name, brand)
+  Function or aggregate in SELECT list: SOUNDEX(name) is not supported (available functions: ABS, COALESCE, ...)
+  ```
 
 #### Calculations in WHERE and ORDER BY
 
@@ -973,7 +1049,7 @@ Each number has one spelling in the output:
 
 Trailing zeros are dropped. A whole number that was written as a decimal keeps one decimal place, up to 20 digits; beyond that, and below `0.000001`, numbers use exponent form.
 
-**Unsupported WHERE expressions fail loudly:** WHERE constructs that are not implemented, such as subqueries (`IN (SELECT ...)`, `EXISTS (...)`) and functions, raise a clear error instead of silently returning zero rows (see [Known Limitations](#known-limitations)).
+**Unsupported WHERE expressions fail loudly:** WHERE constructs that are not implemented, such as subqueries (`IN (SELECT ...)`, `EXISTS (...)`) and functions that are not available, raise a clear error instead of silently returning zero rows (see [Known Limitations](#known-limitations)).
 
 ### JOIN Clause
 
@@ -1253,7 +1329,8 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 
 | Construct | Error |
 |---|---|
-| Functions in SELECT, such as `UPPER(name)` | `Function or aggregate in SELECT list: UPPER(name) is not supported (...)` |
+| A function that isn't [available](#functions), such as `SOUNDEX(name)` or `CONCAT(a, b)` | `Function or aggregate in SELECT list: SOUNDEX(name) is not supported (available functions: ABS, COALESCE, ...)` |
+| A function with the wrong number of values | `UPPER takes 1 argument, got 2: UPPER(name, brand)` |
 | An aggregate inside another, such as `SUM(COUNT(id))` | `Function or aggregate in SELECT list: SUM(COUNT(id)) is not supported (an aggregate can't be used here)` |
 | A field that isn't grouped, used with `GROUP BY` or an aggregate | `Column 'price' must be in GROUP BY or inside an aggregate` |
 | `CAST` to a type other than a number or text | `CAST to DATE in SELECT list: ... is not supported (use INTEGER, REAL or TEXT)` |
@@ -1263,7 +1340,6 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 | `RIGHT`, `FULL [OUTER]`, `CROSS` (except with `UNNEST`), `NATURAL` joins | `RIGHT JOIN is not supported`, ... |
 | `INTERSECT`, `EXCEPT`, `MINUS` | `INTERSECT is not supported (only UNION and UNION ALL are supported)` |
 | `IN (SELECT ...)`, `EXISTS` in WHERE | `Unsupported WHERE expression: ...` |
-| Functions in WHERE, GROUP BY, HAVING and ORDER BY | `Function in WHERE: UPPER(name) = 'X' is not supported (functions are not available)` |
 | An aggregate in WHERE | `Function in WHERE: COUNT(*) > 1 is not supported (use HAVING to filter on an aggregate)` |
 | An aggregate in GROUP BY | `Function in GROUP BY: COUNT(*) + 1 is not supported (an aggregate can't be used here)` |
 | A calculation in the `ORDER BY` after a `UNION` | `Expression in ORDER BY: price * 2 is not supported (...)` |
@@ -1639,10 +1715,11 @@ Planned features for future releases, organized by priority:
 
 **String & Data Functions:**
 
-- String functions: `UPPER`, `LOWER`, `CONCAT`, `SUBSTRING`, `LENGTH`, `TRIM`
+- ✅ String functions: `UPPER`, `LOWER`, `LENGTH`, `SUBSTR` / `SUBSTRING`, `TRIM` / `LTRIM` / `RTRIM`, `REPLACE` - **IMPLEMENTED** (`||` joins text, so there is no `CONCAT`)
+- ✅ Numeric functions: `ROUND`, `ABS` - **IMPLEMENTED**
+- ✅ `COALESCE` / `IFNULL` / `NULLIF` for null value handling - **IMPLEMENTED**
+- More numeric functions: `FLOOR`, `CEIL`, `POWER`
 - Date/Time functions: `YEAR`, `MONTH`, `DAY`, `DATE`, `DATEADD`, `DATEDIFF`
-- Numeric functions: `ROUND`, `FLOOR`, `CEIL`, `ABS`, `POWER`
-- `COALESCE` / `IFNULL` for null value handling
 
 **Conditional Logic:**
 
