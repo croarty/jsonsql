@@ -2,6 +2,9 @@ package com.jsonsql.query;
 
 import net.sf.jsqlparser.expression.Expression;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
+
 /**
  * Represents information about a column in SELECT clause, including optional alias.
  *
@@ -37,7 +40,49 @@ public class ColumnInfo {
      * @param name     its alias, or null to name it after the expression
      */
     static ColumnInfo computed(int position, Expression expression, String name) {
-        return new ColumnInfo(calculatedKey(position), name == null ? expression.toString() : name, expression);
+        return new ColumnInfo(calculatedKey(position), name == null ? nameOf(expression) : name, expression);
+    }
+
+    /**
+     * The name of an unnamed calculated column: its SQL. The parser prints TRIM(x) as
+     * "Trim( x )", so that is put back the way it is written.
+     */
+    private static String nameOf(Expression expression) {
+        String sql = expression.toString();
+        if (!sql.contains("Trim( ")) {
+            return sql;
+        }
+        StringBuilder name = new StringBuilder();
+        Deque<Integer> openTrims = new ArrayDeque<>();
+        int depth = 0;
+        boolean inText = false;
+        for (int i = 0; i < sql.length(); i++) {
+            char c = sql.charAt(i);
+            if (c == '\'') {
+                inText = !inText;
+            }
+            if (!inText && sql.startsWith("Trim( ", i)) {
+                name.append("TRIM(");
+                openTrims.push(++depth);
+                i += "Trim( ".length() - 1;
+                continue;
+            }
+            boolean closesTrim = !openTrims.isEmpty() && openTrims.peek() == depth;
+            if (!inText && c == ' ' && closesTrim && sql.startsWith(" )", i)) {
+                // The space the parser puts before a TRIM's closing bracket
+                continue;
+            }
+            if (!inText && c == '(') {
+                depth++;
+            } else if (!inText && c == ')') {
+                if (closesTrim) {
+                    openTrims.pop();
+                }
+                depth--;
+            }
+            name.append(c);
+        }
+        return name.toString();
     }
 
     /**

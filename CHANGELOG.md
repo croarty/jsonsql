@@ -50,8 +50,9 @@ Cache files from earlier versions are ignored, because they hold rounded numbers
 - Calculated columns in `SELECT`: arithmetic (`+`, `-`, `*`, `/`, `%`), literals, text joined with `||`, `CASE`, `CAST`, and conditions as `true` or `false`. For example, `SELECT name, price * 1.2 AS with_tax FROM products ORDER BY with_tax`
 - The same calculations in `WHERE` and `ORDER BY`, such as `WHERE price * stock > 5000 ORDER BY price * stock DESC`. `LIKE`, `IN` and `IS NULL` can take a calculation on the left, as in `CAST(size AS REAL) IS NULL`. Arithmetic in `WHERE` and `ORDER BY` was rejected in 2.0
 - Calculations with grouping: inside an aggregate (`SUM(price * stock)`), around aggregates (`SUM(price) * 2`, `SUM(price * stock) / SUM(stock)`), and in `GROUP BY`, `HAVING` and the `ORDER BY` of a grouped query. For example, `SELECT CASE WHEN price >= 50 THEN 'premium' ELSE 'standard' END AS band, COUNT(*) FROM products GROUP BY band`
+- Functions, in every clause: `UPPER`, `LOWER`, `LENGTH`, `SUBSTR` (and `SUBSTRING`), `TRIM`, `LTRIM`, `RTRIM`, `REPLACE`, `ROUND`, `ABS`, `COALESCE`, `IFNULL` and `NULLIF`. For example, `SELECT category, ROUND(AVG(price), 2) FROM products WHERE LOWER(name) LIKE '%hub%' GROUP BY category`
 - `CAST(value AS INTEGER | REAL | TEXT)`, which reads the number at the start of text, so `CAST('15.6 inch' AS REAL)` is `15.6`
-- A warning when arithmetic meets a value that is not a number, as for `SUM` and `AVG`. The result for that row is `null`
+- A warning when arithmetic, `ROUND` or `ABS` meets a value that is not a number, as for `SUM` and `AVG`. The result for that row is `null`
 - `--strict`, which turns those warnings into an error with exit code 1
 
 Where calculated columns differ from other databases:
@@ -60,6 +61,9 @@ Where calculated columns differ from other databases:
 - Arithmetic on text gives `null` and a warning. SQLite reads the text as a number, or as 0.
 - `CAST` of text with no number at the start gives `null`. SQLite gives `0`.
 - A condition gives `true` or `false`. SQLite gives `1` or `0`.
+- `ROUND` and `ABS` on text give `null` and a warning. SQLite reads the text as a number, or as 0.
+- `ROUND` is exact, so `ROUND(2.675, 2)` is `2.68`. SQLite, working in floating point, gives `2.67`.
+- `UPPER` and `LOWER` change letters outside ASCII, so `UPPER('é')` is `É`. SQLite leaves them alone.
 
 ### Fixed
 

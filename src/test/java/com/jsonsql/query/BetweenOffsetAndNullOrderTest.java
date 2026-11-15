@@ -83,9 +83,9 @@ class BetweenOffsetAndNullOrderTest {
     }
 
     @Test
-    void betweenTakesArithmeticButNotFunctions() throws Exception {
+    void betweenTakesArithmeticButNotUnknownFunctions() throws Exception {
         assertEquals(ids("SELECT id FROM t WHERE price BETWEEN 2 AND 20"), ids("SELECT id FROM t WHERE price BETWEEN 1 + 1 AND 20"));
-        assertThrows(QueryParseException.class, () -> query("SELECT id FROM t WHERE LOWER(name) BETWEEN 'a' AND 'b'"));
+        assertThrows(QueryParseException.class, () -> query("SELECT id FROM t WHERE REVERSE(name) BETWEEN 'a' AND 'b'"));
     }
 
     @Test

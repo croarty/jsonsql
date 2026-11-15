@@ -231,8 +231,7 @@ The following analytics features are **not implemented yet**. They are listed he
 | Feature | Current behavior |
 |---|---|
 | A calculation in the `ORDER BY` after a `UNION` | Error: `Expression in ORDER BY: ... is not supported`. Sort by a column of the result |
-| SQL functions in SELECT: string (`UPPER`, `LOWER`, `CONCAT`, ...), date (`DATE_FORMAT`, `MONTH`, `NOW`, ...), JSON (`JSON_CONTAINS`, `JSON_LENGTH`, ...) | Error: `Function or aggregate in SELECT list: ... is not supported` |
-| Functions in WHERE and ORDER BY (`WHERE UPPER(name) = 'X'`) | Error: `Function in WHERE: ... is not supported` |
+| Functions other than `UPPER`, `LOWER`, `LENGTH`, `SUBSTR`, `TRIM`, `REPLACE`, `ROUND`, `ABS`, `COALESCE`, `IFNULL` and `NULLIF`: for example `CONCAT`, date functions (`DATE_FORMAT`, `MONTH`, `NOW`, ...) and JSON functions (`JSON_CONTAINS`, `JSON_LENGTH`, ...) | Error: `Function or aggregate in SELECT list: ... is not supported (available functions: ...)` |
 | `FETCH` | Error: `FETCH is not supported` |
 | `RIGHT JOIN`, `FULL OUTER JOIN` | Error: `RIGHT JOIN is not supported` / `FULL OUTER JOIN is not supported` |
 | `INTERSECT`, `EXCEPT` | Error: `INTERSECT is not supported (...)` |

@@ -17,6 +17,7 @@ import net.sf.jsqlparser.expression.NullValue;
 import net.sf.jsqlparser.expression.Parenthesis;
 import net.sf.jsqlparser.expression.SignedExpression;
 import net.sf.jsqlparser.expression.StringValue;
+import net.sf.jsqlparser.expression.TrimFunction;
 import net.sf.jsqlparser.expression.WhenClause;
 import net.sf.jsqlparser.expression.operators.arithmetic.Addition;
 import net.sf.jsqlparser.expression.operators.arithmetic.Concat;
@@ -147,8 +148,39 @@ final class ExpressionEvaluator {
         if (WhereEvaluator.isCondition(expression)) {
             return conditions.value(row, expression);
         }
+        if (expression instanceof Function function) {
+            List<JsonNode> arguments = new ArrayList<>();
+            for (Object argument : function.getParameters()) {
+                arguments.add(evaluate(row, (Expression) argument));
+            }
+            return Functions.call(function.getName(), arguments, value -> leftOut(function).add(value));
+        }
+        if (expression instanceof TrimFunction trim) {
+            return trim(row, trim);
+        }
         throw new UnsupportedExpressionException(
             "Unsupported expression: " + expression + " (type: " + expression.getClass().getSimpleName() + ")");
+    }
+
+    /**
+     * TRIM has a form of its own in SQL: TRIM(x), TRIM(x, chars), and TRIM(BOTH chars FROM x)
+     * with LEADING or TRAILING in place of BOTH.
+     */
+    private JsonNode trim(JsonNode row, TrimFunction trim) {
+        Expression text = trim.isUsingFromKeyword() ? trim.getFromExpression() : trim.getExpression();
+        Expression characters = trim.isUsingFromKeyword() ? trim.getExpression() : trim.getFromExpression();
+        List<JsonNode> arguments = new ArrayList<>();
+        arguments.add(evaluate(row, text));
+        if (characters != null) {
+            arguments.add(evaluate(row, characters));
+        }
+        String function = trim.getTrimSpecification() == TrimFunction.TrimSpecification.LEADING ? "LTRIM"
+            : trim.getTrimSpecification() == TrimFunction.TrimSpecification.TRAILING ? "RTRIM" : "TRIM";
+        return Functions.call(function, arguments, value -> leftOut(trim).add(value));
+    }
+
+    private LeftOut leftOut(Expression calculation) {
+        return leftOut.computeIfAbsent(calculation, key -> new LeftOut());
     }
 
     private JsonNode held(JsonNode row, String key) {
@@ -294,7 +326,8 @@ final class ExpressionEvaluator {
         return left == null || right == null ? null : TextNode.valueOf(text(left) + text(right));
     }
 
-    private static String text(JsonNode value) {
+    /** A value as text: a number or boolean as it prints, and an array or object as JSON. */
+    static String text(JsonNode value) {
         return value.isContainerNode() ? value.toString() : value.asText();
     }
 

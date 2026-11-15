@@ -291,15 +291,15 @@ class JsonSqlCliTest {
 
     @Test
     void testUnsupportedFunctionFailsWithClearError() {
-        CliResult r = runCli(withConfig("-q", "SELECT UPPER(name) FROM products"));
+        CliResult r = runCli(withConfig("-q", "SELECT SOUNDEX(name) FROM products"));
         assertEquals(1, r.exitCode());
-        assertTrue(r.err().contains("UPPER(name)"), r.err());
+        assertTrue(r.err().contains("SOUNDEX(name)"), r.err());
         assertTrue(r.err().contains("is not supported"), r.err());
     }
 
     @Test
     void testDryRunRejectsUnsupportedSyntax() {
-        CliResult r = runCli(withConfig("-q", "SELECT UPPER(name) FROM products", "--dry-run"));
+        CliResult r = runCli(withConfig("-q", "SELECT SOUNDEX(name) FROM products", "--dry-run"));
         assertEquals(1, r.exitCode());
         assertTrue(r.err().contains("is not supported"), r.err());
         assertFalse(r.out().contains("Dry run OK"));

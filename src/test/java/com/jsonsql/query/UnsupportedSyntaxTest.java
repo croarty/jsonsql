@@ -61,9 +61,9 @@ class UnsupportedSyntaxTest {
         "SELECT o.orderId FROM orders o CROSS JOIN products p                   | CROSS JOIN is not supported",
         "SELECT o.orderId FROM orders o NATURAL JOIN products p                 | NATURAL JOIN is not supported",
         "SELECT p.* FROM products p                                             | SELECT p.* is not supported",
-        "SELECT UPPER(name) FROM products                                       | Function or aggregate in SELECT list: UPPER(name) is not supported",
-        "SELECT price * LENGTH(name) AS x FROM products                         | Function or aggregate in SELECT list: price * LENGTH(name) is not supported",
-        "SELECT SUM(UPPER(name)) FROM products                                  | Function or aggregate in SELECT list: SUM(UPPER(name)) is not supported",
+        "SELECT SOUNDEX(name) FROM products                                       | Function or aggregate in SELECT list: SOUNDEX(name) is not supported",
+        "SELECT price * HEX(name) AS x FROM products                         | Function or aggregate in SELECT list: price * HEX(name) is not supported",
+        "SELECT SUM(SOUNDEX(name)) FROM products                                  | Function or aggregate in SELECT list: SUM(SOUNDEX(name)) is not supported",
         "SELECT (SELECT 1) FROM products                                        | Expression in SELECT list: (SELECT 1) is not supported",
         "SELECT CAST(price AS DATE) FROM products                               | CAST to DATE in SELECT list: CAST(price AS DATE) is not supported (use INTEGER, REAL or TEXT)",
         "SELECT category, price * 2 FROM products GROUP BY category             | Column 'price' must be in GROUP BY or inside an aggregate",
@@ -71,7 +71,7 @@ class UnsupportedSyntaxTest {
         "SELECT CASE WHEN price THEN 1 END FROM products                        | Condition in SELECT list",
         "SELECT price IN (SELECT 1) FROM products                               | Condition in SELECT list",
         "SELECT NOT name FROM products                                          | Condition in SELECT list",
-        "SELECT name FROM products ORDER BY UPPER(name)                         | Function in ORDER BY: UPPER(name) is not supported",
+        "SELECT name FROM products ORDER BY SOUNDEX(name)                         | Function in ORDER BY: SOUNDEX(name) is not supported",
         "SELECT name FROM products INTERSECT SELECT name FROM products          | INTERSECT is not supported",
         "SELECT name FROM products EXCEPT SELECT name FROM products             | EXCEPT is not supported",
         "SELECT name FROM products MINUS SELECT name FROM products              | MINUS is not supported",
@@ -84,8 +84,8 @@ class UnsupportedSyntaxTest {
 
     @Test
     void functionJoinedToTextIsRejected() {
-        assertTrue(rejected("SELECT UPPER(name) || 'x' FROM products").getMessage()
-            .contains("Function or aggregate in SELECT list: UPPER(name) || 'x' is not supported"));
+        assertTrue(rejected("SELECT SOUNDEX(name) || 'x' FROM products").getMessage()
+            .contains("Function or aggregate in SELECT list: SOUNDEX(name) || 'x' is not supported"));
     }
 
     @Test
@@ -102,15 +102,15 @@ class UnsupportedSyntaxTest {
     @Test
     void rejectedInsideCteBody() {
         QueryParseException ex = rejected(
-            "WITH c AS (SELECT UPPER(name) FROM products) SELECT * FROM c");
-        assertTrue(ex.getMessage().contains("UPPER(name)"));
+            "WITH c AS (SELECT SOUNDEX(name) FROM products) SELECT * FROM c");
+        assertTrue(ex.getMessage().contains("SOUNDEX(name)"));
     }
 
     @Test
     void rejectedInsideUnionBranch() {
         QueryParseException ex = rejected(
-            "SELECT name FROM products UNION ALL SELECT UPPER(name) FROM products");
-        assertTrue(ex.getMessage().contains("UPPER(name)"));
+            "SELECT name FROM products UNION ALL SELECT SOUNDEX(name) FROM products");
+        assertTrue(ex.getMessage().contains("SOUNDEX(name)"));
     }
 
     @Test
@@ -123,7 +123,7 @@ class UnsupportedSyntaxTest {
     @Test
     void executorSurfacesParseErrorInsteadOfReturningRows() {
         assertThrows(QueryParseException.class,
-            () -> executor.execute("SELECT UPPER(category) FROM products"));
+            () -> executor.execute("SELECT SOUNDEX(category) FROM products"));
         assertThrows(QueryParseException.class,
             () -> executor.execute("SELECT o.orderId FROM orders o RIGHT JOIN products p ON o.productId = p.id"));
     }
@@ -131,7 +131,7 @@ class UnsupportedSyntaxTest {
     @Test
     void dryRunAlsoRejects() {
         assertThrows(QueryParseException.class,
-            () -> executor.dryRunValidate("SELECT UPPER(name) FROM products"));
+            () -> executor.dryRunValidate("SELECT SOUNDEX(name) FROM products"));
     }
 
     // -- forms that must remain accepted ----------------------------------------------

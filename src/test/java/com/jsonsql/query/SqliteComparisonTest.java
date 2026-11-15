@@ -529,6 +529,74 @@ class SqliteComparisonTest {
         assertMatchesSqlite(query);
     }
 
+    /**
+     * Functions where the two engines are meant to agree. Left out on purpose: a number given
+     * to a text function (every number here reaches SQLite as a REAL, so 10 would be '10.0'),
+     * text given to ROUND or ABS (SQLite reads it as a number, JsonSQL gives NULL), and
+     * letters outside ASCII (SQLite's UPPER and LOWER leave them alone).
+     */
+    static Stream<Query> functionQueries() {
+        List<Query> queries = new ArrayList<>();
+        for (String value : List.of(
+                "UPPER(name)", "LOWER(name)", "LENGTH(name)", "LENGTH(cat)", "UPPER(cat)",
+                "SUBSTR(name, 1, id)", "SUBSTR(name, id - 5, 3)", "SUBSTR(name, id - 5, 3 - id)", "SUBSTR(cat, 2, 2)",
+                "SUBSTR(name, NULL)", "SUBSTR(name, 1, NULL)", "SUBSTR(name, 2.9, 1.9)", "SUBSTR(name, -100, 102)",
+                "TRIM(name)", "TRIM('  x  ')", "LTRIM('  x  ')", "RTRIM('  x  ')", "TRIM(name, 'Wt')", "LTRIM(name, 'WG')",
+                "RTRIM(name, 'te')", "TRIM(cat, 'Ts')", "TRIM(name, '')", "TRIM(name, NULL)", "TRIM('xxx', 'x')",
+                "REPLACE(name, 'e', 'E')", "REPLACE(name, 'dg', '')", "REPLACE(name, '', 'x')", "REPLACE(name, 'W', NULL)",
+                "REPLACE(cat, 'o', '00')", "REPLACE(name, name, 'all')",
+                "ROUND(price)", "ROUND(price, 1)", "ROUND(price, 2)", "ROUND(price / 3, 2)", "ROUND(price * qty / 7, 3)",
+                "ROUND(price, -1)", "ROUND(qty)", "ROUND(price, NULL)", "ROUND(0 - price / 4, 1)", "ROUND(price / 4, 1)",
+                "ROUND(2.5)", "ROUND(-2.5)", "ROUND(price, 1.9)", "ROUND(price, 40)",
+                "ABS(price)", "ABS(qty - 3)", "ABS(0 - price)", "ABS(NULL)",
+                "COALESCE(cat, 'none')", "COALESCE(price, qty, 0)", "COALESCE(NULL, NULL, name)", "IFNULL(cat, name)",
+                "IFNULL(price, 0)", "NULLIF(qty, 0)", "NULLIF(cat, 'Tools')", "NULLIF(name, cat)", "NULLIF(price, qty * 2)",
+                "NULLIF(qty, NULL)", "NULLIF(NULL, qty)",
+                "UPPER(SUBSTR(name, 1, 1)) || LOWER(SUBSTR(name, 2))", "LENGTH(TRIM(name)) + LENGTH(COALESCE(cat, ''))",
+                "ROUND(ABS(price - 15) / 3, 2)", "COALESCE(UPPER(cat), 'NONE') || '-' || LOWER(name)",
+                "CASE WHEN LENGTH(name) > 5 THEN SUBSTR(name, 1, 5) ELSE name END", "CAST(ROUND(price) AS INTEGER)",
+                "LENGTH(REPLACE(name, 'e', ''))")) {
+            queries.add(any("SELECT id, " + value + " AS v FROM p"));
+        }
+        // SUBSTR has many special cases around zero, negative starts and negative lengths
+        for (int start = -8; start <= 8; start++) {
+            queries.add(any("SELECT id, SUBSTR(name, " + start + ") AS v FROM p"));
+            for (int length = -4; length <= 4; length++) {
+                queries.add(any("SELECT id, SUBSTR(name, " + start + ", " + length + ") AS v FROM p"));
+            }
+        }
+        for (String condition : List.of(
+                "UPPER(name) = 'WIDGET'", "LOWER(name) LIKE 'w%'", "LENGTH(name) > 5", "LENGTH(name) BETWEEN 4 AND 6",
+                "SUBSTR(name, 1, 1) IN ('W', 'T')", "COALESCE(cat, 'x') = 'x'", "ROUND(price) = 21", "ABS(price - 15) < 6",
+                "NULLIF(qty, 0) IS NULL", "TRIM(cat) = ''", "COALESCE(price, 0) > 5 AND LENGTH(name) < 7",
+                "REPLACE(name, 'W', 'w') = LOWER(name)")) {
+            queries.add(any("SELECT id FROM p WHERE " + condition));
+            queries.add(any("SELECT id FROM p WHERE NOT (" + condition + ")"));
+        }
+        for (String orderBy : List.of(
+                "LOWER(name), id", "LENGTH(name) DESC, id", "ABS(price - 15), id", "COALESCE(cat, 'zzz'), id",
+                "ROUND(price / 3, 1) DESC, id", "SUBSTR(name, 2, 2), id")) {
+            queries.add(ordered("SELECT id FROM p ORDER BY " + orderBy, "id"));
+        }
+        queries.add(any("SELECT UPPER(cat) AS c, COUNT(*) AS n FROM p GROUP BY UPPER(cat)"));
+        queries.add(any("SELECT LENGTH(name) AS len, COUNT(*) AS n, ROUND(AVG(price), 2) AS a FROM p GROUP BY LENGTH(name)"));
+        queries.add(any("SELECT SUBSTR(name, 1, 1) AS initial, COUNT(*) AS n FROM p GROUP BY initial"));
+        queries.add(any("SELECT cat, ROUND(AVG(price), 1) AS a, COALESCE(SUM(qty), 0) AS s, MAX(LENGTH(name)) AS longest, "
+            + "SUM(ABS(price - 15)) AS spread FROM p GROUP BY cat"));
+        queries.add(any("SELECT cat FROM p GROUP BY cat HAVING LENGTH(cat) > 4"));
+        queries.add(any("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat HAVING ROUND(AVG(price)) > 10"));
+        queries.add(ordered("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat ORDER BY COALESCE(SUM(qty), -1), cat", "cat"));
+        queries.add(any("SELECT COALESCE(SUM(qty), 0) AS s FROM p WHERE id > 99"));
+        queries.add(any("SELECT p.id AS pi, UPPER(p.name) || ':' || COALESCE(o.st, 'none') AS label FROM p LEFT JOIN o ON o.pid = p.id"));
+        return queries.stream();
+    }
+
+    @ParameterizedTest
+    @MethodSource("functionQueries")
+    void functionsMatchSqlite(Query query) throws Exception {
+        assertMatchesSqlite(query);
+    }
+
     @ParameterizedTest
     @MethodSource("aggregateQueries")
     void aggregatesMatchSqlite(Query query) throws Exception {

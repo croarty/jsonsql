@@ -55,7 +55,7 @@ class GroupByAndAggregatesTest {
         "SELECT cat, COUNT(*) FROM t                        | Column 'cat' must be in GROUP BY",
         "SELECT * FROM t GROUP BY cat                       | SELECT * with GROUP BY",
         "SELECT *, COUNT(*) FROM t                          | not supported",
-        "SELECT cat FROM t GROUP BY LOWER(cat)              | Function in GROUP BY",
+        "SELECT cat FROM t GROUP BY REVERSE(cat)              | Function in GROUP BY",
         "SELECT cat FROM t GROUP BY price + 1               | Column 'cat' must be in GROUP BY",
         "SELECT COUNT(*) AS n FROM t GROUP BY n             | GROUP BY cannot use an aggregate",
         "SELECT COUNT(*) FROM t GROUP BY 1                  | GROUP BY cannot use an aggregate",
@@ -68,7 +68,7 @@ class GroupByAndAggregatesTest {
         "SELECT id FROM t WHERE COUNT(*) > 1                | Function in WHERE",
         "SELECT id FROM t HAVING id > 1                     | HAVING",
         "SELECT cat FROM t GROUP BY cat HAVING id > 1       | HAVING can only use",
-        "SELECT cat FROM t GROUP BY cat HAVING LOWER(cat) = 'a' | Function in HAVING",
+        "SELECT cat FROM t GROUP BY cat HAVING REVERSE(cat) = 'a' | Function in HAVING",
         "SELECT cat FROM t GROUP BY cat ORDER BY id         | ORDER BY can only use",
     })
     void rejectedWithAClearMessage(String sql, String message) {
