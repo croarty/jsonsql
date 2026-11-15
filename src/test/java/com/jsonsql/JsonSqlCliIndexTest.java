@@ -162,7 +162,7 @@ class JsonSqlCliIndexTest {
     void addIndexCombinedWithQueryIsRejected() {
         CliResult r = runCli(withConfig("--add-index", "products", "category",
             "-q", "SELECT * FROM products"));
-        assertEquals(1, r.exitCode());
+        assertEquals(2, r.exitCode());
         assertTrue(r.err().toLowerCase().contains("multiple actions"));
     }
 }

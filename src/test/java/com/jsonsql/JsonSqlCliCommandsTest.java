@@ -114,14 +114,16 @@ class JsonSqlCliCommandsTest {
     void aMalformedParameterFails() {
         assertSucceeds(run("--save-query", "by_id", "-q", "SELECT id FROM t WHERE id = ${n}"));
 
-        assertEquals(1, run("--run-query", "by_id", "--param", "n").code());
+        assertEquals(2, run("--run-query", "by_id", "--param", "n").code());
     }
 
     @Test
     void aMissingParameterFails() {
         assertSucceeds(run("--save-query", "by_id", "-q", "SELECT id FROM t WHERE id = ${n}"));
 
-        assertFails(run("--run-query", "by_id"), "Missing required parameters");
+        Result missing = run("--run-query", "by_id");
+        assertEquals(2, missing.code(), missing.out());
+        assertTrue(missing.err().contains("Missing required parameters"), missing.err());
     }
 
     @Test
@@ -218,8 +220,8 @@ class JsonSqlCliCommandsTest {
         assertSucceeds(run("--materialize-view", "v", "-q", WITH_VIEW));
         writeData("{\"rows\": [{\"id\": 9");
 
-        assertEquals(1, run("--rebuild-views").code());
-        assertEquals(1, run("--rebuild-view", "v").code());
+        assertEquals(3, run("--rebuild-views").code());
+        assertEquals(3, run("--rebuild-view", "v").code());
 
         Result stillThere = run("-q", "SELECT id FROM v");
         assertSucceeds(stillThere);
@@ -258,7 +260,7 @@ class JsonSqlCliCommandsTest {
 
     @Test
     void aBadDataDirectoryFails() {
-        assertEquals(1, new CommandLine(new JsonSqlCli()).execute(
+        assertEquals(3, new CommandLine(new JsonSqlCli()).execute(
             "-c", new File(tempDir, "m.json").getPath(), "-d", new File(tempDir, "nope").getPath(), "-q", "SELECT id FROM t"));
     }
 }
