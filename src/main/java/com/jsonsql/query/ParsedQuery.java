@@ -100,6 +100,16 @@ public class ParsedQuery {
         return Collections.unmodifiableMap(groupCalculations);
     }
 
+    /**
+     * Record a GROUP BY key that is a calculation.
+     *
+     * @return its key, which is the calculation's text
+     */
+    String addGroupCalculation(Expression calculation) {
+        groupCalculations.put(calculation.toString(), calculation);
+        return calculation.toString();
+    }
+
     public Expression getHaving() {
         return having;
     }

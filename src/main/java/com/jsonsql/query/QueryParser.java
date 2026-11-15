@@ -477,8 +477,7 @@ public class QueryParser {
         }
         Expression calculation = selected != null ? selected.getComputed() : expression;
         validateValue(calculation, calculation, GROUP_BY, null);
-        query.getGroupCalculations().put(calculation.toString(), calculation);
-        return calculation.toString();
+        return query.addGroupCalculation(calculation);
     }
 
     /**
