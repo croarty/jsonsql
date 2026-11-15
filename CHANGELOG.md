@@ -61,6 +61,11 @@ Where calculated columns differ from other databases:
 - `CAST` of text with no number at the start gives `null`. SQLite gives `0`.
 - A condition gives `true` or `false`. SQLite gives `1` or `0`.
 
+### Fixed
+
+- In a grouped query, `HAVING` and `ORDER BY` returned nothing useful when a grouped field was written with a table alias it wasn't grouped with, or without one it was: `FROM products p GROUP BY category HAVING p.category = 'Office'` matched no groups. Both spellings now mean the same field.
+- `HAVING` with something that isn't a condition, such as `HAVING COUNT(*)`, is rejected when the query is parsed, so `--dry-run` reports it. It used to fail only when the query ran.
+
 ## 2.0.0 - 2026-10-30
 
 This release adds aggregates, and makes JsonSQL follow SQL where it used to differ. Several of those changes alter results for existing queries, so read [Upgrading from 1.x](#upgrading-from-1x) first.
