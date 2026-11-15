@@ -4,6 +4,7 @@ import net.sf.jsqlparser.expression.Expression;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -96,7 +97,7 @@ public class ParsedQuery {
      * that isn't here is a field.
      */
     Map<String, Expression> getGroupCalculations() {
-        return groupCalculations;
+        return Collections.unmodifiableMap(groupCalculations);
     }
 
     public Expression getHaving() {
