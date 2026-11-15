@@ -22,6 +22,7 @@ public class ParsedQuery {
     private Long top;
     private Long offset;
     private List<String> groupBy = new ArrayList<>();
+    private final Map<String, Expression> groupCalculations = new LinkedHashMap<>();
     private Expression having;
     private final Map<String, AggregateCall> aggregates = new LinkedHashMap<>();
     private boolean distinct = false;
@@ -88,6 +89,14 @@ public class ParsedQuery {
 
     public void setGroupBy(List<String> groupBy) {
         this.groupBy = groupBy;
+    }
+
+    /**
+     * The GROUP BY keys that are calculations, such as {@code qty % 2}, by their text. A key
+     * that isn't here is a field.
+     */
+    Map<String, Expression> getGroupCalculations() {
+        return groupCalculations;
     }
 
     public Expression getHaving() {

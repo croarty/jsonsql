@@ -390,20 +390,43 @@ public class QueryExecutor implements FieldAccessor {
     }
 
     private List<JsonNode> aggregate(List<JsonNode> rows, ParsedQuery query) {
-        // A grouped row holds each value directly under its key, which can contain dots
-        FieldAccessor groupFields = (row, name) -> row.get(name);
+        // A grouped row holds each value directly under its key, which can contain dots. A
+        // field grouped as cat can also be written p.cat.
+        FieldAccessor groupFields = (row, name) -> {
+            JsonNode value = row.get(name);
+            return value == null && name.contains(".") ? row.get(name.substring(name.lastIndexOf('.') + 1)) : value;
+        };
 
-        Aggregator aggregator = new Aggregator();
-        List<JsonNode> groups = aggregator.group(rows, query, this);
+        Aggregator aggregator = new Aggregator(query, this);
+        List<JsonNode> groups = aggregator.group(rows);
         reportLeftOut(aggregator.leftOut("found"), aggregator.leftOut("left out"));
 
+        // Calculations on groups, such as SUM(price) * 2: first the SELECT columns, so that
+        // HAVING and ORDER BY can use their aliases
+        ExpressionEvaluator groupValues = new ExpressionEvaluator(groupFields, query.getGroupCalculations().keySet());
+        for (JsonNode group : groups) {
+            for (ColumnInfo column : query.getSelectColumns()) {
+                if (column.isComputed()) {
+                    JsonNode value = orNullNode(groupValues.evaluate(group, column.getComputed()));
+                    ((ObjectNode) group).set(column.getExpression(), value);
+                    ((ObjectNode) group).set(column.getAlias(), value);
+                }
+            }
+        }
         if (query.getHaving() != null) {
-            WhereEvaluator evaluator = new WhereEvaluator(groupFields);
-            groups = groups.stream().filter(group -> evaluator.evaluate(group, query.getHaving())).toList();
+            groups = groups.stream().filter(group -> groupValues.conditions().evaluate(group, query.getHaving())).toList();
         }
         if (query.hasOrderBy()) {
+            for (JsonNode group : groups) {
+                for (OrderByInfo sortKey : query.getOrderBy()) {
+                    if (sortKey.getCalculation() != null) {
+                        ((ObjectNode) group).set(sortKey.getColumn(), orNullNode(groupValues.evaluate(group, sortKey.getCalculation())));
+                    }
+                }
+            }
             groups = applyOrderBy(groups, query.getOrderBy(), groupFields);
         }
+        reportLeftOut(groupValues.leftOut("found"), groupValues.leftOut("left out"));
 
         List<String> names = outputNames(query);
         List<ColumnInfo> columns = query.getSelectColumns();

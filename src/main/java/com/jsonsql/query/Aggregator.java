@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.DoubleNode;
 import com.fasterxml.jackson.databind.node.LongNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import net.sf.jsqlparser.expression.Expression;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -32,39 +33,60 @@ final class Aggregator {
     private final ObjectMapper objectMapper = new ObjectMapper();
     /** The values each SUM or AVG could not use, across every group. */
     private final Map<String, LeftOut> leftOutByAggregate = new LinkedHashMap<>();
+    private final ParsedQuery query;
+    private final FieldAccessor fields;
+    /** Works out calculated GROUP BY keys and aggregate arguments, such as SUM(price * qty). */
+    private final ExpressionEvaluator calculations;
+
+    Aggregator(ParsedQuery query, FieldAccessor fields) {
+        this.query = query;
+        this.fields = fields;
+        this.calculations = new ExpressionEvaluator(fields);
+    }
 
     /**
-     * One sentence for each SUM or AVG that met values that aren't numbers, such as
-     * {@code SUM(price) left out 3 values that are not numbers, such as "none"}.
+     * One sentence for each calculation, SUM or AVG that met values that aren't numbers, such
+     * as {@code SUM(price) left out 3 values that are not numbers, such as "none"}.
      *
      * @param verb what happened to them: "left out" or "found"
      */
     List<String> leftOut(String verb) {
-        List<String> sentences = new ArrayList<>();
+        List<String> sentences = new ArrayList<>(calculations.leftOut(verb));
         leftOutByAggregate.forEach((aggregate, leftOut) -> sentences.add(leftOut.describe(aggregate, verb)));
         return sentences;
     }
 
-    List<JsonNode> group(List<JsonNode> rows, ParsedQuery query, FieldAccessor fields) {
+    List<JsonNode> group(List<JsonNode> rows) {
         Map<String, Group> groups = new LinkedHashMap<>();
         if (query.getGroupBy().isEmpty()) {
-            groups.put("", new Group(query));
+            groups.put("", new Group(List.of()));
         }
         for (JsonNode row : rows) {
-            groups.computeIfAbsent(groupKey(row, query, fields), key -> new Group(query)).add(row, query, fields);
+            List<JsonNode> values = groupValues(row);
+            groups.computeIfAbsent(groupKey(values), key -> new Group(values)).add(row);
         }
 
         List<JsonNode> result = new ArrayList<>();
         for (Group group : groups.values()) {
-            result.add(group.toRow(query));
+            result.add(group.toRow());
         }
         return result;
     }
 
-    private static String groupKey(JsonNode row, ParsedQuery query, FieldAccessor fields) {
+    /** The row's value for each GROUP BY key: a field, or a calculation such as qty % 2. */
+    private List<JsonNode> groupValues(JsonNode row) {
+        List<JsonNode> values = new ArrayList<>();
+        for (String key : query.getGroupBy()) {
+            Expression calculation = query.getGroupCalculations().get(key);
+            values.add(calculation == null ? fields.getFieldValue(row, key) : calculations.evaluate(row, calculation));
+        }
+        return values;
+    }
+
+    private static String groupKey(List<JsonNode> values) {
         StringBuilder key = new StringBuilder();
-        for (String field : query.getGroupBy()) {
-            key.append(identity(fields.getFieldValue(row, field))).append('\u0000');
+        for (JsonNode value : values) {
+            key.append(identity(value)).append('\u0000');
         }
         return key.toString();
     }
@@ -79,39 +101,47 @@ final class Aggregator {
     }
 
     private final class Group {
-        private final Map<String, JsonNode> fieldValues = new LinkedHashMap<>();
+        private final List<JsonNode> groupValues;
         private final List<Accumulator> accumulators = new ArrayList<>();
 
-        Group(ParsedQuery query) {
+        /**
+         * @param groupValues the value of each GROUP BY key, taken from the group's first row
+         */
+        Group(List<JsonNode> groupValues) {
+            this.groupValues = groupValues;
             for (AggregateCall call : query.getAggregates()) {
                 accumulators.add(new Accumulator(call));
             }
         }
 
-        void add(JsonNode row, ParsedQuery query, FieldAccessor fields) {
-            if (fieldValues.isEmpty()) {
-                for (String field : query.getGroupBy()) {
-                    fieldValues.put(field, fields.getFieldValue(row, field));
-                }
-            }
+        void add(JsonNode row) {
             for (Accumulator accumulator : accumulators) {
-                String field = accumulator.call.field();
-                accumulator.add(field == null ? null : fields.getFieldValue(row, field));
+                AggregateCall call = accumulator.call;
+                if (call.calculation() != null) {
+                    accumulator.add(calculations.evaluate(row, call.calculation()));
+                } else {
+                    accumulator.add(call.field() == null ? null : fields.getFieldValue(row, call.field()));
+                }
             }
         }
 
-        JsonNode toRow(ParsedQuery query) {
+        JsonNode toRow() {
             ObjectNode row = objectMapper.createObjectNode();
-            fieldValues.forEach((field, value) -> {
-                JsonNode stored = isNull(value) ? NullNode.getInstance() : value;
-                row.set(field, stored);
-                row.set(field.substring(field.lastIndexOf('.') + 1), stored);
-            });
+            for (int i = 0; i < groupValues.size(); i++) {
+                String key = query.getGroupBy().get(i);
+                JsonNode stored = isNull(groupValues.get(i)) ? NullNode.getInstance() : groupValues.get(i);
+                row.set(key, stored);
+                if (!query.getGroupCalculations().containsKey(key)) {
+                    // A field is also kept under its last part, so p.cat can be read as cat
+                    row.set(key.substring(key.lastIndexOf('.') + 1), stored);
+                }
+            }
             for (Accumulator accumulator : accumulators) {
                 row.set(accumulator.call.key(), accumulator.result());
             }
             for (ColumnInfo column : query.getSelectColumns()) {
-                if (column.hasAlias()) {
+                // A calculated column's value is added later, once it has been worked out
+                if (column.hasAlias() && !column.isComputed()) {
                     row.set(column.getAlias(), row.get(column.getExpression()));
                 }
             }

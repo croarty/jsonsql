@@ -246,8 +246,6 @@ class WhereAndOrderByExpressionsTest {
         "SELECT id FROM t ORDER BY price * LENGTH(name)        -> Function in ORDER BY: price * LENGTH(name) is not supported",
         "SELECT id FROM t ORDER BY CAST(price AS DATE)         -> CAST to DATE in ORDER BY: CAST(price AS DATE) is not supported (use INTEGER, REAL or TEXT)",
         "SELECT id FROM t ORDER BY (SELECT 1)                  -> Expression in ORDER BY: (SELECT 1) is not supported",
-        "SELECT cat FROM t GROUP BY cat ORDER BY COUNT(*) + 1  -> Expression in ORDER BY: COUNT(*) + 1 is not supported",
-        "SELECT cat FROM t GROUP BY cat ORDER BY cat || 'x'    -> Expression in ORDER BY: cat || 'x' is not supported",
         "SELECT id FROM t UNION SELECT oid FROM o ORDER BY id * 2 -> Expression in ORDER BY: id * 2 is not supported",
     })
     void whatIsStillRejected(String sql, String message) {

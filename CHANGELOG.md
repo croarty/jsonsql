@@ -37,7 +37,7 @@ To find affected queries, look for:
 | A join between a numeric id and a text id | Convert one side in a CTE: `WITH o AS (SELECT orderId, CAST(productId AS INTEGER) AS productId FROM orders) SELECT ... FROM o JOIN products p ON o.productId = p.id` |
 | `ORDER BY` on text that starts with a number, such as `"15.6 inch"` | Sort by its number: `ORDER BY CAST(size AS REAL)` |
 | A boolean compared with `0` or `1` | Use `false` or `true` |
-| `SUM` or `AVG` on a field that holds some text | Run the query and read the warning. If the text should count, convert it in a CTE: `WITH w AS (SELECT CAST(weight AS REAL) AS kg FROM items) SELECT SUM(kg) FROM w` |
+| `SUM` or `AVG` on a field that holds some text | Run the query and read the warning. If the text should count, convert it: `SUM(CAST(weight AS REAL))` |
 | Anything that reads numbers out of the results as text, such as a script matching `1.0E-4` | Parse the output as JSON or CSV numbers, which read both forms the same |
 | Materialized views built by an earlier version | Run `--rebuild-views`. Until then a view still holds the rounded numbers it was built with |
 
@@ -49,6 +49,7 @@ Cache files from earlier versions are ignored, because they hold rounded numbers
 
 - Calculated columns in `SELECT`: arithmetic (`+`, `-`, `*`, `/`, `%`), literals, text joined with `||`, `CASE`, `CAST`, and conditions as `true` or `false`. For example, `SELECT name, price * 1.2 AS with_tax FROM products ORDER BY with_tax`
 - The same calculations in `WHERE` and `ORDER BY`, such as `WHERE price * stock > 5000 ORDER BY price * stock DESC`. `LIKE`, `IN` and `IS NULL` can take a calculation on the left, as in `CAST(size AS REAL) IS NULL`. Arithmetic in `WHERE` and `ORDER BY` was rejected in 2.0
+- Calculations with grouping: inside an aggregate (`SUM(price * stock)`), around aggregates (`SUM(price) * 2`, `SUM(price * stock) / SUM(stock)`), and in `GROUP BY`, `HAVING` and the `ORDER BY` of a grouped query. For example, `SELECT CASE WHEN price >= 50 THEN 'premium' ELSE 'standard' END AS band, COUNT(*) FROM products GROUP BY band`
 - `CAST(value AS INTEGER | REAL | TEXT)`, which reads the number at the start of text, so `CAST('15.6 inch' AS REAL)` is `15.6`
 - A warning when arithmetic meets a value that is not a number, as for `SUM` and `AVG`. The result for that row is `null`
 - `--strict`, which turns those warnings into an error with exit code 1

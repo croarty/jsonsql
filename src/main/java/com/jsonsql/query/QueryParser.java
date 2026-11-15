@@ -208,12 +208,13 @@ public class QueryParser {
 
         // Parse WHERE clause
         if (plainSelect.getWhere() != null) {
-            validateValueCondition(plainSelect.getWhere(), plainSelect.getWhere(), WHERE);
+            validateValueCondition(plainSelect.getWhere(), plainSelect.getWhere(), WHERE, null);
             query.setWhereExpression(plainSelect.getWhere());
         }
 
         // Parse GROUP BY and HAVING
         parseGroupBy(plainSelect, query);
+        validateCalculatedColumns(query);
         parseHaving(plainSelect, query);
         validateGroupedColumns(query);
 
@@ -281,101 +282,151 @@ public class QueryParser {
     private static final String SELECT_LIST = "SELECT list";
     private static final String WHERE = "WHERE";
     private static final String ORDER_BY = "ORDER BY";
+    private static final String GROUP_BY = "GROUP BY";
+    private static final String HAVING = "HAVING";
 
     /**
      * A calculation may only be built from parts ExpressionEvaluator works out. Anything
      * else is rejected here, so it can't silently produce null.
      *
-     * @param whole  the SELECT item, condition or sort key this is part of, for the error message
-     * @param clause where it was written: SELECT list, WHERE or ORDER BY
+     * A calculation on source rows reads their fields, and can't hold an aggregate. One on
+     * groups, such as {@code SUM(price) * 2} in a grouped query, can hold aggregates, which
+     * are added to the query, and otherwise reads only what a group has: its GROUP BY keys
+     * and, outside the SELECT list, SELECT aliases.
+     *
+     * @param whole   the SELECT item, condition or sort key this is part of, for the error message
+     * @param clause  where it was written, such as SELECT list or WHERE
+     * @param grouped the query, when the calculation is on groups; null when it is on source rows
      */
-    private void validateValue(Expression expression, Expression whole, String clause) throws QueryParseException {
-        if (expression instanceof Parenthesis parenthesis) {
-            validateValue(parenthesis.getExpression(), whole, clause);
+    private void validateValue(Expression expression, Expression whole, String clause, ParsedQuery grouped)
+            throws QueryParseException {
+        if (grouped != null && grouped.getGroupCalculations().containsKey(expression.toString())) {
+            // A GROUP BY key written out again, such as qty % 2, which the group already holds
+            return;
+        }
+        if (grouped != null && AggregateCall.isAggregate(expression)) {
+            grouped.addAggregate(aggregateCall((Function) expression, whole, clause));
+        } else if (grouped != null && expression instanceof Column column) {
+            validateGroupedColumn(column, clause, grouped);
+        } else if (expression instanceof Parenthesis parenthesis) {
+            validateValue(parenthesis.getExpression(), whole, clause, grouped);
         } else if (expression instanceof SignedExpression signed) {
-            validateValue(signed.getExpression(), whole, clause);
+            validateValue(signed.getExpression(), whole, clause, grouped);
         } else if (expression instanceof Concat || ExpressionEvaluator.isArithmetic(expression)) {
-            validateValue(((BinaryExpression) expression).getLeftExpression(), whole, clause);
-            validateValue(((BinaryExpression) expression).getRightExpression(), whole, clause);
+            validateValue(((BinaryExpression) expression).getLeftExpression(), whole, clause, grouped);
+            validateValue(((BinaryExpression) expression).getRightExpression(), whole, clause, grouped);
         } else if (expression instanceof CaseExpression caseExpression) {
-            validateCase(caseExpression, whole, clause);
+            validateCase(caseExpression, whole, clause, grouped);
         } else if (expression instanceof CastExpression cast) {
-            validateValue(cast.getLeftExpression(), whole, clause);
+            validateValue(cast.getLeftExpression(), whole, clause, grouped);
             String type = ExpressionEvaluator.castType(cast);
             if (!ExpressionEvaluator.INTEGER_TYPES.contains(type) && !ExpressionEvaluator.DECIMAL_TYPES.contains(type)
                     && !ExpressionEvaluator.TEXT_TYPES.contains(type)) {
                 throw unsupported("CAST to " + type + " in " + clause + ": " + whole, "use INTEGER, REAL or TEXT");
             }
         } else if (WhereEvaluator.isCondition(expression)) {
-            validateValueCondition(expression, whole, clause);
+            validateValueCondition(expression, whole, clause, grouped);
         } else if (!(expression instanceof Column || expression instanceof StringValue || expression instanceof LongValue
                 || expression instanceof DoubleValue || expression instanceof NullValue)) {
-            if (expression instanceof Function && clause.equals(SELECT_LIST)) {
-                throw unsupported("Function or aggregate in SELECT list: " + whole,
-                    "functions, and aggregates inside a calculation, are not available");
-            }
             if (expression instanceof Function) {
-                throw unsupported("Function in " + clause + ": " + whole, clause.equals(WHERE) && AggregateCall.isAggregate(expression)
-                    ? "use HAVING to filter on an aggregate"
-                    : "functions are not available");
+                String hint = "functions are not available";
+                if (AggregateCall.isAggregate(expression)) {
+                    hint = clause.equals(WHERE) ? "use HAVING to filter on an aggregate" : "an aggregate can't be used here";
+                }
+                String kind = clause.equals(SELECT_LIST) ? "Function or aggregate" : "Function";
+                throw unsupported(kind + " in " + clause + ": " + whole, hint);
             }
             throw unsupported("Expression in " + clause + ": " + whole, "use fields, literals, arithmetic, ||, CASE and CAST");
         }
     }
 
-    private void validateCase(CaseExpression caseExpression, Expression whole, String clause) throws QueryParseException {
+    /**
+     * The aggregate a function call stands for. Its argument is worked out on source rows,
+     * so it can be a calculation but can't hold another aggregate.
+     */
+    private AggregateCall aggregateCall(Function function, Expression whole, String clause) throws QueryParseException {
+        AggregateCall call = AggregateCall.from(function);
+        if (call.calculation() != null) {
+            validateValue(call.calculation(), whole, clause, null);
+        }
+        return call;
+    }
+
+    /**
+     * A name in a calculation on groups must be something a group has: a GROUP BY field or,
+     * outside the SELECT list, a SELECT alias. Booleans and double-quoted text aren't names.
+     */
+    private void validateGroupedColumn(Column column, String clause, ParsedQuery query) throws QueryParseException {
+        String name = fieldName(column);
+        boolean literal = column.toString().startsWith("\"") || name.equalsIgnoreCase("true") || name.equalsIgnoreCase("false");
+        if (literal || matchingGroupField(name, query) != null) {
+            return;
+        }
+        if (clause.equals(SELECT_LIST)) {
+            throw new QueryParseException("Column '" + name + "' must be in GROUP BY or inside an aggregate");
+        }
+        if (selectAlias(name, query) == null) {
+            throw new QueryParseException(clause.equals(HAVING)
+                ? "HAVING can only use grouped fields, aliases and aggregates, got: " + name
+                : "ORDER BY can only use grouped fields, aliases and aggregates here, got: " + name);
+        }
+    }
+
+    private void validateCase(CaseExpression caseExpression, Expression whole, String clause, ParsedQuery grouped)
+            throws QueryParseException {
         Expression subject = caseExpression.getSwitchExpression();
         if (subject != null) {
-            validateValue(subject, whole, clause);
+            validateValue(subject, whole, clause, grouped);
         }
         for (WhenClause when : caseExpression.getWhenClauses()) {
             if (subject == null) {
-                validateValueCondition(when.getWhenExpression(), whole, clause);
+                validateValueCondition(when.getWhenExpression(), whole, clause, grouped);
             } else {
-                validateValue(when.getWhenExpression(), whole, clause);
+                validateValue(when.getWhenExpression(), whole, clause, grouped);
             }
-            validateValue(when.getThenExpression(), whole, clause);
+            validateValue(when.getThenExpression(), whole, clause, grouped);
         }
         if (caseExpression.getElseExpression() != null) {
-            validateValue(caseExpression.getElseExpression(), whole, clause);
+            validateValue(caseExpression.getElseExpression(), whole, clause, grouped);
         }
     }
 
     /**
-     * A condition: in WHERE, used as a value, or after CASE WHEN. Its operands can be
-     * calculations.
+     * A condition: in WHERE or HAVING, used as a value, or after CASE WHEN. Its operands can
+     * be calculations.
      */
-    private void validateValueCondition(Expression expression, Expression whole, String clause) throws QueryParseException {
+    private void validateValueCondition(Expression expression, Expression whole, String clause, ParsedQuery grouped)
+            throws QueryParseException {
         switch (expression) {
-            case Parenthesis parenthesis -> validateValueCondition(parenthesis.getExpression(), whole, clause);
+            case Parenthesis parenthesis -> validateValueCondition(parenthesis.getExpression(), whole, clause, grouped);
             case AndExpression and -> {
-                validateValueCondition(and.getLeftExpression(), whole, clause);
-                validateValueCondition(and.getRightExpression(), whole, clause);
+                validateValueCondition(and.getLeftExpression(), whole, clause, grouped);
+                validateValueCondition(and.getRightExpression(), whole, clause, grouped);
             }
             case OrExpression or -> {
-                validateValueCondition(or.getLeftExpression(), whole, clause);
-                validateValueCondition(or.getRightExpression(), whole, clause);
+                validateValueCondition(or.getLeftExpression(), whole, clause, grouped);
+                validateValueCondition(or.getRightExpression(), whole, clause, grouped);
             }
-            case NotExpression not -> validateValueCondition(not.getExpression(), whole, clause);
+            case NotExpression not -> validateValueCondition(not.getExpression(), whole, clause, grouped);
             case ComparisonOperator comparison -> {
-                validateValue(comparison.getLeftExpression(), whole, clause);
-                validateValue(comparison.getRightExpression(), whole, clause);
+                validateValue(comparison.getLeftExpression(), whole, clause, grouped);
+                validateValue(comparison.getRightExpression(), whole, clause, grouped);
             }
             case Between between -> {
-                validateValue(between.getLeftExpression(), whole, clause);
-                validateValue(between.getBetweenExpressionStart(), whole, clause);
-                validateValue(between.getBetweenExpressionEnd(), whole, clause);
+                validateValue(between.getLeftExpression(), whole, clause, grouped);
+                validateValue(between.getBetweenExpressionStart(), whole, clause, grouped);
+                validateValue(between.getBetweenExpressionEnd(), whole, clause, grouped);
             }
             case LikeExpression like -> {
-                validateValue(like.getLeftExpression(), whole, clause);
-                validateValue(like.getRightExpression(), whole, clause);
+                validateValue(like.getLeftExpression(), whole, clause, grouped);
+                validateValue(like.getRightExpression(), whole, clause, grouped);
                 likeEscape(like);
             }
-            case IsNullExpression isNull -> validateValue(isNull.getLeftExpression(), whole, clause);
+            case IsNullExpression isNull -> validateValue(isNull.getLeftExpression(), whole, clause, grouped);
             case InExpression in when in.getRightExpression() instanceof ParenthesedExpressionList<?> list -> {
-                validateValue(in.getLeftExpression(), whole, clause);
+                validateValue(in.getLeftExpression(), whole, clause, grouped);
                 for (Object item : list) {
-                    validateValue((Expression) item, whole, clause);
+                    validateValue((Expression) item, whole, clause, grouped);
                 }
             }
             default -> {
@@ -386,100 +437,6 @@ public class QueryParser {
                 }
             }
         }
-    }
-
-    /**
-     * In HAVING, each side of a condition must be a grouped field, an aggregate or a literal.
-     * Anything else would otherwise be looked up as a field name and silently match nothing.
-     */
-    private void validateCondition(Expression expression, ParsedQuery having) throws QueryParseException {
-        switch (expression) {
-            case AndExpression and -> {
-                validateCondition(and.getLeftExpression(), having);
-                validateCondition(and.getRightExpression(), having);
-            }
-            case OrExpression or -> {
-                validateCondition(or.getLeftExpression(), having);
-                validateCondition(or.getRightExpression(), having);
-            }
-            case NotExpression not -> validateCondition(not.getExpression(), having);
-            case Parenthesis parenthesis -> validateCondition(parenthesis.getExpression(), having);
-            case ComparisonOperator comparison -> {
-                validateOperand(comparison.getLeftExpression(), having);
-                validateOperand(comparison.getRightExpression(), having);
-            }
-            case LikeExpression like -> {
-                validateField(like.getLeftExpression(), like, having);
-                validateOperand(like.getRightExpression(), having);
-                likeEscape(like);
-            }
-            case IsNullExpression isNull -> validateField(isNull.getLeftExpression(), isNull, having);
-            case InExpression in -> validateIn(in, having);
-            case Between between -> {
-                validateOperand(between.getLeftExpression(), having);
-                validateOperand(between.getBetweenExpressionStart(), having);
-                validateOperand(between.getBetweenExpressionEnd(), having);
-            }
-            // Anything else, such as EXISTS, is reported by WhereEvaluator
-            default -> {
-            }
-        }
-    }
-
-    private void validateIn(InExpression in, ParsedQuery having) throws QueryParseException {
-        validateField(in.getLeftExpression(), in, having);
-        if (in.getRightExpression() instanceof ParenthesedExpressionList<?> list) {
-            for (Object item : list) {
-                validateOperand((Expression) item, having);
-            }
-        }
-    }
-
-    private void validateField(Expression expression, Expression condition, ParsedQuery having) throws QueryParseException {
-        if (AggregateCall.isAggregate(expression)) {
-            having.addAggregate(AggregateCall.from((Function) expression));
-            return;
-        }
-        if (!(expression instanceof Column)) {
-            throw unsupported("Expression in HAVING: " + condition, "the left side must be a field or an aggregate");
-        }
-        validateHavingColumn((Column) expression, having);
-    }
-
-    private void validateOperand(Expression expression, ParsedQuery having) throws QueryParseException {
-        if (expression instanceof Parenthesis) {
-            validateOperand(((Parenthesis) expression).getExpression(), having);
-            return;
-        }
-        if (AggregateCall.isAggregate(expression)) {
-            having.addAggregate(AggregateCall.from((Function) expression));
-            return;
-        }
-        if (expression instanceof Column) {
-            validateHavingColumn((Column) expression, having);
-        }
-        boolean signedNumber = expression instanceof SignedExpression
-            && (((SignedExpression) expression).getExpression() instanceof LongValue
-                || ((SignedExpression) expression).getExpression() instanceof DoubleValue);
-        if (expression instanceof Column || expression instanceof StringValue || expression instanceof LongValue
-                || expression instanceof DoubleValue || expression instanceof NullValue || signedNumber) {
-            return;
-        }
-        String kind = expression instanceof Function ? "Function" : "Expression";
-        throw unsupported(kind + " in HAVING: " + expression, "compare a field with a field or a literal");
-    }
-
-    /**
-     * HAVING works on groups, so a name must be a group field or a SELECT alias. Booleans
-     * and double-quoted text aren't names here.
-     */
-    private void validateHavingColumn(Column column, ParsedQuery query) throws QueryParseException {
-        String name = fieldName(column);
-        boolean literal = column.toString().startsWith("\"") || name.equalsIgnoreCase("true") || name.equalsIgnoreCase("false");
-        if (literal || matchingGroupField(name, query) != null || selectAlias(name, query) != null) {
-            return;
-        }
-        throw new QueryParseException("HAVING can only use grouped fields, aliases and aggregates, got: " + name);
     }
 
     private void parseGroupBy(PlainSelect plainSelect, ParsedQuery query) throws QueryParseException {
@@ -501,15 +458,58 @@ public class QueryParser {
         query.setGroupBy(fields);
     }
 
+    /**
+     * The key of one GROUP BY item: a field, or the text of a calculation. A position or an
+     * alias stands for the SELECT column it names.
+     */
     private String groupField(Expression expression, ParsedQuery query) throws QueryParseException {
-        if (expression instanceof LongValue) {
-            return selectedColumn((LongValue) expression, query.getSelectColumns()).getExpression();
+        ColumnInfo selected = null;
+        if (expression instanceof LongValue position) {
+            selected = selectedColumn(position, query.getSelectColumns());
+        } else if (expression instanceof Column) {
+            selected = selectAlias(fieldName(expression), query);
         }
-        if (!(expression instanceof Column)) {
-            throw unsupported("Expression in GROUP BY: " + expression, "group by a column, an alias or a position");
+        if (selected != null && !selected.isComputed()) {
+            return selected.getExpression();
         }
-        ColumnInfo aliased = selectAlias(fieldName(expression), query);
-        return aliased != null ? aliased.getExpression() : fieldName(expression);
+        if (selected == null && expression instanceof Column) {
+            return fieldName(expression);
+        }
+        Expression calculation = selected != null ? selected.getComputed() : expression;
+        validateValue(calculation, calculation, GROUP_BY, null);
+        query.getGroupCalculations().put(calculation.toString(), calculation);
+        return calculation.toString();
+    }
+
+    /**
+     * Check each calculated SELECT column, now that GROUP BY is known. With grouping, or an
+     * aggregate anywhere in the SELECT list, a calculation is on groups.
+     */
+    private void validateCalculatedColumns(ParsedQuery query) throws QueryParseException {
+        boolean grouped = query.isAggregate();
+        for (ColumnInfo column : query.getSelectColumns()) {
+            grouped |= column.isComputed() && containsAggregate(column.getComputed());
+        }
+        for (ColumnInfo column : query.getSelectColumns()) {
+            if (column.isComputed()) {
+                validateValue(column.getComputed(), column.getComputed(), SELECT_LIST, grouped ? query : null);
+            }
+        }
+    }
+
+    private static boolean containsAggregate(Expression expression) {
+        boolean[] found = {false};
+        expression.accept(new ExpressionVisitorAdapter() {
+            @Override
+            public void visit(Function function) {
+                if (AggregateCall.isAggregate(function)) {
+                    found[0] = true;
+                } else {
+                    super.visit(function);
+                }
+            }
+        });
+        return found[0];
     }
 
     private void parseHaving(PlainSelect plainSelect, ParsedQuery query) throws QueryParseException {
@@ -517,7 +517,7 @@ public class QueryParser {
         if (having == null) {
             return;
         }
-        validateCondition(having, query);
+        validateValueCondition(having, having, HAVING, query);
         if (!query.isAggregate()) {
             throw new QueryParseException("HAVING needs GROUP BY or an aggregate");
         }
@@ -536,8 +536,9 @@ public class QueryParser {
         for (ColumnInfo column : query.getSelectColumns()) {
             String expression = column.getExpression();
             if (column.isComputed()) {
-                throw unsupported("Expression in SELECT with GROUP BY or an aggregate: " + column.getComputed(),
-                    "select grouped fields and aggregates on their own");
+                // Already checked by validateCalculatedColumns
+                columns.add(column);
+                continue;
             }
             if ("*".equals(expression)) {
                 throw unsupported("SELECT * with GROUP BY or aggregates", "list the grouped fields and aggregates");
@@ -559,6 +560,10 @@ public class QueryParser {
     /** The GROUP BY field a name refers to, treating p.cat and cat as the same field. */
     private static String matchingGroupField(String name, ParsedQuery query) {
         for (String field : query.getGroupBy()) {
+            if (query.getGroupCalculations().containsKey(field)) {
+                // A calculation's text, such as t.a + t.price, isn't a field name to match
+                continue;
+            }
             if (field.equals(name) || field.endsWith("." + name) || name.endsWith("." + field)) {
                 return field;
             }
@@ -625,14 +630,14 @@ public class QueryParser {
 
         for (SelectItem<?> item : selectItems) {
             if (AggregateCall.isAggregate(item.getExpression())) {
-                AggregateCall call = AggregateCall.from((Function) item.getExpression());
+                AggregateCall call = aggregateCall((Function) item.getExpression(), item.getExpression(), SELECT_LIST);
                 query.addAggregate(call);
                 String name = item.getAlias() != null ? item.getAlias().getName() : item.getExpression().toString();
                 columns.add(new ColumnInfo(call.key(), unquote(name)));
                 continue;
             }
             if (!isPlainSelectItem(item)) {
-                validateValue(item.getExpression(), item.getExpression(), SELECT_LIST);
+                // Checked by validateCalculatedColumns, once GROUP BY is known
                 String name = item.getAlias() == null ? null : unquote(item.getAlias().getName());
                 columns.add(ColumnInfo.computed(columns.size(), item.getExpression(), name));
                 continue;
@@ -810,9 +815,11 @@ public class QueryParser {
             Expression expression = element.getExpression();
             boolean ascending = element.isAsc() || !element.isAscDescPresent(); // Default to ASC if not specified
 
-            if (!query.isAggregate() && !(expression instanceof Column) && !(expression instanceof LongValue)) {
-                // A calculation: its value is added to each row under a key of its own
-                validateValue(expression, expression, ORDER_BY);
+            boolean plain = expression instanceof Column || expression instanceof LongValue
+                || (query.isAggregate() && AggregateCall.isAggregate(expression));
+            if (!plain) {
+                // A calculation: its value is added to each row or group under a key of its own
+                validateValue(expression, expression, ORDER_BY, query.isAggregate() ? query : null);
                 String key = ColumnInfo.calculatedKey(query.getSelectColumns().size() + orderByInfos.size());
                 orderByInfos.add(new OrderByInfo(key, ascending, expression));
                 continue;
@@ -852,12 +859,9 @@ public class QueryParser {
             return selectedColumn((LongValue) expression, query.getSelectColumns()).getExpression();
         }
         if (AggregateCall.isAggregate(expression)) {
-            AggregateCall call = AggregateCall.from((Function) expression);
+            AggregateCall call = aggregateCall((Function) expression, expression, ORDER_BY);
             query.addAggregate(call);
             return call.key();
-        }
-        if (!(expression instanceof Column)) {
-            throw unsupported("Expression in ORDER BY: " + expression, "order by a column, an alias or a position");
         }
         String name = fieldName(expression);
         ColumnInfo aliased = selectAlias(name, query);
