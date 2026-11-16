@@ -290,7 +290,33 @@ class SqliteComparisonTest {
             any("SELECT c.id AS ci, o.id AS oi FROM c LEFT JOIN o ON o.n = o.pid"),
             any("SELECT p.id AS pi, o.id AS oi FROM p JOIN o ON p.id = p.qty AND o.n = 1"),
             any("SELECT p.id AS pi, o.id AS oi, c.label AS l FROM p JOIN o ON p.id = o.pid JOIN c ON o.n = p.qty AND c.st = o.st"),
-            any("SELECT p.id AS pi, o.id AS oi, c.label AS l FROM p JOIN o ON p.id = o.pid LEFT JOIN c ON o.st = c.st AND p.qty > 2"));
+            any("SELECT p.id AS pi, o.id AS oi, c.label AS l FROM p JOIN o ON p.id = o.pid LEFT JOIN c ON o.st = c.st AND p.qty > 2"),
+            // RIGHT, FULL and CROSS joins, and commas
+            any("SELECT " + j + " FROM o RIGHT JOIN p ON p.id = o.pid"),
+            any("SELECT " + j + " FROM p RIGHT JOIN o ON p.id = o.pid"),
+            any("SELECT " + j + " FROM p RIGHT OUTER JOIN o ON o.pid = p.id AND o.st = 'open'"),
+            any("SELECT " + j + " FROM o RIGHT JOIN p ON p.id = o.pid AND p.price > 10"),
+            any("SELECT " + j + " FROM o RIGHT JOIN p ON o.n > p.qty"),
+            any("SELECT " + j + " FROM o RIGHT JOIN p ON p.id = o.pid WHERE o.id IS NULL"),
+            any("SELECT " + j + " FROM o RIGHT JOIN p ON p.id = o.pid WHERE p.cat = 'Tools' OR o.n > 1"),
+            any("SELECT " + j + " FROM p FULL JOIN o ON p.id = o.pid"),
+            any("SELECT " + j + " FROM o FULL OUTER JOIN p ON p.id = o.pid AND o.st = 'open'"),
+            any("SELECT " + j + " FROM p FULL JOIN o ON p.id = o.pid OR o.n > 4"),
+            any("SELECT " + j + " FROM p FULL JOIN o ON p.id = o.pid WHERE p.id IS NULL OR o.id IS NULL"),
+            any("SELECT o.id AS oi, c.label AS l FROM o FULL JOIN c ON o.st = c.st"),
+            any("SELECT o.id AS oi, c.label AS l FROM o RIGHT JOIN c ON o.st = c.st AND o.pid = c.id"),
+            any("SELECT a.id AS x, b.id AS y FROM m a FULL JOIN m b ON a.v = b.v AND a.id < b.id"),
+            any("SELECT p.id AS pi, o.id AS oi, c.label AS l FROM p JOIN o ON p.id = o.pid RIGHT JOIN c ON o.st = c.st"),
+            any("SELECT p.id AS pi, o.id AS oi, c.label AS l FROM p RIGHT JOIN o ON p.id = o.pid LEFT JOIN c ON o.st = c.st"),
+            any("SELECT p.id AS pi, o.id AS oi, c.label AS l FROM p FULL JOIN o ON p.id = o.pid FULL JOIN c ON c.id = p.id"),
+            any("SELECT p.id AS pi, o.id AS oi, c.label AS l FROM p LEFT JOIN o ON p.id = o.pid RIGHT JOIN c ON c.st = o.st"),
+            any("SELECT o.id AS oi, c.label AS l FROM o CROSS JOIN c"),
+            any("SELECT o.id AS oi, c.label AS l FROM o, c"),
+            any("SELECT o.id AS oi, c.label AS l FROM o, c WHERE o.st = c.st AND o.n > 1"),
+            any("SELECT p.id AS pi, o.id AS oi, c.label AS l FROM p, o, c WHERE p.id = o.pid AND c.st = o.st"),
+            any("SELECT o.id AS oi, c.label AS l FROM o CROSS JOIN c LEFT JOIN p ON p.id = o.pid AND c.id = 1"),
+            any("SELECT COUNT(*) AS n, COUNT(o.id) AS a, COUNT(p.id) AS b FROM p FULL JOIN o ON p.id = o.pid"),
+            any("SELECT p.cat AS cat, COUNT(o.id) AS n FROM o RIGHT JOIN p ON p.id = o.pid GROUP BY p.cat"));
     }
 
     static Stream<Query> unionAndCteQueries() {

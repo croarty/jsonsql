@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.BigIntegerNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.jsonsql.config.MappingManager;
+import com.jsonsql.query.JoinInfo;
 import com.jsonsql.query.Json;
 import com.jsonsql.query.ParsedQuery;
 import com.jsonsql.query.TableFileResolver;
@@ -90,7 +91,8 @@ public class IndexPlanner {
 
     private List<File> doPrune(TableInfo fromTable, ParsedQuery query, List<File> currentFiles) {
         String table = fromTable.getTableName();
-        if (table == null || !indexManager.hasIndexesForTable(table) || !query.hasWhere()) {
+        if (table == null || !indexManager.hasIndexesForTable(table) || !query.hasWhere()
+                || keepsUnmatchedJoinedRows(query)) {
             return currentFiles;
         }
 
@@ -156,6 +158,16 @@ public class IndexPlanner {
             }
         }
         return keep;
+    }
+
+    /**
+     * With a RIGHT or FULL join, a FROM row left out changes which joined rows match nothing,
+     * and those come out with the FROM table's fields missing, where WHERE may then read a
+     * field of the same name from another table. So the FROM table is read in full.
+     */
+    private static boolean keepsUnmatchedJoinedRows(ParsedQuery query) {
+        return query.hasJoins() && query.getJoins().stream().anyMatch(join ->
+            join.getType() == JoinInfo.Type.RIGHT || join.getType() == JoinInfo.Type.FULL);
     }
 
     // -- predicate extraction -------------------------------------------------

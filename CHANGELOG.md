@@ -7,6 +7,10 @@
 - `JOIN ... ON` takes any condition `WHERE` takes: `AND`, `OR`, `NOT`, every comparison, `BETWEEN`, `IN`, `LIKE`, `IS NULL`, arithmetic, `CASE`, `CAST` and functions. For example `ON o.productId = p.id AND o.region = p.region`, `ON p.price >= b.low AND p.price < b.high` or `ON LOWER(o.code) = LOWER(c.code)`. These used to fail when the query ran.
 - `LEFT JOIN` keeps a left row when no joined row passes the whole condition, so `LEFT JOIN products p ON o.productId = p.id AND o.status = 'open'` keeps every order and fills in the product only for open ones.
 - Each `field = field` part joined by `AND` is a join key looked up by hash, so `ON a.x = b.x AND a.y = b.y` stays fast. A join with no such part compares every pair of rows.
+- `RIGHT [OUTER] JOIN` keeps every row of the joined table, and `FULL [OUTER] JOIN` keeps every row of both sides, with `null` for the other side's columns where nothing matched. Unmatched joined rows come after the matched rows, in their own order.
+- `CROSS JOIN` and comma joins between tables (`FROM a, b`) pair every row with every row. They used to work only with `UNNEST`.
+- The FROM table of a query with a `RIGHT` or `FULL JOIN` is read in full, without index pruning, which would change which joined rows count as unmatched.
+- `NATURAL JOIN` now says to write `JOIN ... ON`, and `ON` after `CROSS JOIN` or a comma is rejected.
 - A bad `ON` is reported when the query is parsed, so `--dry-run` reports it: an aggregate, a subquery, a function that isn't available, or more than one `ON` for a join. `JOIN ... USING (...)` now says to write `ON a.x = b.x` instead.
 
 ### Fixed

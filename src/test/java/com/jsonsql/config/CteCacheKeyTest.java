@@ -96,6 +96,20 @@ class CteCacheKeyTest {
     }
 
     @Test
+    void testCteDifferingOnlyInJoinTypeNotConfused() throws Exception {
+        String on = " products b ON a.id = b.id AND b.price > 500 AND a.price < 800) SELECT * FROM t";
+        String select = "WITH t AS (SELECT a.name AS x, b.name AS y FROM products a ";
+        assertEquals("[{\"x\":\"Phone\",\"y\":\"Phone\"}]", run(select + "JOIN" + on).toString());
+        assertEquals("[{\"x\":\"Laptop\",\"y\":null},{\"x\":\"Phone\",\"y\":\"Phone\"},{\"x\":\"Monitor\",\"y\":null},"
+            + "{\"x\":\"Cable\",\"y\":null}]", run(select + "LEFT JOIN" + on).toString());
+        assertEquals("[{\"x\":\"Phone\",\"y\":\"Phone\"},{\"x\":null,\"y\":\"Laptop\"},{\"x\":null,\"y\":\"Monitor\"},"
+            + "{\"x\":null,\"y\":\"Cable\"}]", run(select + "RIGHT JOIN" + on).toString());
+        assertEquals(7, run(select + "FULL JOIN" + on).size());
+        assertEquals(16, run("WITH t AS (SELECT a.name AS x, b.name AS y FROM products a CROSS JOIN products b) SELECT * FROM t").size());
+        assertEquals(16, run("WITH t AS (SELECT a.name AS x, b.name AS y FROM products a, products b) SELECT * FROM t").size());
+    }
+
+    @Test
     void testCteCacheInvalidatedOnSourceChange() throws Exception {
         JsonNode first = run("WITH t AS (SELECT name FROM products) SELECT * FROM t");
         assertEquals(4, first.size());

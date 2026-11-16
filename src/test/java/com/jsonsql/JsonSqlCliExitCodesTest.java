@@ -116,7 +116,7 @@ class JsonSqlCliExitCodesTest {
     void sqlThatIsNotSupportedIsAQueryError() {
         assertExit(QUERY, run("-q", "SELECT SOUNDEX(name) FROM products"));
         assertExit(QUERY, run("-q", "SELECT UPPER(name, name) FROM products"));
-        assertExit(QUERY, run("-q", "SELECT * FROM products p RIGHT JOIN products q ON p.id = q.id"));
+        assertExit(QUERY, run("-q", "SELECT * FROM products p NATURAL JOIN products q"));
         assertExit(QUERY, run("-q", "SELECT name, COUNT(*) FROM products"));
         assertExit(QUERY, run("-q", "SELECT * FROM products WHERE EXISTS (SELECT 1 FROM products)"));
     }

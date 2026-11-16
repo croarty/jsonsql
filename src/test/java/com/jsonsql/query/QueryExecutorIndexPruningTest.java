@@ -75,6 +75,21 @@ class QueryExecutorIndexPruningTest {
     }
 
     @Test
+    void rightAndFullJoinsAreNotPruned() throws Exception {
+        // Pruning the FROM table would make shelf 10 unmatched, and its own category would then pass WHERE
+        writeFile("shelves.json", """
+            [{"id": 10, "pid": 1, "category": "Furniture"}]""");
+        mappingManager.addMapping("shelves", "shelves.json:$[*]");
+
+        String on = " shelves s ON p.id = s.pid WHERE category = 'Furniture'";
+        assertSameResult("SELECT s.id FROM products p RIGHT JOIN" + on);
+        assertEquals("[]", indexed.execute("SELECT s.id FROM products p RIGHT JOIN" + on));
+        // Product 3 is Furniture and matches no shelf
+        assertSameResult("SELECT p.id, s.id FROM products p FULL JOIN" + on);
+        assertEquals("[{\"p.id\":3,\"s.id\":null}]", indexed.execute("SELECT p.id, s.id FROM products p FULL JOIN" + on));
+    }
+
+    @Test
     void equalityResultsMatchFullScan() throws Exception {
         assertSameResult("SELECT id, category FROM products WHERE category = 'Furniture'");
         assertSameResult("SELECT id FROM products WHERE category = 'Tools'");
