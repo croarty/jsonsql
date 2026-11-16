@@ -1,11 +1,17 @@
 # Changelog
 
-## Unreleased
+## 3.1.1 - 2026-11-16
+
+Fixes two error messages and corrects the documentation. No query that worked in 3.1.0 gives a different result.
 
 ### Fixed
 
 - `VALUES` in `FROM` or a join always gives `VALUES is not supported (use a mapped table)`. One row of `VALUES` gave `Table function in FROM: ...`, or, in parentheses, `Parentheses in FROM: ... (put one pair of parentheses around a subquery, ...)`, which didn't help.
 - A table function after a join or a comma, such as `JOIN generate_series(1, 3) g` or `JOIN VALUES (1, 2)`, gave `Invalid UNNEST syntax`. It now gives the same message as in `FROM`. Both were already errors, so no query that worked is affected.
+
+### Changed
+
+- Documentation corrected where it disagreed with 3.1.0: a reversed comparison such as `150 <= price` works and uses an index; a calculation in the `ORDER BY` after a set operation is rejected by design, with workarounds that work; the README says which fixture its calculation and set-operation examples use; `--explain` is marked as not implemented; `--dry-run` still rejects an unknown `--format`; and the `--pretty` and CSV samples match the real output.
 
 ## 3.1.0 - 2026-11-16
 
