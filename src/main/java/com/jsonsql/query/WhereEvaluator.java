@@ -310,26 +310,19 @@ public class WhereEvaluator {
      * Example: WHERE category IN ('Electronics', 'Tools', 'Furniture')
      */
     private Truth evaluateIn(JsonNode row, InExpression inExpr) {
-        JsonNode fieldValue = leftValue(row, inExpr.getLeftExpression());
-
-        // In SQL, NULL IN (...) and NULL NOT IN (...) are both UNKNOWN
-        // This means NULL values are ALWAYS excluded from IN/NOT IN results
-        if (fieldValue == null || fieldValue.isNull()) {
-            return Truth.UNKNOWN;
-        }
-
-        // Get the list of values to check against: written out, or a subquery's rows
+        // The values to check against: written out, worked out one at a time as they are
+        // reached, or a subquery's rows, worked out once before the rows
         var rightExpression = inExpr.getRightExpression();
-        List<JsonNode> listValues = new ArrayList<>();
+        List<Supplier<JsonNode>> listValues = new ArrayList<>();
         if (rightExpression instanceof ParenthesedExpressionList<?> expressionList) {
             // ExpressionList extends List directly (getExpressions() is deprecated)
             for (var expr : expressionList) {
-                listValues.add(resolve(row, (Expression) expr));
+                listValues.add(() -> resolve(row, (Expression) expr));
             }
         } else if (rightExpression instanceof ParenthesedSelect) {
-            // Worked out once, before the rows
             for (JsonNode value : fieldAccessor.subqueryValues(rightExpression)) {
-                listValues.add(Values.isNull(value) ? null : value);
+                JsonNode listValue = Values.isNull(value) ? null : value;
+                listValues.add(() -> listValue);
             }
         } else {
             // Unsupported right expression type - fail loudly instead of silently excluding all rows
@@ -339,14 +332,27 @@ public class WhereEvaluator {
             );
         }
 
+        // Nothing is in an empty list, NULL included, so IN is false and NOT IN true. Only a
+        // subquery can return an empty list.
+        if (listValues.isEmpty()) {
+            return Truth.of(inExpr.isNot());
+        }
+
+        // In SQL, NULL IN (...) and NULL NOT IN (...) are both UNKNOWN for a list with values
+        JsonNode fieldValue = leftValue(row, inExpr.getLeftExpression());
+        if (fieldValue == null || fieldValue.isNull()) {
+            return Truth.UNKNOWN;
+        }
+
         boolean listHasNull = false;
-        for (JsonNode listValue : listValues) {
+        for (Supplier<JsonNode> item : listValues) {
+            JsonNode listValue = item.get();
             if (listValue == null) {
                 listHasNull = true;
                 continue;
             }
             if (Values.equal(fieldValue, listValue)) {
-                // Found a match
+                // Found a match: the items after it are never worked out
                 return Truth.of(!inExpr.isNot()); // IN returns true, NOT IN returns false
             }
         }

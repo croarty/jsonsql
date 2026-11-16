@@ -455,6 +455,11 @@ class SqliteComparisonTest {
             any("SELECT id FROM p WHERE cat NOT IN (SELECT cat FROM k WHERE cat IS NOT NULL)"),
             any("SELECT id FROM p WHERE id IN (SELECT pid FROM o WHERE n > 100)"),
             any("SELECT id FROM p WHERE id NOT IN (SELECT pid FROM o WHERE n > 100)"),
+            // A NULL or missing pid with an empty result: nothing is in an empty list
+            any("SELECT id FROM o WHERE pid IN (SELECT id FROM p WHERE id > 100)"),
+            any("SELECT id FROM o WHERE pid NOT IN (SELECT id FROM p WHERE id > 100)"),
+            any("SELECT id FROM o WHERE NOT (pid IN (SELECT id FROM p WHERE id > 100))"),
+            any("SELECT id FROM o WHERE NOT (pid NOT IN (SELECT id FROM p WHERE id > 100))"),
             any("SELECT id FROM m WHERE v IN (SELECT v FROM m WHERE id < 3)"),
             any("SELECT id FROM m WHERE v NOT IN (SELECT v FROM m WHERE id IN (1, 5))"),
             any("SELECT id FROM p WHERE id IN (1, (SELECT MIN(pid) FROM o))"),

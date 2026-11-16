@@ -175,6 +175,29 @@ class SubqueryTest {
     }
 
     @Test
+    void nothingIsInAnEmptySubqueryNotEvenNull() throws Exception {
+        // Order 103 has a NULL pid: NULL IN (empty) is false, not unknown, as in SQL
+        String empty = "(SELECT id FROM products WHERE cat = 'Nope')";
+        assertEquals(List.of(), rows("SELECT oid FROM orders WHERE pid IN " + empty));
+        assertEquals(List.of("100", "101", "102", "103"), rows("SELECT oid FROM orders WHERE pid NOT IN " + empty));
+        assertEquals(List.of("100", "101", "102", "103"), rows("SELECT oid FROM orders WHERE NOT (pid IN " + empty + ")"));
+        assertEquals(List.of(), rows("SELECT oid FROM orders WHERE NOT (pid NOT IN " + empty + ")"));
+        assertEquals(List.of("103:false:true"),
+            rows("SELECT oid, pid IN " + empty + " AS i, pid NOT IN " + empty + " AS n FROM orders WHERE oid = 103"));
+    }
+
+    @Test
+    void aWrittenListStopsAtTheFirstMatch() throws Exception {
+        // Every order matches before qty * 2, which would warn for order 102's "many"
+        String sql = "SELECT oid FROM orders WHERE oid IN (100, 101, 102, 103, qty * 2)";
+        assertEquals(List.of("100", "101", "102", "103"), rows(sql));
+        assertEquals(List.of(), warnings);
+
+        executor.setStrict(true);
+        assertEquals(List.of("100", "101", "102", "103"), rows(sql));
+    }
+
+    @Test
     void numbersDontMatchText() throws Exception {
         assertEquals(List.of("1", "2"), rows("SELECT id FROM products WHERE id IN (SELECT v FROM nums)"));
         assertEquals(List.of("1", "2"), rows("SELECT v FROM nums WHERE v IN (SELECT id FROM products)"));
