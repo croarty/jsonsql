@@ -86,6 +86,14 @@ class JoinOnConditionTest {
     }
 
     @Test
+    void anUnprefixedNameOppositeAnEarlierTableIsReadFromTheJoinedTable() throws Exception {
+        List<String> expected = List.of("1:Widget EU", "1:Widget US", "2:Widget EU", "2:Widget US", "3:Gadget", "6:Nothing");
+        assertEquals(expected, rows("SELECT o.id, p.name FROM orders o JOIN products p ON id = o.pid"));
+        assertEquals(expected, rows("SELECT o.id, p.name FROM orders o JOIN products p ON o.pid = id"));
+        assertEquals(expected, rows("SELECT o.id, p.name FROM orders o JOIN products p ON o.pid = p.id"));
+    }
+
+    @Test
     void aKeyAndAFilterOnTheJoinedTable() throws Exception {
         assertEquals(List.of("1:Widget US", "2:Widget US", "3:Gadget", "6:Nothing"),
             rows("SELECT o.id, p.name FROM orders o JOIN products p ON o.pid = p.id AND p.price > 11"));

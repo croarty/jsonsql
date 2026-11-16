@@ -16,8 +16,10 @@ import java.util.Set;
  *
  * A key is a {@code field = field} part of the condition, on its own or joined to the rest
  * by AND. Its side that names the joined table is read from the joined table, and the other
- * side from the rows so far; with neither side naming it, the left side is read from the
- * rows so far. That is how 3.0.0 read a join, so existing joins keep their results. Two
+ * side from the rows so far. With neither side naming it, a side that names an earlier table
+ * is read from the rows so far, so {@code id = o.pid} reads {@code id} from the joined table;
+ * otherwise the left side is read from the rows so far. Apart from {@code id = o.pid}, which
+ * matched nothing in 3.0.0, that is how 3.0.0 read a join. Two
  * fields of the joined table, or two of earlier tables, aren't a key: they are checked on
  * the combined row, like the rest.
  */
@@ -91,6 +93,11 @@ final class JoinCondition {
             return null;
         }
         if (leftJoined && !rightJoined) {
+            return new Key(rightField, leftField);
+        }
+        // id = o.pid: the earlier table's side is read from the rows so far, the other from the joined table
+        if (!leftJoined && !rightJoined && !qualifiedByAny(leftField, earlierTables, joinedName)
+                && qualifiedByAny(rightField, earlierTables, joinedName)) {
             return new Key(rightField, leftField);
         }
         return new Key(leftField, rightField);

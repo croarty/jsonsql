@@ -161,9 +161,10 @@ public class IndexPlanner {
     }
 
     /**
-     * With a RIGHT or FULL join, a FROM row left out changes which joined rows match nothing,
-     * and those come out with the FROM table's fields missing, where WHERE may then read a
-     * field of the same name from another table. So the FROM table is read in full.
+     * With a RIGHT or FULL join, a FROM row left out changes which joined rows match nothing.
+     * Those rows get the FROM table's fields as null, but only the fields of the rows that
+     * were read: if pruning leaves out a field, or every row, an unprefixed name in WHERE is
+     * then read from another table. So the FROM table is read in full.
      */
     private static boolean keepsUnmatchedJoinedRows(ParsedQuery query) {
         return query.hasJoins() && query.getJoins().stream().anyMatch(join ->

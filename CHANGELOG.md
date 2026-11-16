@@ -4,10 +4,10 @@
 
 ### Added
 
-- `JOIN ... ON` takes any condition `WHERE` takes: `AND`, `OR`, `NOT`, every comparison, `BETWEEN`, `IN`, `LIKE`, `IS NULL`, arithmetic, `CASE`, `CAST` and functions. For example `ON o.productId = p.id AND o.region = p.region`, `ON p.price >= b.low AND p.price < b.high` or `ON LOWER(o.code) = LOWER(c.code)`. These used to fail when the query ran.
+- `JOIN ... ON` takes any condition `WHERE` takes: `AND`, `OR`, `NOT`, every comparison, `BETWEEN`, `IN`, `LIKE`, `IS NULL`, arithmetic, `CASE`, `CAST` and functions. For example `ON o.productId = p.id AND o.region = p.region`, `ON p.price >= b.low AND p.price < b.high` or `ON LOWER(o.code) = LOWER(c.code)`. Conditions with `AND`, `OR` or a comparison other than `=` used to fail when the query ran; for the others, see Fixed.
 - `LEFT JOIN` keeps a left row when no joined row passes the whole condition, so `LEFT JOIN products p ON o.productId = p.id AND o.status = 'open'` keeps every order and fills in the product only for open ones.
 - Each `field = field` part joined by `AND` is a join key looked up by hash, so `ON a.x = b.x AND a.y = b.y` stays fast. A join with no such part compares every pair of rows.
-- `RIGHT [OUTER] JOIN` keeps every row of the joined table, and `FULL [OUTER] JOIN` keeps every row of both sides, with `null` for the other side's columns where nothing matched. Unmatched joined rows come after the matched rows, in their own order.
+- `RIGHT [OUTER] JOIN` keeps every row of the joined table, and `FULL [OUTER] JOIN` keeps every row of both sides, with `null` for the other side's columns where nothing matched. An unprefixed name that belongs to an earlier table reads `null` on an unmatched joined row, not the joined table's field of the same name. Unmatched joined rows come after the matched rows, in their own order.
 - `CROSS JOIN` and comma joins between tables (`FROM a, b`) pair every row with every row. They used to work only with `UNNEST`.
 - The FROM table of a query with a `RIGHT` or `FULL JOIN` is read in full, without index pruning, which would change which joined rows count as unmatched.
 - `NATURAL JOIN` now says to write `JOIN ... ON`, and `ON` after `CROSS JOIN` or a comma is rejected.
@@ -17,7 +17,9 @@
 
 - `ON p.a = p.b`, where both fields are in the joined table, matched nothing. It now keeps the joined rows where the two fields are equal, as in SQL.
 - `ON o.a = c.b`, where both fields are in tables joined earlier, read `c.b` from the table being joined, so it matched nothing. Both fields are now read from the earlier tables, and the condition keeps the rows where they are equal.
+- `ON id = o.productId`, with no table name on the left and an earlier table's on the right, read `o.productId` from the table being joined, so it matched nothing. It now reads `id` from the joined table, as `ON o.productId = id` always did.
 - A literal on one side of `ON`, such as `ON p.category = 'Tools'` or `ON p.inStock = true`, was read as a field name and matched nothing. It is now compared as a value.
+- A calculation or function on one side of `ON`, such as `ON o.productId + 1 = p.id` or `ON LOWER(o.code) = LOWER(c.code)`, was also read as a field name and matched nothing. It is now worked out for each row.
 - A second `ON` for one join (`JOIN p ON a ON b`) was silently ignored. It is now an error.
 
 ## 3.0.0 - 2026-11-16

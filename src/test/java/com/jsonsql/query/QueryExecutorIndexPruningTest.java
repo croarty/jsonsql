@@ -90,6 +90,19 @@ class QueryExecutorIndexPruningTest {
     }
 
     @Test
+    void rightJoinsAreNotPrunedEvenWhenEveryFileWouldBeLeftOut() throws Exception {
+        // No product is Garden, so pruning would leave no products, and so no fields to fill with
+        // null: the unmatched shelf's own category would then pass WHERE
+        writeFile("shelves.json", """
+            [{"id": 10, "pid": 1, "category": "Garden"}]""");
+        mappingManager.addMapping("shelves", "shelves.json:$[*]");
+
+        String sql = "SELECT s.id FROM products p RIGHT JOIN shelves s ON p.id = s.pid WHERE category = 'Garden'";
+        assertSameResult(sql);
+        assertEquals("[]", indexed.execute(sql));
+    }
+
+    @Test
     void equalityResultsMatchFullScan() throws Exception {
         assertSameResult("SELECT id, category FROM products WHERE category = 'Furniture'");
         assertSameResult("SELECT id FROM products WHERE category = 'Tools'");
