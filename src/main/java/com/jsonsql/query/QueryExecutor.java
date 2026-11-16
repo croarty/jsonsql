@@ -927,88 +927,75 @@ public class QueryExecutor implements FieldAccessor {
     private List<JsonNode> executeJoins(List<JsonNode> leftData, ParsedQuery parsedQuery, QueryExecutionContext context) throws IOException {
         List<JsonNode> result = leftData;
 
+        // The names ON can use for the rows so far
+        Set<String> earlierTables = new HashSet<>();
+        earlierTables.add(parsedQuery.getFromTable().getEffectiveName());
+        if (parsedQuery.hasUnnests()) {
+            for (UnnestInfo unnest : parsedQuery.getUnnests()) {
+                earlierTables.add(unnest.getAlias());
+            }
+        }
+
         for (JoinInfo joinInfo : parsedQuery.getJoins()) {
             List<JsonNode> rightData = loadTableData(joinInfo.getTable(), context);
-            result = performJoin(result, rightData, joinInfo);
+            result = performJoin(result, rightData, joinInfo, earlierTables);
+            earlierTables.add(joinInfo.getTable().getEffectiveName());
         }
 
         return result;
     }
 
     /**
-     * Perform a single JOIN operation.
+     * Perform a single JOIN operation. Rows come out in the order of the rows so far and,
+     * for each, in the order of the joined table.
      */
     private List<JsonNode> performJoin(
         List<JsonNode> leftData,
         List<JsonNode> rightData,
-        JoinInfo joinInfo
+        JoinInfo joinInfo,
+        Set<String> earlierTables
     ) {
         List<JsonNode> result = new ArrayList<>();
-        String onCondition = joinInfo.getOnCondition();
+        JoinCondition condition = JoinCondition.of(joinInfo.getOn(), joinInfo.getTable(), earlierTables);
+        List<JoinCondition.Key> keys = condition.keys();
+        Expression residual = condition.residual();
 
-        // Parse ON condition (e.g., "o.productId = p.id")
-        JoinCondition condition = orientJoinCondition(parseJoinCondition(onCondition), joinInfo.getTable());
-
-        JoinIndex rightIndex = new JoinIndex(rightData, row -> getFieldValue(row, condition.rightField()));
+        // With keys, look the joined rows up by them; without, every joined row is a candidate
+        JoinIndex rightIndex = keys.isEmpty() ? null : new JoinIndex(rightData, keys.stream()
+            .<java.util.function.Function<JsonNode, JsonNode>>map(key -> row -> getFieldValue(row, key.rightField()))
+            .toList());
+        WhereEvaluator evaluator = new WhereEvaluator(this);
 
         for (JsonNode leftRow : leftData) {
-            List<JsonNode> matches = rightIndex.matches(getFieldValue(leftRow, condition.leftField()));
+            List<JsonNode> candidates = rightData;
+            if (rightIndex != null) {
+                List<JsonNode> leftValues = new ArrayList<>(keys.size());
+                for (JoinCondition.Key key : keys) {
+                    leftValues.add(getFieldValue(leftRow, key.leftField()));
+                }
+                candidates = rightIndex.matchesAll(leftValues);
+            }
 
-            for (JsonNode rightRow : matches) {
+            boolean matched = false;
+            for (JsonNode rightRow : candidates) {
                 // Merge left and right rows
                 ObjectNode mergedRow = objectMapper.createObjectNode();
                 mergedRow.setAll((ObjectNode) leftRow);
                 mergedRow.setAll((ObjectNode) rightRow);
-                result.add(mergedRow);
+                if (residual == null || evaluator.evaluate(mergedRow, residual)) {
+                    result.add(mergedRow);
+                    matched = true;
+                }
             }
 
             // For LEFT JOIN, include left row even if no match found
-            if (joinInfo.isLeftJoin() && matches.isEmpty()) {
+            if (joinInfo.isLeftJoin() && !matched) {
                 result.add(leftRow);
             }
         }
 
+        reportLeftOut(evaluator.leftOut("found"), evaluator.leftOut("left out"));
         return result;
-    }
-
-    /**
-     * Parse JOIN ON condition into left and right field paths.
-     */
-    private JoinCondition parseJoinCondition(String onCondition) {
-        // Only a single equi-join "a.b = c.d" is supported.
-        String normalized = onCondition.trim();
-        String upper = normalized.toUpperCase();
-
-        if (upper.contains(" AND ") || upper.contains(" OR ")) {
-            throw new IllegalArgumentException(
-                "Only a single equi-join condition is supported in JOIN ON, got: " + onCondition);
-        }
-
-        // Reject non-equality comparison operators (>=, <=, <>, !=, >, <).
-        if (normalized.contains(">=") || normalized.contains("<=") || normalized.contains("<>")
-            || normalized.contains("!=") || normalized.contains(">") || normalized.contains("<")) {
-            throw new IllegalArgumentException(
-                "Only equi-join (=) conditions are supported in JOIN ON, got: " + onCondition);
-        }
-
-        String[] parts = normalized.split("=");
-        if (parts.length != 2 || parts[0].trim().isEmpty() || parts[1].trim().isEmpty()) {
-            throw new IllegalArgumentException("Invalid JOIN ON condition: " + onCondition);
-        }
-
-        return new JoinCondition(parts[0].trim(), parts[1].trim());
-    }
-
-    /**
-     * Put the joined table's field on the right, so "p.id = o.productId" and
-     * "o.productId = p.id" behave the same when joining p.
-     */
-    private JoinCondition orientJoinCondition(JoinCondition condition, TableInfo joinedTable) {
-        String prefix = joinedTable.getEffectiveName() + ".";
-        if (condition.leftField().startsWith(prefix) && !condition.rightField().startsWith(prefix)) {
-            return new JoinCondition(condition.rightField(), condition.leftField());
-        }
-        return condition;
     }
 
     /**
@@ -1299,10 +1286,5 @@ public class QueryExecutor implements FieldAccessor {
         });
         return key.toString();
     }
-
-    /**
-     * Simple record for JOIN conditions.
-     */
-    private record JoinCondition(String leftField, String rightField) {}
 }
 

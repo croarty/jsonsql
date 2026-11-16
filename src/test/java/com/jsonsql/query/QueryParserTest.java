@@ -71,6 +71,23 @@ class QueryParserTest {
     }
 
     @Test
+    void testJoinKeepsTheWholeOnCondition() throws QueryParseException {
+        JoinInfo join = parser.parse(
+            "SELECT * FROM orders o JOIN products p ON o.productId = p.id AND (p.price > 5 OR LOWER(o.code) = 'x')"
+        ).getJoins().get(0);
+
+        assertInstanceOf(net.sf.jsqlparser.expression.operators.conditional.AndExpression.class, join.getOn());
+        assertEquals("o.productId = p.id AND (p.price > 5 OR LOWER(o.code) = 'x')", join.getOnCondition());
+    }
+
+    @Test
+    void testJoinWithoutOnIsRejected() {
+        QueryParseException ex = assertThrows(QueryParseException.class,
+            () -> parser.parse("SELECT * FROM orders o, products p"));
+        assertEquals("JOIN requires ON condition", ex.getMessage());
+    }
+
+    @Test
     void testSelectWithLeftJoin() throws QueryParseException {
         ParsedQuery query = parser.parse(
             "SELECT * FROM orders o LEFT JOIN products p ON o.productId = p.id"

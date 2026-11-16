@@ -137,6 +137,77 @@ class JoinIndexTest {
         assertTrue(indexOf(List.of()).matches(MAPPER.readTree("1")).isEmpty());
     }
 
+    private static ObjectNode pair(int id, String a, String b) throws Exception {
+        ObjectNode row = JsonNodeFactory.instance.objectNode();
+        row.put("id", id);
+        if (a != null) {
+            row.set("a", MAPPER.readTree(a));
+        }
+        if (b != null) {
+            row.set("b", MAPPER.readTree(b));
+        }
+        return row;
+    }
+
+    private static JoinIndex compositeIndexOf(List<JsonNode> rows) {
+        return new JoinIndex(rows, List.of(row -> row.get("a"), row -> row.get("b")));
+    }
+
+    private static List<JsonNode> values(String a, String b) throws Exception {
+        List<JsonNode> values = new ArrayList<>();
+        values.add(a == null ? null : MAPPER.readTree(a));
+        values.add(b == null ? null : MAPPER.readTree(b));
+        return values;
+    }
+
+    @Test
+    void aCompositeKeyMatchesOnlyWhenEveryPartMatches() throws Exception {
+        JoinIndex index = compositeIndexOf(List.of(
+            pair(0, "1", "\"EU\""), pair(1, "1", "\"US\""), pair(2, "2", "\"EU\""), pair(3, "1.0", "\"EU\""),
+            pair(4, "\"1\"", "\"EU\"")));
+
+        assertEquals(List.of(0, 3), ids(index.matchesAll(values("1", "\"EU\""))));
+        assertEquals(List.of(1), ids(index.matchesAll(values("1.00", "\"US\""))));
+        assertEquals(List.of(4), ids(index.matchesAll(values("\"1\"", "\"EU\""))));
+        assertTrue(index.matchesAll(values("2", "\"US\"")).isEmpty());
+    }
+
+    @Test
+    void theValuesOfACompositeKeyDoNotRunTogether() throws Exception {
+        JoinIndex index = compositeIndexOf(List.of(pair(0, "\"a,b\"", "\"c\""), pair(1, "\"a\"", "\"b,c\"")));
+
+        assertEquals(List.of(0), ids(index.matchesAll(values("\"a,b\"", "\"c\""))));
+        assertEquals(List.of(1), ids(index.matchesAll(values("\"a\"", "\"b,c\""))));
+    }
+
+    @Test
+    void aNullInAnyPartOfACompositeKeyMatchesNothing() throws Exception {
+        JoinIndex index = compositeIndexOf(List.of(
+            pair(0, "1", "null"), pair(1, "1", null), pair(2, "null", "\"EU\""), pair(3, "1", "\"EU\"")));
+
+        assertTrue(index.matchesAll(values("1", "null")).isEmpty());
+        assertTrue(index.matchesAll(values("1", null)).isEmpty());
+        assertTrue(index.matchesAll(values(null, "\"EU\"")).isEmpty());
+        assertEquals(List.of(3), ids(index.matchesAll(values("1", "\"EU\""))));
+    }
+
+    @Test
+    void aSingleKeyAsAListMatchesAsTheSingleKeyDoes() throws Exception {
+        List<JsonNode> values = awkwardValues();
+        List<JsonNode> rows = new ArrayList<>();
+        for (int i = 0; i < values.size(); i++) {
+            rows.add(row(i, values.get(i)));
+        }
+        JoinIndex single = indexOf(rows);
+        JoinIndex list = new JoinIndex(rows, List.of(row -> row.get("k")));
+
+        for (JsonNode value : values) {
+            List<JsonNode> asList = new ArrayList<>();
+            asList.add(value);
+            assertEquals(single.matches(value), list.matchesAll(asList), "joining on " + value);
+        }
+    }
+
     @Test
     void nullAndMissingMatchNothing() throws Exception {
         JoinIndex index = indexOf(List.of(row(0, MAPPER.readTree("null")), row(1, null)));
