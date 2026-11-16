@@ -102,11 +102,72 @@ class OuterAndCrossJoinTest {
     }
 
     @Test
-    void anUnmatchedJoinedRowHasOnlyItsOwnFields() throws Exception {
-        assertEquals("[{\"id\":3,\"name\":\"C\",\"cat\":\"x\"}]",
+    void anUnmatchedJoinedRowHasTheEarlierTablesFieldsAsNull() throws Exception {
+        // id is in both tables: a later table's field overwrites an earlier one in SELECT *, as for matched rows
+        assertEquals("[{\"id\":3,\"pid\":null,\"qty\":null,\"name\":\"C\",\"cat\":\"x\"}]",
             executor.execute("SELECT * FROM orders o RIGHT JOIN products p ON o.pid = p.id WHERE p.id = 3"));
         assertEquals(List.of("C:x"),
             rows("SELECT name, cat FROM orders o RIGHT JOIN products p ON o.pid = p.id WHERE p.id = 3"));
+    }
+
+    @Test
+    void anUnprefixedNameIsReadFromTheEarlierTableOnUnmatchedRows() throws Exception {
+        // id is in both tables, so it means o.id, which is null where no order matched
+        assertEquals(List.of("1:1:A", "2:2:B", "null:3:C", "null:null:D"),
+            rows("SELECT id AS oid, p.id AS pid, p.name FROM orders o RIGHT JOIN products p ON o.pid = p.id"));
+        assertEquals(List.of("C", "D"),
+            rows("SELECT p.name FROM orders o RIGHT JOIN products p ON o.pid = p.id WHERE id IS NULL"));
+        assertEquals(List.of("null:C", "null:D", "1:A", "2:B", "3:null", "4:null"),
+            rows("SELECT id AS oid, p.name FROM orders o FULL JOIN products p ON o.pid = p.id ORDER BY id, p.name"));
+    }
+
+    @Test
+    void aFieldOnlySomeEarlierRowsHaveIsNullOnUnmatchedRows() throws Exception {
+        table("mixed", """
+            [{"id": 1, "pid": 1}, {"id": 2, "pid": 9, "name": "order two"}]
+            """);
+        // The matched row's m has no name, so name is read from p, as in any join since 3.0.0
+        assertEquals(List.of("1:A", "null:null", "null:null", "null:null"),
+            rows("SELECT m.id, name FROM mixed m RIGHT JOIN products p ON m.pid = p.id AND p.id <> 2"));
+    }
+
+    @Test
+    void withNoRowsSoFarAnUnprefixedNameIsReadFromTheJoinedTable() throws Exception {
+        // An empty table has no fields to copy, so there is nothing to say pid belongs to it
+        assertEquals(List.of("1", "3"), rows("SELECT pid FROM empty e RIGHT JOIN stock s ON e.pid = s.pid"));
+        assertEquals("[{\"pid\":1,\"shop\":\"north\"},{\"pid\":3,\"shop\":\"south\"}]",
+            executor.execute("SELECT * FROM empty e RIGHT JOIN stock s ON e.pid = s.pid"));
+    }
+
+    @Test
+    void leftJoinRowsAreUnchanged() throws Exception {
+        // An unmatched left row has no fields of the joined table, as in 3.0.0; FULL JOIN does the same
+        assertEquals("[{\"id\":3,\"pid\":9,\"qty\":1}]",
+            executor.execute("SELECT * FROM orders o LEFT JOIN products p ON o.pid = p.id WHERE o.id = 3"));
+        assertEquals("[{\"id\":3,\"pid\":9,\"qty\":1}]",
+            executor.execute("SELECT * FROM orders o FULL JOIN products p ON o.pid = p.id WHERE o.id = 3"));
+    }
+
+    @Test
+    void nullFilledRowsInAChain() throws Exception {
+        assertEquals(List.of("1:A:north", "null:C:south"),
+            rows("SELECT o.id, p.name, s.shop FROM orders o RIGHT JOIN products p ON o.pid = p.id"
+                + " JOIN stock s ON s.pid = p.id"));
+        assertEquals(List.of("1:A:north", "2:B:null", "3:null:null", "4:null:null", "null:C:south", "null:D:null"),
+            rows("SELECT o.id, p.name, s.shop FROM orders o FULL JOIN products p ON o.pid = p.id"
+                + " LEFT JOIN stock s ON s.pid = p.id"));
+        // A second RIGHT JOIN fills in both earlier tables
+        assertEquals(List.of("1:A:1", "null:null:3"),
+            rows("SELECT id, p.name, s.pid FROM orders o JOIN products p ON o.pid = p.id"
+                + " RIGHT JOIN stock s ON s.pid = p.id"));
+    }
+
+    @Test
+    void csvForARightJoinWhereNothingMatches() throws Exception {
+        String json = executor.execute("SELECT * FROM orders o RIGHT JOIN stock s ON o.id = s.pid + 100");
+        assertEquals("[{\"id\":null,\"pid\":1,\"qty\":null,\"shop\":\"north\"},{\"id\":null,\"pid\":3,\"qty\":null,\"shop\":\"south\"}]", json);
+        assertEquals("id,pid,qty,shop\n,1,,north\n,3,,south\n",
+            new com.jsonsql.output.CsvFormatter().format(json).replace("\r", ""));
     }
 
     @Test

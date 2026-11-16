@@ -97,7 +97,15 @@ class SqliteComparisonTest {
 
     private static final String JOIN_COLUMNS = "p.id AS pi, o.id AS oi, o.n AS n, p.name AS nm";
 
-    private record Query(String sql, List<String> orderedBy) {
+    /**
+     * @param sqliteSql the same query for SQLite, which rejects an unprefixed name that two
+     *                  tables share; JsonSQL reads it from the earliest table that has it
+     */
+    private record Query(String sql, List<String> orderedBy, String sqliteSql) {
+        Query(String sql, List<String> orderedBy) {
+            this(sql, orderedBy, sql);
+        }
+
         @Override
         public String toString() {
             return sql;
@@ -165,6 +173,11 @@ class SqliteComparisonTest {
 
     private static Query ordered(String sql, String... columns) {
         return new Query(sql, List.of(columns));
+    }
+
+    /** A query with an unprefixed shared name, and the same query with that name prefixed for SQLite. */
+    private static Query prefixedForSqlite(String sql, String sqliteSql, String... orderedBy) {
+        return new Query(sql, List.of(orderedBy), sqliteSql);
     }
 
     static Stream<Query> whereQueries() {
@@ -316,7 +329,29 @@ class SqliteComparisonTest {
             any("SELECT p.id AS pi, o.id AS oi, c.label AS l FROM p, o, c WHERE p.id = o.pid AND c.st = o.st"),
             any("SELECT o.id AS oi, c.label AS l FROM o CROSS JOIN c LEFT JOIN p ON p.id = o.pid AND c.id = 1"),
             any("SELECT COUNT(*) AS n, COUNT(o.id) AS a, COUNT(p.id) AS b FROM p FULL JOIN o ON p.id = o.pid"),
-            any("SELECT p.cat AS cat, COUNT(o.id) AS n FROM o RIGHT JOIN p ON p.id = o.pid GROUP BY p.cat"));
+            any("SELECT p.cat AS cat, COUNT(o.id) AS n FROM o RIGHT JOIN p ON p.id = o.pid GROUP BY p.cat"),
+            // An unprefixed name is read from the earliest table that has it, also on unmatched rows
+            prefixedForSqlite("SELECT p.id AS pi, id AS x FROM o RIGHT JOIN p ON p.id = o.pid",
+                "SELECT p.id AS pi, o.id AS x FROM o RIGHT JOIN p ON p.id = o.pid"),
+            prefixedForSqlite("SELECT p.id AS pi FROM o RIGHT JOIN p ON p.id = o.pid WHERE id IS NULL",
+                "SELECT p.id AS pi FROM o RIGHT JOIN p ON p.id = o.pid WHERE o.id IS NULL"),
+            prefixedForSqlite("SELECT p.id AS pi, o.id AS oi FROM o FULL JOIN p ON p.id = o.pid WHERE id > 101",
+                "SELECT p.id AS pi, o.id AS oi FROM o FULL JOIN p ON p.id = o.pid WHERE o.id > 101"),
+            prefixedForSqlite("SELECT id AS x, p.id AS pi FROM o FULL JOIN p ON p.id = o.pid ORDER BY id, p.id",
+                "SELECT o.id AS x, p.id AS pi FROM o FULL JOIN p ON p.id = o.pid ORDER BY o.id, p.id", "x", "pi"),
+            prefixedForSqlite("SELECT c.label AS l, st AS s FROM o RIGHT JOIN c ON o.st = c.st AND o.n > 1",
+                "SELECT c.label AS l, o.st AS s FROM o RIGHT JOIN c ON o.st = c.st AND o.n > 1"),
+            prefixedForSqlite("SELECT id AS x, o.id AS oi FROM p FULL JOIN o ON p.id = o.pid",
+                "SELECT p.id AS x, o.id AS oi FROM p FULL JOIN o ON p.id = o.pid"),
+            prefixedForSqlite("SELECT id AS x, c.label AS l FROM o RIGHT JOIN p ON p.id = o.pid JOIN c ON c.id = p.id",
+                "SELECT o.id AS x, c.label AS l FROM o RIGHT JOIN p ON p.id = o.pid JOIN c ON c.id = p.id"),
+            prefixedForSqlite("SELECT id AS x, c.label AS l FROM o FULL JOIN p ON p.id = o.pid LEFT JOIN c ON c.st = o.st",
+                "SELECT o.id AS x, c.label AS l FROM o FULL JOIN p ON p.id = o.pid LEFT JOIN c ON c.st = o.st"),
+            // An unprefixed name on one side and an earlier table's name on the other
+            any("SELECT " + j + " FROM o JOIN p ON qty = o.n"),
+            any("SELECT " + j + " FROM o JOIN p ON o.n = qty"),
+            any("SELECT " + j + " FROM o LEFT JOIN p ON qty = o.n AND price > 0"),
+            any("SELECT " + j + " FROM o RIGHT JOIN p ON qty = o.n"));
     }
 
     static Stream<Query> unionAndCteQueries() {
@@ -681,7 +716,7 @@ class SqliteComparisonTest {
 
     private void assertMatchesSqlite(Query query) throws Exception {
         List<String> columns = new ArrayList<>();
-        List<List<String>> expected = runSqlite(query.sql(), columns);
+        List<List<String>> expected = runSqlite(query.sqliteSql(), columns);
         List<List<String>> actual = runJsonSql(query.sql(), columns);
 
         assertEquals(sorted(expected), sorted(actual), "rows differ");

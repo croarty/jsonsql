@@ -56,9 +56,23 @@ class JoinConditionKeysTest {
     }
 
     @Test
-    void aNameWithoutATableIsReadFromTheRowsSoFar() throws Exception {
+    void aNameWithoutATableIsReadFromTheOtherSideOfANamedTable() throws Exception {
         assertEquals(List.of("pid=p.id"), keys(split("p.id = pid", "p", "o")));
         assertEquals(List.of("o.pid=id"), keys(split("o.pid = id", "p", "o")));
+    }
+
+    @Test
+    void anEarlierTableOnTheRightIsReadFromTheRowsSoFar() throws Exception {
+        assertEquals(List.of("o.pid=id"), keys(split("id = o.pid", "p", "o")));
+        assertEquals(List.of("c.code=profile.code"), keys(split("profile.code = c.code", "p", "o", "c")));
+        // A name that isn't a table, such as a typo, is read from the joined table
+        assertEquals(List.of("o.pid=x.id"), keys(split("x.id = o.pid", "p", "o")));
+    }
+
+    @Test
+    void theJoinedTableStillDecidesWhenBothSidesNameATable() throws Exception {
+        assertEquals(List.of("o.pid=p.id"), keys(split("p.id = o.pid", "p", "o")));
+        assertEquals(List.of("o.pid=p.id"), keys(split("o.pid = p.id", "p", "o")));
     }
 
     @Test

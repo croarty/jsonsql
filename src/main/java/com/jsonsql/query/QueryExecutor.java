@@ -1001,17 +1001,46 @@ public class QueryExecutor implements FieldAccessor {
             }
         }
 
-        // For RIGHT and FULL JOIN, then the joined rows that matched nothing, in their order
+        // For RIGHT and FULL JOIN, then the joined rows that matched nothing, in their order,
+        // with the earlier tables' fields as null
         if (type.keepsUnmatchedRight()) {
+            ObjectNode earlierAsNull = nullShape(leftData);
             for (JsonNode rightRow : rightData) {
                 if (!matchedRight.contains(rightRow)) {
-                    result.add(rightRow);
+                    ObjectNode unmatchedRow = objectMapper.createObjectNode();
+                    unmatchedRow.setAll(earlierAsNull);
+                    unmatchedRow.setAll((ObjectNode) rightRow);
+                    result.add(unmatchedRow);
                 }
             }
         }
 
         reportLeftOut(evaluator.leftOut("found"), evaluator.leftOut("left out"));
         return result;
+    }
+
+    /**
+     * The rows so far as one row of nulls: each table's wrapper holding every top-level field
+     * any of its rows has, set to null. An unmatched joined row starts from this, so an
+     * unprefixed name of an earlier table is found there, as null, rather than read from the
+     * joined table. With no rows so far there are no fields to copy, and this is empty.
+     */
+    private ObjectNode nullShape(List<JsonNode> rows) {
+        ObjectNode shape = objectMapper.createObjectNode();
+        for (JsonNode row : rows) {
+            for (var entry : row.properties()) {
+                JsonNode value = entry.getValue();
+                if (value.isObject()) {
+                    JsonNode existing = shape.get(entry.getKey());
+                    ObjectNode fields = existing instanceof ObjectNode object ? object : shape.putObject(entry.getKey());
+                    value.fieldNames().forEachRemaining(fields::putNull);
+                } else if (!shape.has(entry.getKey())) {
+                    // A value at the top of the row, such as an UNNEST element
+                    shape.putNull(entry.getKey());
+                }
+            }
+        }
+        return shape;
     }
 
     /**
