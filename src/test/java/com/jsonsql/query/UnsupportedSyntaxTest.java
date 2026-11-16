@@ -122,6 +122,17 @@ class UnsupportedSyntaxTest {
         "SELECT * FROM (SELECT SOUNDEX(name) FROM products) t                   | Function or aggregate in SELECT list: SOUNDEX(name) is not supported",
         "SELECT * FROM products p JOIN (SELECT id FROM products WHERE SUM(id) > 1) t ON p.id = t.id | Function in WHERE: SUM(id) > 1 is not supported",
         "SELECT * FROM (VALUES (1), (2)) AS t(x)                                | VALUES is not supported (use a mapped table)",
+        // JSqlParser reads one row of VALUES as a table function, so each form needs its own check
+        "SELECT * FROM (VALUES (1, 2)) t                                        | VALUES is not supported (use a mapped table)",
+        "SELECT * FROM (VALUES (1, 2)) AS t(a, b)                               | VALUES is not supported (use a mapped table)",
+        "SELECT * FROM (VALUES 1, 2) t                                          | VALUES is not supported (use a mapped table)",
+        "SELECT * FROM VALUES (1, 2)                                            | VALUES is not supported (use a mapped table)",
+        "SELECT * FROM values (1, 2)                                            | VALUES is not supported (use a mapped table)",
+        "SELECT * FROM products p JOIN (VALUES (1, 2)) v ON p.id = 1            | VALUES is not supported (use a mapped table)",
+        "SELECT * FROM products p JOIN VALUES (1, 2) ON p.id = 1                | VALUES is not supported (use a mapped table)",
+        // A table function after a join used to be read as UNNEST, and fail as bad UNNEST syntax
+        "SELECT * FROM products p JOIN generate_series(1, 3) g ON p.id = 1      | Table function in FROM: generate_series(1, 3) g is not supported (use a mapped table or a derived table)",
+        "SELECT * FROM products p, generate_series(1, 3) g                      | Table function in FROM: generate_series(1, 3) g is not supported",
         "SELECT * FROM LATERAL (SELECT name FROM products) t                    | LATERAL is not supported (a derived table can't refer to the outer query)",
         "SELECT * FROM products p JOIN LATERAL (SELECT 1) t ON 1 = 1            | LATERAL is not supported",
         "SELECT * FROM generate_series(1, 3) AS g(x)                            | Table function in FROM: generate_series(1, 3) AS g(x) is not supported (use a mapped table or a derived table)",
