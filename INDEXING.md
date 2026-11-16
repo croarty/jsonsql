@@ -157,7 +157,7 @@ a catalog `id`), `quantity`, `unitPrice`, `status`, `channel`, `region`, and `qu
 > `--indexes-file` at scratch files. Adjust paths as you like.
 
 ```bash
-JAR=target/jsonsql-3.1.0.jar
+JAR=target/jsonsql-3.1.1.jar
 CFG=/tmp/jsonsql-mappings.json
 IDX=/tmp/jsonsql-indexes.json
 
