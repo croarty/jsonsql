@@ -333,7 +333,7 @@ Dry run OK.
     products -> complex-products.json:$.products[*]
 ```
 
-Works with `--run-query` and parameterized queries (`--param` is applied before validation). `--dry-run` ignores `--output`, `--clipboard` (with a warning), and `--format`.
+Works with `--run-query` and parameterized queries (`--param` is applied before validation). `--dry-run` ignores `--output` and `--clipboard` (with a warning), and a valid `--format`. An unknown `--format` is still an error, with exit code `2`.
 
 ### Saved Queries
 
@@ -693,7 +693,7 @@ jsonsql --query "SELECT TOP 5 p.name, o.quantity FROM orders o JOIN products p O
 
 #### UNION, INTERSECT and EXCEPT Queries
 
-Combine results from multiple SELECT queries using `UNION` or `UNION ALL`, or keep the rows they share or don't share with `INTERSECT` and `EXCEPT`:
+Combine results from multiple SELECT queries using `UNION` or `UNION ALL`, or keep the rows they share or don't share with `INTERSECT` and `EXCEPT`. These examples, and the results in their comments, assume `products` and `orders` are mapped to the `complex-*.json` fixtures (see [COMPLEX-QUERY-EXAMPLES.md](COMPLEX-QUERY-EXAMPLES.md#data-setup)):
 
 ```bash
 # UNION - combine results and remove duplicates
@@ -752,32 +752,31 @@ jsonsql --query "SELECT * FROM products" --clipboard
 #### Pretty Print
 
 ```bash
-jsonsql --query "SELECT * FROM products" --pretty
+jsonsql --query "SELECT * FROM products LIMIT 2" --pretty --data-dir example-data
 ```
 
 Output:
 
 ```json
-[
-  {
-    "id": 1,
-    "name": "Widget",
-    "price": 19.99,
-    "category": "Tools"
-  },
-  {
-    "id": 2,
-    "name": "Gadget",
-    "price": 29.99,
-    "category": "Electronics"
-  }
-]
+[ {
+  "id" : 1,
+  "name" : "Widget",
+  "price" : 19.99,
+  "category" : "Tools",
+  "inStock" : true
+}, {
+  "id" : 2,
+  "name" : "Gadget",
+  "price" : 29.99,
+  "category" : "Electronics",
+  "inStock" : true
+} ]
 ```
 
 #### CSV Output
 
 ```bash
-jsonsql --query "SELECT name, price FROM products" --format csv
+jsonsql --query "SELECT name, price FROM products LIMIT 2" --format csv --data-dir example-data
 ```
 
 Output (header row plus one row per result):
@@ -822,6 +821,8 @@ jsonsql --query "SELECT * FROM products" --output results.json --pretty
 `t.*` is rejected with `SELECT t.* is not supported (use SELECT * or list the columns)`.
 
 #### Calculated columns
+
+The examples here and in [Functions](#functions) and [Calculations in WHERE and ORDER BY](#calculations-in-where-and-order-by) map `products` to `complex-products.json:$.products[*]`, as in [COMPLEX-QUERY-EXAMPLES.md](COMPLEX-QUERY-EXAMPLES.md#data-setup), and the results shown come from that file.
 
 A SELECT column can be worked out from other values:
 
@@ -999,7 +1000,7 @@ jsonsql --data-dir example-data --query "SELECT name FROM products WHERE CAST(sp
 - `WHERE` can't see a SELECT alias, as in SQL, because it runs before the SELECT list. `WHERE doubled > 5` looks for a field called `doubled`.
 - The rules are the same as for calculated columns: dividing by zero gives `null`, and arithmetic on text gives `null` with a warning on stderr, or an error with `--strict`. A `null` never satisfies a comparison, so those rows are left out.
 - A calculation can't use a declared index, so `WHERE price * 2 > 100` reads every file where `WHERE price > 50` could skip some. A plain condition beside it, as in `category = 'Tools' AND price * 2 > 100`, still uses its index.
-- Not yet supported: a calculation in the `ORDER BY` after a `UNION`. Sort by a column of the result, or put the `UNION` in a CTE.
+- A calculation in the `ORDER BY` after a `UNION`, `INTERSECT` or `EXCEPT` is rejected, as in SQLite and PostgreSQL: there, `ORDER BY` takes a column name or position of the result. To sort by a calculation, select it as a column and order by its name, or put the set operation in a [derived table](#derived-tables): `SELECT * FROM (A UNION B) t ORDER BY t.price * 2`.
 
 ### FROM Clause
 
