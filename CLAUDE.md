@@ -9,7 +9,7 @@ mvn test                                  # full suite, about 30 seconds
 mvn test -Dtest=QueryExecutorTest         # one class, while iterating
 mvn verify                                # also checks coverage: 85% line, 75% branch
 mvn package                               # builds target/jsonsql-<version>.jar
-java -jar target/jsonsql-3.0.0.jar --help
+java -jar target/jsonsql-3.1.0.jar --help
 ```
 
 `./mvnw` runs the same commands with the Maven version pinned in `.mvn/wrapper/`. CI runs `./mvnw -B -ntp clean verify` on JDK 21 and 25; the workflows are in `.github/workflows/`.
