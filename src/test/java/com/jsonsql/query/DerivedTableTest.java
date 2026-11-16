@@ -206,9 +206,14 @@ class DerivedTableTest {
 
     @Test
     void aDerivedTableCantSeeTheOuterQuerysTables() throws Exception {
-        // It runs on its own, so p.name inside it names nothing and reads null
+        // It runs on its own, so p.name would find nothing: it is rejected rather than read as null
+        QueryParseException error = assertThrows(QueryParseException.class,
+            () -> rows("SELECT t.x FROM products p CROSS JOIN (SELECT p.name AS x FROM orders WHERE oid = 100) t"));
+        assertTrue(error.getMessage().startsWith("A derived table that refers to another table of the query (p.name)"),
+            error.getMessage());
+        // An unprefixed name it doesn't have still reads null, as any unknown field does
         assertEquals(List.of("null", "null", "null", "null"),
-            rows("SELECT t.x FROM products p CROSS JOIN (SELECT p.name AS x FROM orders WHERE oid = 100) t"));
+            rows("SELECT t.x FROM products p CROSS JOIN (SELECT name AS x FROM orders WHERE oid = 100) t"));
     }
 
     // -- warnings ---------------------------------------------------------------------

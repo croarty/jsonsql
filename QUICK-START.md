@@ -40,6 +40,9 @@ jsonsql --query "SELECT * FROM orders WHERE status = 'active'" --data-dir exampl
 
 # JOIN them
 jsonsql --query "SELECT p.name, o.quantity FROM orders o JOIN products p ON o.productId = p.id" --data-dir example-data --pretty
+
+# Products dearer than the average, with a subquery (Gadget and Thingamajig)
+jsonsql --query "SELECT name, price FROM products WHERE price > (SELECT AVG(price) FROM products)" --data-dir example-data --pretty
 ```
 
 ## Scenario 2: Explicit File Specification

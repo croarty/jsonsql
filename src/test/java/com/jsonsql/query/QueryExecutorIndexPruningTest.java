@@ -113,6 +113,17 @@ class QueryExecutorIndexPruningTest {
     }
 
     @Test
+    void subqueriesAreNotUsedForPruning() throws Exception {
+        assertSameResult("SELECT id FROM products WHERE category IN (SELECT category FROM products WHERE price > 100)");
+        assertSameResult("SELECT id FROM products WHERE category NOT IN (SELECT category FROM products WHERE price > 100)");
+        assertSameResult("SELECT id FROM products WHERE price > (SELECT AVG(price) FROM products)");
+        assertSameResult("SELECT id FROM products WHERE category IN (SELECT category FROM products WHERE price < 10)"
+            + " AND category = 'Tools'");
+        assertEquals("[{\"id\":4}]",
+            indexed.execute("SELECT id FROM products WHERE category IN (SELECT category FROM products WHERE price > 100)"));
+    }
+
+    @Test
     void equalityResultsMatchFullScan() throws Exception {
         assertSameResult("SELECT id, category FROM products WHERE category = 'Furniture'");
         assertSameResult("SELECT id FROM products WHERE category = 'Tools'");

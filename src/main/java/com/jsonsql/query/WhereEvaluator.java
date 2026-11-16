@@ -7,7 +7,9 @@ import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.conditional.OrExpression;
 import net.sf.jsqlparser.expression.operators.relational.*;
 import net.sf.jsqlparser.schema.Column;
+import net.sf.jsqlparser.statement.select.ParenthesedSelect;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -308,44 +310,55 @@ public class WhereEvaluator {
      * Example: WHERE category IN ('Electronics', 'Tools', 'Furniture')
      */
     private Truth evaluateIn(JsonNode row, InExpression inExpr) {
-        JsonNode fieldValue = leftValue(row, inExpr.getLeftExpression());
+        // The values to check against: written out, worked out one at a time as they are
+        // reached, or a subquery's rows, worked out once before the rows
+        var rightExpression = inExpr.getRightExpression();
+        List<Supplier<JsonNode>> listValues = new ArrayList<>();
+        if (rightExpression instanceof ParenthesedExpressionList<?> expressionList) {
+            // ExpressionList extends List directly (getExpressions() is deprecated)
+            for (var expr : expressionList) {
+                listValues.add(() -> resolve(row, (Expression) expr));
+            }
+        } else if (rightExpression instanceof ParenthesedSelect) {
+            for (JsonNode value : fieldAccessor.subqueryValues(rightExpression)) {
+                JsonNode listValue = Values.isNull(value) ? null : value;
+                listValues.add(() -> listValue);
+            }
+        } else {
+            // Unsupported right expression type - fail loudly instead of silently excluding all rows
+            throw new UnsupportedExpressionException(
+                "Unsupported IN expression right-hand side: " + inExpr +
+                " (type: " + (rightExpression == null ? "null" : rightExpression.getClass().getSimpleName()) + ")"
+            );
+        }
 
-        // In SQL, NULL IN (...) and NULL NOT IN (...) are both UNKNOWN
-        // This means NULL values are ALWAYS excluded from IN/NOT IN results
+        // Nothing is in an empty list, NULL included, so IN is false and NOT IN true. Only a
+        // subquery can return an empty list.
+        if (listValues.isEmpty()) {
+            return Truth.of(inExpr.isNot());
+        }
+
+        // In SQL, NULL IN (...) and NULL NOT IN (...) are both UNKNOWN for a list with values
+        JsonNode fieldValue = leftValue(row, inExpr.getLeftExpression());
         if (fieldValue == null || fieldValue.isNull()) {
             return Truth.UNKNOWN;
         }
 
-        // Get the list of values to check against
-        var rightExpression = inExpr.getRightExpression();
-
-        // Handle ExpressionList (the typical case)
-        if (rightExpression instanceof ParenthesedExpressionList) {
-            ParenthesedExpressionList<?> expressionList = (ParenthesedExpressionList<?>) rightExpression;
-
-            // ExpressionList extends List directly (getExpressions() is deprecated)
-            boolean listHasNull = false;
-            for (var expr : expressionList) {
-                JsonNode listValue = resolve(row, (Expression) expr);
-                if (listValue == null) {
-                    listHasNull = true;
-                    continue;
-                }
-                if (Values.equal(fieldValue, listValue)) {
-                    // Found a match
-                    return Truth.of(!inExpr.isNot()); // IN returns true, NOT IN returns false
-                }
+        boolean listHasNull = false;
+        for (Supplier<JsonNode> item : listValues) {
+            JsonNode listValue = item.get();
+            if (listValue == null) {
+                listHasNull = true;
+                continue;
             }
-
-            // No match found: a NULL in the list could have matched, so the answer is UNKNOWN
-            return listHasNull ? Truth.UNKNOWN : Truth.of(inExpr.isNot());
+            if (Values.equal(fieldValue, listValue)) {
+                // Found a match: the items after it are never worked out
+                return Truth.of(!inExpr.isNot()); // IN returns true, NOT IN returns false
+            }
         }
 
-        // Unsupported right expression type - fail loudly instead of silently excluding all rows
-        throw new UnsupportedExpressionException(
-            "Unsupported IN expression right-hand side: " + inExpr +
-            " (type: " + (rightExpression == null ? "null" : rightExpression.getClass().getSimpleName()) + ")"
-        );
+        // No match found: a NULL in the list could have matched, so the answer is UNKNOWN
+        return listHasNull ? Truth.UNKNOWN : Truth.of(inExpr.isNot());
     }
 
     /**

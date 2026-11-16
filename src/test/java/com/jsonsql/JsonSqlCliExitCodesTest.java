@@ -136,6 +136,25 @@ class JsonSqlCliExitCodesTest {
     }
 
     @Test
+    void dryRunLooksInsideSubqueries() {
+        assertExit(OK, run("-q", "SELECT name FROM products WHERE id IN (SELECT id FROM products)", "--dry-run"));
+        assertExit(QUERY, run("-q", "SELECT name FROM products WHERE id IN (SELECT id FROM nope)", "--dry-run"));
+        assertExit(QUERY, run("-q", "SELECT name FROM products WHERE price > (SELECT MAX(id) FROM nope)", "--dry-run"));
+        assertExit(DATA, run("-q", "SELECT name FROM products WHERE id IN (SELECT id FROM missing)", "--dry-run"));
+
+        CliResult exists = run("-q", "SELECT name FROM products WHERE EXISTS (SELECT 1 FROM products)", "--dry-run");
+        assertExit(QUERY, exists);
+        assertTrue(exists.err().contains("EXISTS is not supported"), exists.err());
+    }
+
+    @Test
+    void aSubqueryWithSeveralRowsIsAQueryError() {
+        CliResult result = run("-q", "SELECT name FROM products WHERE id = (SELECT id FROM products)");
+        assertExit(QUERY, result);
+        assertTrue(result.err().contains("Subquery returned 2 rows where one value is expected"), result.err());
+    }
+
+    @Test
     void dryRunLooksInsideDerivedTables() {
         assertExit(OK, run("-q", "SELECT t.id FROM (SELECT id FROM products) t", "--dry-run"));
         assertExit(QUERY, run("-q", "SELECT t.id FROM (SELECT id FROM nope) t", "--dry-run"));

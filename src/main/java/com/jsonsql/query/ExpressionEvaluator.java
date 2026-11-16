@@ -26,6 +26,7 @@ import net.sf.jsqlparser.expression.operators.arithmetic.Modulo;
 import net.sf.jsqlparser.expression.operators.arithmetic.Multiplication;
 import net.sf.jsqlparser.expression.operators.arithmetic.Subtraction;
 import net.sf.jsqlparser.schema.Column;
+import net.sf.jsqlparser.statement.select.ParenthesedSelect;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -144,6 +145,11 @@ final class ExpressionEvaluator {
         }
         if (expression instanceof CastExpression cast) {
             return cast(evaluate(row, cast.getLeftExpression()), castType(cast));
+        }
+        if (expression instanceof ParenthesedSelect) {
+            // Worked out once, before the rows
+            JsonNode value = fields.subqueryValue(expression);
+            return Values.isNull(value) ? null : value;
         }
         if (WhereEvaluator.isCondition(expression)) {
             return conditions.value(row, expression);

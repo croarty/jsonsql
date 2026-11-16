@@ -236,8 +236,8 @@ The following analytics features are **not implemented yet**. They are listed he
 | `NATURAL JOIN` | Error: `NATURAL JOIN is not supported (...)`. Write `JOIN ... ON` |
 | `INTERSECT ALL`, `EXCEPT ALL`, `MINUS` | Error: `INTERSECT ALL is not supported (write INTERSECT, ...)` / `MINUS is not supported (write EXCEPT)` |
 | `INTERSECT` after `UNION` or `EXCEPT` | Error: `INTERSECT after UNION is not supported (...)`. Write the `INTERSECT` first |
-| Subqueries in `WHERE` (`IN (SELECT ...)`, `EXISTS`) | Error: unsupported expression |
+| `EXISTS`, and subqueries that refer to the outer query | Error: `EXISTS is not supported (...)` / `A subquery that refers to the enclosing query (...) is not supported (...)`. Use `IN (SELECT ...)`, or a CTE with `GROUP BY` and a join |
 
-`UNION`, `UNION ALL`, `INTERSECT` and `EXCEPT` **are** supported — see [UNION, INTERSECT and EXCEPT Queries](README.md#union-intersect-and-except-queries). So are `RIGHT`, `FULL` and `CROSS` joins — see [JOIN Clause](README.md#join-clause) — and derived tables in `FROM` and joins — see [Derived Tables](README.md#derived-tables).
+`UNION`, `UNION ALL`, `INTERSECT` and `EXCEPT` **are** supported — see [UNION, INTERSECT and EXCEPT Queries](README.md#union-intersect-and-except-queries). So are `RIGHT`, `FULL` and `CROSS` joins — see [JOIN Clause](README.md#join-clause) — and derived tables in `FROM` and joins — see [Derived Tables](README.md#derived-tables) — and subqueries as values and after `IN` — see [Subqueries](README.md#subqueries).
 
 For the authoritative list of supported syntax, see the [SQL Syntax Support](README.md#sql-syntax-support) and [Known Limitations](README.md#known-limitations) sections of the README.

@@ -323,7 +323,7 @@ Use this before writing queries to discover field names and nesting. Schema is i
 jsonsql --query "SELECT p.name, o.orderId FROM orders o JOIN products p ON o.productId = p.id" --data-dir example-data --dry-run
 ```
 
-Validates SQL syntax, confirms every referenced table has a mapping (or is a CTE or materialized view), and checks that backing JSON files exist — without loading data or returning results. Unsupported syntax that is rejected at parse time (`NATURAL JOIN`, `FETCH`, a function that isn't available, an ungrouped column with `GROUP BY`, an aggregate in `JOIN ... ON`, ...) also fails the dry run. It does **not** check that referenced *fields* exist (see [Known Limitations](#known-limitations)):
+Validates SQL syntax, confirms every referenced table has a mapping (or is a CTE or materialized view), and checks that backing JSON files exist — without loading data or returning results. Unsupported syntax that is rejected at parse time (`NATURAL JOIN`, `FETCH`, a function that isn't available, an ungrouped column with `GROUP BY`, an aggregate in `JOIN ... ON`, `EXISTS`, a subquery that refers to the outer query, ...) also fails the dry run. The tables read by subqueries and derived tables are checked too. It does **not** check that referenced *fields* exist (see [Known Limitations](#known-limitations)):
 
 ```
 Dry run OK.
@@ -552,7 +552,7 @@ jsonsql --query "SELECT * FROM products WHERE ((category = 'Electronics' AND pri
 - Operator precedence follows standard SQL rules
 - SQL comments (`-- ...` and `/* ... */`) are accepted anywhere in the query
 
-**Operands:** each side of a comparison can be a field or a literal, in either order, so `price > 20`, `20 < price` and `price > stock` all work. Text needs single quotes: an unquoted word is a field, so `category = Tools` compares two fields. Double-quoted names are fields, or text if no such field exists. Field names are case-sensitive, and a field that doesn't exist reads as NULL. Either side can also be a calculation, such as `price * stock > 5000` (see [Calculations in WHERE and ORDER BY](#calculations-in-where-and-order-by)), or use a function, such as `LOWER(name) = 'widget'` (see [Functions](#functions)).
+**Operands:** each side of a comparison can be a field or a literal, in either order, so `price > 20`, `20 < price` and `price > stock` all work. Text needs single quotes: an unquoted word is a field, so `category = Tools` compares two fields. Double-quoted names are fields, or text if no such field exists. Field names are case-sensitive, and a field that doesn't exist reads as NULL. Either side can also be a calculation, such as `price * stock > 5000` (see [Calculations in WHERE and ORDER BY](#calculations-in-where-and-order-by)), or use a function, such as `LOWER(name) = 'widget'` (see [Functions](#functions)), or a subquery, such as `price > (SELECT AVG(price) FROM products)` (see [Subqueries](#subqueries)).
 
 **Pattern Matching with LIKE:**
 
@@ -1022,10 +1022,51 @@ SELECT id FROM c
 - The alias is required: `FROM (SELECT ...)` without one is rejected with `A derived table needs an alias, as in FROM (SELECT ...) t`. Column names after the alias, as in `t(x, y)`, are rejected; name the columns inside the subquery.
 - The subquery can be anything a query can be: joins, grouping, calculations, `ORDER BY` and `LIMIT`, its own derived tables, and a `UNION`, `INTERSECT` or `EXCEPT`.
 - It runs once, before the query that reads it, and can read the statement's CTEs (and, inside a CTE body, the CTEs defined before it). A `WITH` inside the subquery is rejected: put the CTEs at the top of the statement.
-- It runs on its own, so it can't refer to the outer query's tables: such a name finds nothing and reads `null`, like any field that doesn't exist. `LATERAL` is rejected.
+- It runs on its own, so it can't refer to the query's other tables. A name prefixed with one of them, as `o.productId` in `JOIN (SELECT ... WHERE id = o.productId) t`, is rejected with `A derived table that refers to another table of the query (o.productId) is not supported (... put the condition in the join's ON instead)`. An unprefixed name it doesn't have reads `null`, like any field that doesn't exist (see [Subqueries](#subqueries)). `LATERAL` is rejected.
 - Errors inside it are reported when the query is parsed, and `--dry-run` checks the mappings and files it reads. Warnings from it appear once, and `--strict` makes them an error.
 - Index pruning applies to the subquery's own `FROM` table, from its own `WHERE`, not from the outer query's.
 - Other things in `FROM` are rejected with a clear error: `VALUES`, table functions such as `generate_series(...)`, `UNNEST(...)` directly after `FROM` (write `FROM t, UNNEST(t.items) AS i(item)`), and parentheses around joins.
+
+### Subqueries
+
+A subquery is a `SELECT` in parentheses inside another query. There are three forms:
+
+```sql
+-- As a value, wherever a value can go: SELECT list, WHERE, HAVING, ORDER BY, GROUP BY, JOIN ON,
+-- and inside CASE, CAST, functions and arithmetic
+SELECT name, price FROM products WHERE price > (SELECT AVG(price) FROM products)
+
+-- After IN or NOT IN
+SELECT name FROM products WHERE id IN (SELECT productId FROM orders WHERE status = 'completed')
+
+-- As a table: see Derived Tables
+SELECT t.category, t.n FROM (SELECT category, COUNT(*) AS n FROM products GROUP BY category) t
+```
+
+- **One column.** A subquery used as a value or after `IN` must select exactly one column; `SELECT *` or two columns is rejected when the query is parsed.
+- **One row for a value.** A subquery used as a value that returns no rows gives `NULL`. One that returns several rows is an error when the query runs, with exit code 1: `Subquery returned 3 rows where one value is expected: (SELECT ...) (add LIMIT 1 or use an aggregate such as MAX)`.
+- **`IN (SELECT ...)`** works exactly as a written-out list of the same values does, including `NULL`: `x NOT IN (SELECT ...)` is unknown, and so matches nothing, when the subquery returns a `NULL`. An empty result makes `IN` false and `NOT IN` true for every row, `NULL` included, since nothing is in an empty list. Values match by the [usual rules](#where-clause): `1` matches `1.0` but not `"1"`.
+- **Run once.** Each subquery runs once, before the rows of the query it is in, whether or not any row needs it. So its warnings appear once, and its errors don't depend on the outer data. `--strict` makes its warnings an error.
+- A subquery can be nested, can be a `UNION`, `INTERSECT` or `EXCEPT`, and can read the statement's CTEs. A `WITH` inside it is rejected. Errors inside it are reported when the query is parsed, and `--dry-run` checks the mappings and files it reads.
+- An unnamed subquery in the SELECT list is named after its text, like any calculated column. Name it with `AS`.
+- Index pruning doesn't use a subquery: `field IN (SELECT ...)` and `field > (SELECT ...)` keep every file.
+
+**Subqueries can't refer to the query around them** (no correlated subqueries). Each one runs once on its own. A subquery that uses a name prefixed with a table of a query around it, such as `p.category` with `p` from outside, is rejected:
+
+```sql
+-- Rejected: A subquery that refers to the enclosing query (p.category) is not supported
+SELECT p.name, p.price FROM products p
+WHERE p.price > (SELECT AVG(price) FROM products WHERE category = p.category)
+
+-- The same question: a CTE works out each category's average once, and a join brings it to each product
+WITH averages AS (SELECT category, AVG(price) AS avg_price FROM products GROUP BY category)
+SELECT p.name, p.price FROM products p JOIN averages a ON p.category = a.category
+WHERE p.price > a.avg_price
+```
+
+A name counts as another table's only when its first part is that table's name or alias. There is no schema, so an **unprefixed** name inside a subquery always belongs to the subquery's own tables: if only the outer table has that field, it reads `NULL`, as any field that doesn't exist does, rather than raising an error. Prefix names in subqueries when in doubt, so that a mistake becomes the error above. A first part that isn't a table of a query around it, as `profile` in `profile.level`, is a nested field, and a subquery's own table with the same alias as an outer one is its own.
+
+`EXISTS` and `NOT EXISTS` are rejected; write `IN (SELECT ...)` or a join. `ANY`, `SOME` and `ALL` are rejected; write `IN (SELECT ...)`, or compare with `MIN` or `MAX` in a subquery. A row value such as `(a, b) IN (SELECT a, b ...)` is rejected.
 
 ### WHERE Clause
 
@@ -1088,7 +1129,7 @@ Each number has one spelling in the output:
 
 Trailing zeros are dropped. A whole number that was written as a decimal keeps one decimal place, up to 20 digits; beyond that, and below `0.000001`, numbers use exponent form.
 
-**Unsupported WHERE expressions fail loudly:** WHERE constructs that are not implemented, such as subqueries (`IN (SELECT ...)`, `EXISTS (...)`) and functions that are not available, raise a clear error instead of silently returning zero rows (see [Known Limitations](#known-limitations)).
+**Unsupported WHERE expressions fail loudly:** WHERE constructs that are not implemented, such as `EXISTS (...)`, a subquery that refers to the outer query, and functions that are not available, are rejected when the query is parsed, so `--dry-run` reports them too, instead of silently returning zero rows (see [Known Limitations](#known-limitations)). Subqueries as values and after `IN` work: see [Subqueries](#subqueries).
 
 ### JOIN Clause
 
@@ -1119,7 +1160,7 @@ LEFT JOIN products p ON o.productId = p.id AND o.status = 'open'
 - **Which table a name is read from.** A `field = field` comparison, on its own or as one of the parts joined by `AND`, is a join key. Its side that names the joined table (`p.id` when joining `products p`) is read from the joined table, and the other side from the rows so far. If neither side names the joined table but one side names an earlier table, that side is read from the rows so far and the other from the joined table, so `ON id = o.productId` reads `id` from the joined table. If neither side names a table, the left side is read from the rows so far and the right side from the joined table. So the two sides can be written in either order (`o.productId = p.id`, `p.id = o.productId`, `o.productId = id` or `id = o.productId`). Every other part of the condition is read from the combined row, as `WHERE` is after a join, so an unqualified name there is looked up in the earlier tables first: qualify names in `ON` when tables share field names.
 - A `field = field` comparison between two fields of the joined table (`ON p.a = p.b`), or between two fields of earlier tables, isn't a join key: it is a filter like any other part.
 - A join with at least one `field = field` key looks rows up by those keys, so its cost grows with the size of the tables. A join with no such key (`ON p.price >= b.low AND p.price < b.high`, or a top-level `OR`) compares every pair of rows, so its cost grows with the product of the table sizes.
-- An aggregate, a subquery, a function that isn't available, or more than one `ON` for a join is rejected at parse time, so `--dry-run` reports it too.
+- An aggregate, `EXISTS`, a function that isn't available, or more than one `ON` for a join is rejected at parse time, so `--dry-run` reports it too. A [subquery](#subqueries) as a value or after `IN` can be used in `ON`; it runs once, before the join.
 - Join keys match by the same rules as `=` in `WHERE` (see [Comparison behavior](#where-clause)): `5` matches `5.0` but not `"5"`. If one file stores an id as a number and another stores it as text, the join finds no matches. Convert one side in a CTE first: `WITH o AS (SELECT orderId, CAST(productId AS INTEGER) AS productId FROM orders) SELECT ... FROM o JOIN products p ON o.productId = p.id`.
 - SQL `NULL` join keys never match anything (including other nulls).
 - Unmatched `LEFT JOIN` rows return `null` for every selected right-hand column, and unmatched `RIGHT JOIN` rows return `null` for every column of the earlier tables. `FULL JOIN` does both. An unmatched `RIGHT` or `FULL JOIN` row holds the earlier tables' fields as `null`, so an unprefixed name that belongs to an earlier table reads `null` there, as it would on a matched row, rather than the joined table's field of the same name. That includes a nested name such as `profile.level` when `profile` is an earlier table's field. (A `null` in the data itself works as it always has: when an earlier table's own `profile` is `null`, `profile.level` is looked for in the later tables.) Those fields are the ones the earlier tables' rows have; if the earlier tables have no rows there are none, and an unprefixed name is read from the joined table. With `SELECT *`, an unmatched `RIGHT` or `FULL JOIN` row shows the earlier tables' fields as `null`, while an unmatched `LEFT` or `FULL JOIN` row has only the fields of the earlier tables.
@@ -1413,12 +1454,17 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 | `JOIN ... USING (...)` | `JOIN ... USING is not supported (write ON a.x = b.x instead)` |
 | More than one `ON` for a join (`JOIN p ON a ON b`) | `More than one ON for JOIN p is not supported (join the conditions with AND)` |
 | An aggregate in `ON` | `Function in JOIN ON: SUM(p.id) = o.productId is not supported (an aggregate can't be used here)` |
-| A subquery or `EXISTS` in `ON` | `Condition in JOIN ON: ... is not supported (...)`, or `Expression in JOIN ON: ...` for `= (SELECT ...)` |
 | `INTERSECT` after `UNION`, `UNION ALL` or `EXCEPT` | `INTERSECT after UNION is not supported (databases disagree on which runs first; write the INTERSECT first, ...)` |
 | `INTERSECT ALL`, `EXCEPT ALL` | `INTERSECT ALL is not supported (write INTERSECT, which removes duplicates)` |
 | `MINUS` | `MINUS is not supported (write EXCEPT)` |
 | Parentheses around a set operation | `Parentheses around UNION, INTERSECT or EXCEPT are not supported (...)` |
-| `IN (SELECT ...)`, `EXISTS` in WHERE | `Unsupported WHERE expression: ...` |
+| `EXISTS`, `NOT EXISTS` | `EXISTS is not supported (use IN (SELECT ...) or a join)` |
+| A subquery that refers to the outer query | `A subquery that refers to the enclosing query (p.category) is not supported (... write a CTE with GROUP BY and join it to the table instead)` |
+| A derived table that refers to another table of the query | `A derived table that refers to another table of the query (o.productId) is not supported (...)` |
+| A subquery as a value or after `IN` with more than one column | `A subquery used as a value must select one column, got 2: (SELECT ...)` |
+| `ANY`, `SOME`, `ALL` | `ANY, SOME and ALL are not supported (use IN (SELECT ...), or MIN or MAX in a subquery)` |
+| A row value, `(a, b) IN (SELECT ...)` | `A row value such as (a, b) is not supported (compare one value at a time)` |
+| Any other condition not listed in this README | `Condition in WHERE: ... is not supported (...)` |
 | An aggregate in WHERE | `Function in WHERE: COUNT(*) > 1 is not supported (use HAVING to filter on an aggregate)` |
 | An aggregate in GROUP BY | `Function in GROUP BY: COUNT(*) + 1 is not supported (an aggregate can't be used here)` |
 | A calculation in the `ORDER BY` after a `UNION` | `Expression in ORDER BY: price * 2 is not supported (...)` |
@@ -1779,7 +1825,7 @@ When enabled, the query engine also writes `DEBUG:` trace lines about CTE and UN
 - **[Saved Queries Guide](SAVED-QUERIES.md)** - Saving, running, and sharing queries
 - **[Saved Queries Reference](SAVED-QUERIES-REFERENCE.md)** - The 39 shipped example queries
 - **[Comprehensive Review](COMPREHENSIVE-REVIEW.md)** - Capability status and roadmap
-- **[Subquery Design](SUBQUERY-DESIGN.md)** - Design notes for CTEs and (future) subqueries
+- **[Subquery Design](SUBQUERY-DESIGN.md)** - Design notes for CTEs, derived tables and subqueries
 
 ## Future Enhancements
 
@@ -1799,7 +1845,8 @@ Planned features for future releases, organized by priority:
 
 **Query Features:**
 
-- Subqueries in conditions and values (e.g., `WHERE price > (SELECT AVG(price) FROM products)`, `IN (SELECT ...)`)
+- ✅ Subqueries as values and after `IN` (e.g., `WHERE price > (SELECT AVG(price) FROM products)`, `IN (SELECT ...)`) - **IMPLEMENTED**
+- Correlated subqueries and `EXISTS` (rejected today; write a CTE with `GROUP BY` and a join, or `IN (SELECT ...)`)
 - ✅ Derived tables in `FROM` and joins (`FROM (SELECT ...) t`) - **IMPLEMENTED**
 - ✅ Calculated fields in SELECT (e.g., `SELECT price * 1.1 AS price_with_tax`), with `||`, `CASE` and `CAST` - **IMPLEMENTED**
 - ✅ Calculations in `WHERE` and `ORDER BY` (e.g., `WHERE price * stock > 5000 ORDER BY price * stock DESC`) - **IMPLEMENTED**

@@ -20,10 +20,14 @@ import java.util.Locale;
  */
 public class QueryParser {
 
+    /** The queries being built, innermost first. A subquery belongs to the innermost one. */
+    private final java.util.Deque<ParsedQuery> building = new java.util.ArrayDeque<>();
+
     /**
      * Parse a SQL query string into a ParsedQuery object.
      */
     public ParsedQuery parse(String sql) throws QueryParseException {
+        building.clear();
         try {
             Statement statement = CCJSqlParserUtil.parse(sql);
             
@@ -60,7 +64,8 @@ public class QueryParser {
                 // Build the main query (CTEs already stored in query)
                 buildParsedQuery(plainSelect, query);
             }
-            
+
+            CorrelationCheck.check(select);
             return query;
         } catch (JSQLParserException e) {
             QueryParseException modifier = setOperatorModifier(sql);
@@ -244,6 +249,16 @@ public class QueryParser {
     }
     
     private ParsedQuery buildParsedQuery(PlainSelect plainSelect, ParsedQuery query) throws QueryParseException {
+        // A subquery written while this query is built belongs to it
+        building.push(query);
+        try {
+            return buildPlainSelect(plainSelect, query);
+        } finally {
+            building.pop();
+        }
+    }
+
+    private ParsedQuery buildPlainSelect(PlainSelect plainSelect, ParsedQuery query) throws QueryParseException {
         // CTEs are already parsed and stored in query, so we don't need to parse them again
 
         rejectUnsupportedClauses(plainSelect);
@@ -391,6 +406,11 @@ public class QueryParser {
             if (trim.getFromExpression() != null) {
                 validateValue(trim.getFromExpression(), whole, clause, grouped);
             }
+        } else if (expression instanceof ParenthesedSelect subquery) {
+            // One value, worked out once before the rows; a constant for groups too
+            valueSubquery(subquery, false);
+        } else if (expression instanceof AnyComparisonExpression) {
+            throw new QueryParseException("ANY, SOME and ALL are not supported (use IN (SELECT ...), or MIN or MAX in a subquery)");
         } else if (!(expression instanceof Column || expression instanceof StringValue || expression instanceof LongValue
                 || expression instanceof DoubleValue || expression instanceof NullValue)) {
             if (expression instanceof Function) {
@@ -403,6 +423,25 @@ public class QueryParser {
             }
             throw unsupported("Expression in " + clause + ": " + whole, "use fields, literals, arithmetic, ||, CASE and CAST");
         }
+    }
+
+    /**
+     * A subquery used as a value or after IN. It is parsed now, so its errors are reported at
+     * parse time, and recorded on the query being built, which runs it before its rows.
+     *
+     * @param list true after IN, where it may return any number of rows
+     */
+    private void valueSubquery(ParenthesedSelect subquery, boolean list) throws QueryParseException {
+        ParsedQuery query = parseNested(subquery);
+        List<ColumnInfo> columns = query.isUnionQuery()
+            ? query.getUnionQuery().getSubQueries().get(0).getSelectColumns()
+            : query.getSelectColumns();
+        String count = columns.size() == 1 && "*".equals(columns.get(0).getExpression()) ? "*" : String.valueOf(columns.size());
+        if (!count.equals("1")) {
+            throw new QueryParseException((list ? "A subquery after IN" : "A subquery used as a value")
+                + " must select one column, got " + count + ": " + subquery);
+        }
+        building.peek().addValueSubquery(subquery, query, list);
     }
 
     /**
@@ -508,18 +547,32 @@ public class QueryParser {
             }
             case IsNullExpression isNull -> validateValue(isNull.getLeftExpression(), whole, clause, grouped);
             case InExpression in when in.getRightExpression() instanceof ParenthesedExpressionList<?> list -> {
+                validateInLeft(in);
                 validateValue(in.getLeftExpression(), whole, clause, grouped);
                 for (Object item : list) {
                     validateValue((Expression) item, whole, clause, grouped);
                 }
             }
-            default -> {
-                // In WHERE, anything else, such as EXISTS, is reported by WhereEvaluator
-                if (!clause.equals(WHERE)) {
-                    throw unsupported("Condition in " + clause + ": " + whole,
-                        "compare values with =, <, >, BETWEEN, LIKE, IN or IS NULL");
-                }
+            case InExpression in when in.getRightExpression() instanceof ParenthesedSelect subquery -> {
+                validateInLeft(in);
+                validateValue(in.getLeftExpression(), whole, clause, grouped);
+                valueSubquery(subquery, true);
             }
+            // Anything else, in every clause, is rejected here rather than when a row reaches it
+            default -> {
+                if (expression instanceof ExistsExpression) {
+                    throw unsupported("EXISTS", "use IN (SELECT ...) or a join");
+                }
+                throw unsupported("Condition in " + clause + ": " + whole,
+                    "compare values with =, <, >, BETWEEN, LIKE, IN or IS NULL");
+            }
+        }
+    }
+
+    /** IN compares one value: (a, b) IN (...) compares a row. */
+    private static void validateInLeft(InExpression in) throws QueryParseException {
+        if (in.getLeftExpression() instanceof ParenthesedExpressionList<?> row) {
+            throw unsupported("A row value such as " + row, "compare one value at a time");
         }
     }
 
