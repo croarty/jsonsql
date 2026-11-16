@@ -78,6 +78,12 @@ jsonsql --data-dir example-data --query "SELECT COUNT(*) AS pairs FROM orders o 
 # A condition in a LEFT JOIN's ON keeps every order, and fills in the product only when it is in stock
 # (order 104 is for Doohickey, which is out of stock, so its name is null)
 jsonsql --data-dir example-data --query "SELECT o.orderId, p.name FROM orders o LEFT JOIN products p ON o.productId = p.id AND p.inStock = true"
+
+# INTERSECT: products in an active order that are also in stock (1 and 2)
+jsonsql --data-dir example-data --query "SELECT productId AS id FROM orders WHERE status = 'active' INTERSECT SELECT id FROM products WHERE inStock = true"
+
+# EXCEPT: products nobody has ordered (4)
+jsonsql --data-dir example-data --query "SELECT id FROM products EXCEPT SELECT productId FROM orders"
 ```
 
 ## Example 4: Output Options

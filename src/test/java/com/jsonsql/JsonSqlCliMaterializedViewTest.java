@@ -148,6 +148,39 @@ class JsonSqlCliMaterializedViewTest {
     }
 
     @Test
+    void aViewReadByIntersectAndExceptBranchesIsBuiltAndRebuilt() throws Exception {
+        CliResult build = runCli(withConfig(
+            "--materialize-view", "expensive",
+            "--query", "WITH expensive AS (SELECT id FROM products WHERE price > 10)"
+                + " SELECT id FROM products EXCEPT SELECT id FROM expensive"));
+        assertEquals(0, build.exitCode(), build.err());
+
+        assertEquals("[{\"id\":2},{\"id\":3}]",
+            runCli(withConfig("-q", "SELECT id FROM products INTERSECT SELECT id FROM expensive")).out().trim());
+        assertEquals("[{\"id\":1}]",
+            runCli(withConfig("-q", "SELECT id FROM products EXCEPT SELECT id FROM expensive")).out().trim());
+
+        Files.writeString(dataDir.resolve("products.json"), """
+            {"products":[
+              {"id":1,"category":"Tools","price":99.0},
+              {"id":2,"category":"Electronics","price":5.0},
+              {"id":3,"category":"Furniture","price":120.0}
+            ]}""");
+        assertEquals(0, runCli(withConfig("--rebuild-view", "expensive")).exitCode());
+        assertEquals("[{\"id\":2}]",
+            runCli(withConfig("-q", "SELECT id FROM products EXCEPT SELECT id FROM expensive")).out().trim());
+    }
+
+    @Test
+    void aViewCannotBeASetOperation() {
+        CliResult r = runCli(withConfig(
+            "--materialize-view", "pair",
+            "--query", "WITH pair AS (SELECT id FROM products INTERSECT SELECT id FROM products) SELECT * FROM pair"));
+        assertEquals(1, r.exitCode());
+        assertTrue(r.err().contains("CTE must be a simple SELECT query: pair"), r.err());
+    }
+
+    @Test
     void materializeRejectsMappingCollision() {
         CliResult r = runCli(withConfig(
             "--materialize-view", "products",

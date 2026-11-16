@@ -355,10 +355,10 @@ class UnionTest {
     }
 
     @Test
-    void testIntersectIsRejectedRatherThanTreatedAsUnion() {
-        QueryParseException ex = assertThrows(QueryParseException.class, () -> queryExecutor.execute(
-            "SELECT name FROM products INTERSECT SELECT name FROM categories"));
-        assertTrue(ex.getMessage().contains("INTERSECT is not supported"), ex.getMessage());
+    void testIntersectIsNotTreatedAsUnion() throws Exception {
+        // A UNION would give Tools, Electronics and Furniture
+        assertEquals("[{\"category\":\"Tools\"},{\"category\":\"Electronics\"}]", queryExecutor.execute(
+            "SELECT category FROM products INTERSECT SELECT name FROM categories"));
     }
 
     @Test

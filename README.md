@@ -12,7 +12,7 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
   - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses, LIKE, ILIKE, IN, IS NULL)
   - `JOIN`, `LEFT JOIN`, `RIGHT JOIN`, `FULL JOIN` - Combine data from multiple sources, on any condition `WHERE` accepts
   - `CROSS JOIN` and comma joins (`FROM a, b`) - Every row paired with every row
-  - `UNION` / `UNION ALL` - Combine result sets from multiple queries
+  - `UNION` / `UNION ALL` / `INTERSECT` / `EXCEPT` - Combine, intersect or subtract the results of several queries
   - `WITH` - Common Table Expressions (CTEs) for composing queries
   - `UNNEST` - Flatten arrays into individual rows
   - `TOP x` / `LIMIT` - Limit result sets
@@ -691,9 +691,9 @@ jsonsql --query "SELECT o.orderId, p.name, c.name FROM orders o JOIN products p 
 jsonsql --query "SELECT TOP 5 p.name, o.quantity FROM orders o JOIN products p ON o.productId = p.id"
 ```
 
-#### UNION Queries
+#### UNION, INTERSECT and EXCEPT Queries
 
-Combine results from multiple SELECT queries using `UNION` or `UNION ALL`:
+Combine results from multiple SELECT queries using `UNION` or `UNION ALL`, or keep the rows they share or don't share with `INTERSECT` and `EXCEPT`:
 
 ```bash
 # UNION - combine results and remove duplicates
@@ -704,6 +704,12 @@ jsonsql --query "SELECT name FROM products WHERE category = 'Office' UNION ALL S
 
 # ORDER BY applies to the entire result set
 jsonsql --query "SELECT name FROM products WHERE category = 'Office' UNION ALL SELECT name FROM products WHERE category = 'Electronics' ORDER BY name"
+
+# INTERSECT - rows in both results: categories with products over 50 and under 30 (Electronics)
+jsonsql --query "SELECT category FROM products WHERE price > 50 INTERSECT SELECT category FROM products WHERE price < 30"
+
+# EXCEPT - rows in the first result that are not in the second: products in no delivered order (4 and 5)
+jsonsql --query "SELECT id FROM products EXCEPT SELECT item.productId FROM orders o, UNNEST(o.items) AS i(item) WHERE o.status = 'delivered'"
 ```
 
 #### UNNEST - Flatten Arrays
@@ -1305,7 +1311,7 @@ CTE rules:
 - `WITH RECURSIVE` is not supported.
 - A CTE with the same name as a mapping or materialized view shadows it for that query.
 
-### UNION Queries
+### UNION, INTERSECT and EXCEPT
 
 Combine result sets from multiple SELECT queries:
 
@@ -1337,16 +1343,31 @@ LIMIT 3
 SELECT TOP 1 name FROM products WHERE category = 'Tools'
 UNION ALL
 (SELECT name FROM products ORDER BY price DESC LIMIT 1)
+
+-- INTERSECT: the rows of the first query that are also in the second
+SELECT category FROM products WHERE price > 20
+INTERSECT
+SELECT category FROM products WHERE inStock = false
+
+-- EXCEPT: the rows of the first query that are not in the second
+SELECT id FROM products
+EXCEPT
+SELECT productId FROM orders
 ```
 
-UNION rules:
+Rules:
 
-- Every branch must select the **same number of columns** (checked at parse time). Columns are matched by position and named by the first branch, so `SELECT id AS key ... UNION SELECT orderId ...` gives every row a `key` column. With `SELECT *` in any branch, each row keeps its own names, because positions depend on the data.
+- Every branch must select the **same number of columns** (checked at parse time). Columns are matched by position and named by the first branch, so `SELECT id AS key ... UNION SELECT orderId ...` gives every row a `key` column. With `SELECT *` in any branch, each row keeps its own names, because positions depend on the data. Rows are then compared by field name, so where the branches' field names differ, `INTERSECT` finds no row in common, `EXCEPT` removes nothing, and `UNION` keeps rows from both sides even when their values are the same: `SELECT * FROM a INTERSECT SELECT * FROM b` is empty when `a` has a field `v` and `b` a field `w`. Name the columns, as in `SELECT v FROM a INTERSECT SELECT w FROM b`, to match them by position.
 - `UNION` de-duplicates whole rows; `UNION ALL` keeps duplicates. When both appear, operators are applied left to right as in standard SQL: `A UNION ALL B UNION C` de-duplicates everything, while `A UNION B UNION ALL C` de-duplicates `A`+`B` and then appends all of `C`.
 - A trailing `ORDER BY` sorts the combined output and therefore refers to **output column names** from any branch, or positions, not qualified source fields.
 - A trailing `LIMIT n` (after the last branch, with or without `ORDER BY`) limits the **whole** result, after de-duplication and sorting. A trailing `OFFSET` also applies to the whole result. `TOP` and a `LIMIT` inside parentheses apply to their own branch only.
-- `INTERSECT`, `EXCEPT`, and `MINUS` are rejected (`INTERSECT is not supported`).
-- A `WITH` clause may precede a UNION, and its CTEs are visible to every branch. A UNION cannot be used inside a CTE.
+- `INTERSECT` keeps the rows of the left side that are also in the right side, and `EXCEPT` those that are not. Both remove duplicates, and keep the left side's rows, in its order. Rows match as they do for `UNION` and `DISTINCT`: by position, compared by the [usual rules](#where-clause), so `10` and `10.0` are the same row, `10` and `"10"` are not, and two `NULL`s are the same.
+- Operators run left to right: `A EXCEPT B UNION C` is `(A EXCEPT B) UNION C`, and `A INTERSECT B UNION C` is `(A INTERSECT B) UNION C`.
+- An `INTERSECT` after a `UNION`, `UNION ALL` or `EXCEPT` is rejected, because databases disagree on what it means: PostgreSQL, MySQL and SQL Server run `INTERSECT` first, while SQLite and Oracle run left to right. Write the `INTERSECT` first: `B INTERSECT C UNION A` instead of `A UNION B INTERSECT C`. `INTERSECT` after `INTERSECT` is fine.
+- Parentheses around a set operation, as in `(A UNION B) INTERSECT C`, are rejected; write the operations in the order they should run.
+- `INTERSECT ALL` and `EXCEPT ALL` are rejected. `MINUS` is rejected with a hint to write `EXCEPT`.
+- After a set operation, `ORDER BY` takes an output column name or a position, not a calculation, as in SQLite and PostgreSQL.
+- A `WITH` clause may precede a set operation, and its CTEs are visible to every branch. A set operation cannot be used inside a CTE, so a materialized view cannot be one, but its branches can read a view.
 
 ### Known Limitations
 
@@ -1369,7 +1390,10 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 | More than one `ON` for a join (`JOIN p ON a ON b`) | `More than one ON for JOIN p is not supported (join the conditions with AND)` |
 | An aggregate in `ON` | `Function in JOIN ON: SUM(p.id) = o.productId is not supported (an aggregate can't be used here)` |
 | A subquery or `EXISTS` in `ON` | `Condition in JOIN ON: ... is not supported (...)`, or `Expression in JOIN ON: ...` for `= (SELECT ...)` |
-| `INTERSECT`, `EXCEPT`, `MINUS` | `INTERSECT is not supported (only UNION and UNION ALL are supported)` |
+| `INTERSECT` after `UNION`, `UNION ALL` or `EXCEPT` | `INTERSECT after UNION is not supported (databases disagree on which runs first; write the INTERSECT first, ...)` |
+| `INTERSECT ALL`, `EXCEPT ALL` | `INTERSECT ALL is not supported (write INTERSECT, which removes duplicates)` |
+| `MINUS` | `MINUS is not supported (write EXCEPT)` |
+| Parentheses around a set operation | `Parentheses around UNION, INTERSECT or EXCEPT are not supported (...)` |
 | `IN (SELECT ...)`, `EXISTS` in WHERE | `Unsupported WHERE expression: ...` |
 | An aggregate in WHERE | `Function in WHERE: COUNT(*) > 1 is not supported (use HAVING to filter on an aggregate)` |
 | An aggregate in GROUP BY | `Function in GROUP BY: COUNT(*) + 1 is not supported (an aggregate can't be used here)` |
@@ -1753,8 +1777,8 @@ Planned features for future releases, organized by priority:
 - ✅ Calculated fields in SELECT (e.g., `SELECT price * 1.1 AS price_with_tax`), with `||`, `CASE` and `CAST` - **IMPLEMENTED**
 - ✅ Calculations in `WHERE` and `ORDER BY` (e.g., `WHERE price * stock > 5000 ORDER BY price * stock DESC`) - **IMPLEMENTED**
 - ✅ Calculations in `GROUP BY` and `HAVING`, and inside and around aggregates (e.g., `SUM(price * qty)`, `SUM(price) * 2`) - **IMPLEMENTED**
-- Calculations in the `ORDER BY` after a `UNION`
-- ✅ **Unsupported SQL fails loudly** — `NATURAL` joins, `INTERSECT`/`EXCEPT`, and non-column SELECT items are rejected at parse time instead of being silently ignored - **IMPLEMENTED**
+- Calculations in the `ORDER BY` after a `UNION`, `INTERSECT` or `EXCEPT`: not planned, since SQLite and PostgreSQL also reject them; after a set operation, `ORDER BY` takes an output column name or a position
+- ✅ **Unsupported SQL fails loudly** — `NATURAL` joins, `INTERSECT ALL`/`EXCEPT ALL`/`MINUS`, and non-column SELECT items are rejected at parse time instead of being silently ignored - **IMPLEMENTED**
 - ✅ `ORDER BY` on a SELECT alias or column position - **IMPLEMENTED**
 
 ### Medium Priority (Advanced Features)
@@ -1784,7 +1808,7 @@ Planned features for future releases, organized by priority:
 
 - ✅ `OFFSET` support for pagination - **IMPLEMENTED**
 - ✅ `LIMIT` applied to a whole `UNION` - **IMPLEMENTED**
-- `INTERSECT` / `EXCEPT` set operations (currently rejected with an error)
+- ✅ `INTERSECT` / `EXCEPT` set operations - **IMPLEMENTED**
 
 ### Lower Priority (Quality of Life)
 
