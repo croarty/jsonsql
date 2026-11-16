@@ -254,9 +254,11 @@ Run `jsonsql --help` for the authoritative, alphabetized list.
 Only one primary action may be specified per invocation (for example, you cannot
 combine `--query` with `--list-tables`, or `--run-query` with `--query`); doing so
 exits with an error. `--save-query` and `--materialize-view` take `--query` as their
-payload, so those pairings are allowed. The tool returns exit code `0` on success and
-`1` on error. Result data is written to stdout; informational and error messages are
-written to stderr (see [Debug Mode](#debug-mode)).
+payload, so those pairings are allowed. The tool returns exit code `0` on success, and
+`1`, `2` or `3` on an error, depending on what went wrong (see
+[Exit Codes and Output Streams](#exit-codes-and-output-streams)). Result data is written
+to stdout; informational and error messages are written to stderr (see
+[Debug Mode](#debug-mode)).
 
 ### Configuration Management
 
@@ -1176,7 +1178,7 @@ Rules:
   Warning: SUM(price) left out 3 values that are not numbers, such as "none"
   ```
 
-  Add `--strict` to fail instead, with exit code `1` and nothing on stdout. Use it in scripts, where a warning on stderr is easy to miss. SQLite differs here: it would count `"none"` as 0 and `"3.5kg"` as 3.5, with no warning.
+  Add `--strict` to fail instead, with exit code `3` and nothing on stdout. Use it in scripts, where a warning on stderr is easy to miss. SQLite differs here: it would count `"none"` as 0 and `"3.5kg"` as 3.5, with no warning.
 - Every selected field must be in `GROUP BY`. `SELECT category, name ... GROUP BY category` is rejected, because `name` would be an arbitrary row's value.
 - `GROUP BY` accepts a field, a SELECT alias, a position or a calculation.
 - `HAVING` can use grouped fields, aliases and aggregates. `ORDER BY` can use those and positions, including aggregates you didn't select. Both can use calculations built from them.
@@ -1650,8 +1652,29 @@ jsonsql --query "SELECT * FROM products"
 
 ### Exit Codes and Output Streams
 
-- Exit code `0` indicates success; exit code `1` indicates an error, including asking to show or drop an index or view that does not exist.
-- Result JSON is written to **stdout**; all informational and error messages go to **stderr**, so piping stdout never mixes in log text.
+The exit code says what kind of thing went wrong, so a script can tell them apart:
+
+| Exit code | Meaning | Examples |
+|---|---|---|
+| `0` | Success | A warning on stderr is still success |
+| `1` | The query is at fault | SQL that isn't valid or isn't supported; a table with no mapping; a saved query, index or view that doesn't exist |
+| `2` | The command line is at fault | An option that doesn't exist; two actions at once; `--save-query` without `--query`; `--format xml`; a `--param` that is missing, malformed or rejected; no action at all |
+| `3` | The data or another file is at fault | A data file that is missing, isn't valid JSON or isn't UTF-8; a `--data-dir` that doesn't exist; a mappings, queries, indexes or views file that can't be read; output that can't be written; values that `--strict` refuses |
+
+```bash
+jsonsql --data-dir example-data --query "SELECT * FROM products" --output products.json
+case $? in
+  0) echo "done" ;;
+  1) echo "fix the query" ;;
+  2) echo "fix the command" ;;
+  3) echo "check the data files" ;;
+esac
+```
+
+- `--dry-run` gives the same codes as running the query would, for everything it checks.
+- `--rebuild-indexes` and `--rebuild-views` carry on after a failure and give the highest code any of them produced.
+- A mistake on the command line is reported before anything runs. `--format xml` fails without reading any data.
+- Result JSON is written to **stdout**; all informational and error messages go to **stderr**, so piping stdout never mixes in log text. When a query fails, nothing is written to stdout.
 
 ### Debug Mode
 
