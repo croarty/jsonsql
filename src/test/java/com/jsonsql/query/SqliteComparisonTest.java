@@ -417,7 +417,29 @@ class SqliteComparisonTest {
             ordered("SELECT id FROM p EXCEPT SELECT pid FROM o ORDER BY id DESC LIMIT 3", "id"),
             ordered("SELECT cat FROM p INTERSECT SELECT cat FROM k ORDER BY cat", "cat"),
             ordered("SELECT id AS a FROM p INTERSECT SELECT pid FROM o ORDER BY 1 LIMIT 2 OFFSET 1", "a"),
-            ordered("SELECT id FROM p EXCEPT SELECT pid FROM o UNION SELECT id FROM c ORDER BY id LIMIT 4", "id"));
+            ordered("SELECT id FROM p EXCEPT SELECT pid FROM o UNION SELECT id FROM c ORDER BY id LIMIT 4", "id"),
+            // Derived tables
+            any("SELECT t.id AS i FROM (SELECT id, price FROM p WHERE price > 10) t"),
+            any("SELECT t.id AS i, t.price AS pr FROM (SELECT id, price FROM p) t WHERE t.price IS NULL OR t.price < 10"),
+            any("SELECT t.cat AS c, t.n AS n FROM (SELECT cat, COUNT(*) AS n FROM p GROUP BY cat) t WHERE t.n > 1"),
+            any("SELECT COUNT(*) AS n FROM (SELECT DISTINCT cat FROM p) t"),
+            any("SELECT p.id AS pi, a.m AS m FROM p JOIN (SELECT cat, MAX(price) AS m FROM p GROUP BY cat) a ON p.cat = a.cat"),
+            any("SELECT o.id AS oi, t.name AS nm FROM o JOIN (SELECT id, name FROM p WHERE qty > 2) t ON t.id = o.pid"),
+            any("SELECT o.id AS oi, t.name AS nm FROM o LEFT JOIN (SELECT id, name FROM p WHERE qty > 2) t ON t.id = o.pid"),
+            any("SELECT o.id AS oi, t.name AS nm FROM o RIGHT JOIN (SELECT id, name FROM p WHERE qty > 2) t ON t.id = o.pid"),
+            any("SELECT o.id AS oi, t.name AS nm FROM o FULL JOIN (SELECT id, name FROM p WHERE qty > 2) t ON t.id = o.pid"),
+            any("SELECT o.id AS oi, t.label AS l FROM o, (SELECT label FROM c WHERE id < 3) t"),
+            any("SELECT o.id AS oi, t.label AS l FROM o CROSS JOIN (SELECT label FROM c WHERE id < 3) t"),
+            any("SELECT x.id AS a, y.id AS b FROM (SELECT id, cat FROM p) x JOIN (SELECT id, cat FROM p WHERE qty > 2) y ON x.cat = y.cat"),
+            any("SELECT y.id AS i FROM (SELECT x.id, x.qty FROM (SELECT id, qty FROM p WHERE qty > 0) x WHERE x.qty < 5) y"),
+            any("SELECT t.id AS i FROM (SELECT id FROM p UNION SELECT pid FROM o) t"),
+            any("SELECT * FROM (SELECT id FROM p UNION SELECT pid FROM o) t INTERSECT SELECT id FROM c"),
+            any("SELECT * FROM (SELECT id FROM p EXCEPT SELECT pid FROM o) t UNION ALL SELECT id FROM c"),
+            any("SELECT p.id AS pi FROM p JOIN (SELECT pid FROM o INTERSECT SELECT id FROM p) t ON t.pid = p.id"),
+            any("WITH x AS (SELECT id, cat FROM p) SELECT t.id AS i FROM (SELECT id FROM x WHERE cat = 'Tools') t"),
+            any("WITH x AS (SELECT t.id FROM (SELECT id FROM p WHERE qty > 2) t) SELECT id FROM x"),
+            ordered("SELECT t.id AS i FROM (SELECT id FROM p ORDER BY id DESC LIMIT 3) t ORDER BY t.id", "i"),
+            ordered("SELECT t.n AS n, t.c AS c FROM (SELECT pid AS n, COUNT(*) AS c FROM o GROUP BY pid) t ORDER BY t.c DESC, t.n LIMIT 3", "n", "c"));
     }
 
     static Stream<Query> aggregateQueries() {

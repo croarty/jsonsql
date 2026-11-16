@@ -60,19 +60,39 @@ public final class SourceFingerprint {
         }
     }
 
+    /**
+     * The tables a query reads: its FROM and joins, the branches of a set operation, and
+     * the tables inside its derived tables, at any depth. A derived table itself has no name
+     * to look up, so it isn't one of them.
+     */
     public static Set<String> collectTableNames(ParsedQuery query) {
         Set<String> names = new LinkedHashSet<>();
-        if (query.getFromTable() != null && query.getFromTable().getTableName() != null) {
+        collectTableNames(query, names);
+        return names;
+    }
+
+    private static void collectTableNames(ParsedQuery query, Set<String> names) {
+        if (query.isUnionQuery()) {
+            for (ParsedQuery branch : query.getUnionQuery().getSubQueries()) {
+                collectTableNames(branch, names);
+            }
+            return;
+        }
+        if (query.getFromTable() != null && query.getFromTable().getSubquery() == null
+                && query.getFromTable().getTableName() != null) {
             names.add(query.getFromTable().getTableName());
         }
         if (query.hasJoins()) {
             for (JoinInfo join : query.getJoins()) {
-                if (join.getTable() != null && join.getTable().getTableName() != null) {
+                if (join.getTable() != null && join.getTable().getSubquery() == null
+                        && join.getTable().getTableName() != null) {
                     names.add(join.getTable().getTableName());
                 }
             }
         }
-        return names;
+        for (ParsedQuery nested : query.nestedQueries()) {
+            collectTableNames(nested, names);
+        }
     }
 
     /**

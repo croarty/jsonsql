@@ -84,6 +84,9 @@ jsonsql --data-dir example-data --query "SELECT productId AS id FROM orders WHER
 
 # EXCEPT: products nobody has ordered (4)
 jsonsql --data-dir example-data --query "SELECT id FROM products EXCEPT SELECT productId FROM orders"
+
+# A derived table: each product beside its category's average price (Tools 14.99, Electronics 34.99)
+jsonsql --data-dir example-data --query "SELECT p.name, p.price, a.avg_price FROM products p JOIN (SELECT category, AVG(price) AS avg_price FROM products GROUP BY category) a ON p.category = a.category"
 ```
 
 ## Example 4: Output Options

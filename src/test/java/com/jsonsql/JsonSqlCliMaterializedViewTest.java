@@ -172,6 +172,44 @@ class JsonSqlCliMaterializedViewTest {
     }
 
     @Test
+    void aViewOnADerivedTableGoesStaleWhenItsSourceChanges() throws Exception {
+        CliResult build = runCli(withConfig(
+            "--materialize-view", "dear",
+            "--query", "WITH dear AS (SELECT t.id FROM (SELECT id, price FROM products WHERE price > 10) t) SELECT * FROM dear"));
+        assertEquals(0, build.exitCode(), build.err());
+        assertEquals("[{\"id\":2},{\"id\":3}]", runCli(withConfig("-q", "SELECT id FROM dear")).out().trim());
+        assertTrue(runCli(withConfig("--list-materialized-views")).out().contains("FRESH"));
+
+        Files.writeString(dataDir.resolve("products.json"), """
+            {"products":[
+              {"id":1,"category":"Tools","price":99.0},
+              {"id":2,"category":"Electronics","price":5.0},
+              {"id":3,"category":"Furniture","price":120.0},
+              {"id":4,"category":"Office","price":200.0}
+            ]}""");
+        String list = runCli(withConfig("--list-materialized-views")).out();
+        assertTrue(list.contains("STALE"), list);
+
+        assertEquals(0, runCli(withConfig("--rebuild-view", "dear")).exitCode());
+        assertEquals("[{\"id\":1},{\"id\":3},{\"id\":4}]", runCli(withConfig("-q", "SELECT id FROM dear")).out().trim());
+    }
+
+    @Test
+    void aViewOnASetOperationInADerivedTableGoesStaleWhenABranchSourceChanges() throws Exception {
+        Files.writeString(dataDir.resolve("extra.json"), "[{\"id\": 7}]");
+        Files.writeString(mappingFile, "{\"products\": \"products.json:$.products[*]\", \"extra\": \"extra.json:$[*]\"}");
+        CliResult build = runCli(withConfig(
+            "--materialize-view", "ids",
+            "--query", "WITH ids AS (SELECT t.id FROM (SELECT id FROM products UNION SELECT id FROM extra) t) SELECT * FROM ids"));
+        assertEquals(0, build.exitCode(), build.err());
+        assertTrue(runCli(withConfig("--list-materialized-views")).out().contains("FRESH"));
+
+        Files.writeString(dataDir.resolve("extra.json"), "[{\"id\": 7}, {\"id\": 8}]");
+        String list = runCli(withConfig("--list-materialized-views")).out();
+        assertTrue(list.contains("STALE"), list);
+    }
+
+    @Test
     void aViewCannotBeASetOperation() {
         CliResult r = runCli(withConfig(
             "--materialize-view", "pair",

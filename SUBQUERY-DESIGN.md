@@ -4,14 +4,14 @@
 
 This document explores how to implement subqueries and temporary tables (CTEs) in JsonSQL, specifically focusing on the ability to define temporary result sets that can be used in JOINs.
 
-> **Status update:** Common Table Expressions (the `WITH` clause) described in this document have since been **implemented** and shipped, along with persisted [materialized views](MATERIALIZED-VIEWS.md) of a CTE. See the [Common Table Expressions](README.md#common-table-expressions-with) section of the README for current usage, and `CteTest` / `CTECacheTest` for coverage. The remaining ideas below — **subqueries in the `FROM` clause** and **correlated / `WHERE` subqueries** — are still forward-looking design and are not implemented. The "Current Architecture Analysis" section reflects the pre-CTE codebase and is kept for historical context.
+> **Status update:** Common Table Expressions (the `WITH` clause) described in this document have since been **implemented** and shipped, along with persisted [materialized views](MATERIALIZED-VIEWS.md) of a CTE. See the [Common Table Expressions](README.md#common-table-expressions-with) section of the README for current usage, and `CteTest` / `CTECacheTest` for coverage. **Subqueries in the `FROM` clause** (derived tables) have since been implemented too: see [Derived Tables](README.md#derived-tables) and `DerivedTableTest`. **Correlated / `WHERE` subqueries** are still forward-looking design and are not implemented. The "Current Architecture Analysis" section reflects the pre-CTE codebase and is kept for historical context.
 >
 > How the shipped implementation differs from this design:
 > - CTEs are resolved in declaration order, so a CTE can only reference CTEs defined **before** it. A reference to a later CTE (including the circular example under "Circular Dependencies") fails with "No mapping or materialized view found" rather than a dedicated cycle error.
 > - A CTE body must be a single plain `SELECT` (no `UNION`, no nested `WITH`); `WITH RECURSIVE` is not supported.
 > - CTE names are matched case-insensitively and shadow mappings/views of the same name.
 > - CTE results are recomputed on every run unless `--enable-cache` is used (or the CTE is materialized as a view).
-> - Today a derived table (`JOIN (SELECT ...) AS ep`) fails with "No mapping or materialized view found for table: (SELECT ...) AS ep", and `IN (SELECT ...)` / `EXISTS` fail with an "Unsupported ... expression" error.
+> - A derived table (`JOIN (SELECT ...) AS ep`) is parsed into `TableInfo.subquery`, run once with `QueryExecutor.runToRows`, and wrapped under its alias like a CTE result. It can be a set operation, needs an alias, can't hold a `WITH`, and is uncorrelated. `IN (SELECT ...)` / `EXISTS` still fail with an "Unsupported ... expression" error.
 
 ## Use Cases
 
@@ -26,7 +26,7 @@ FROM orders o
 JOIN expensive_products ep ON o.productId = ep.id
 ```
 
-### 2. Subqueries in FROM Clause (NOT YET IMPLEMENTED — design only)
+### 2. Subqueries in FROM Clause (IMPLEMENTED as derived tables)
 
 ```sql
 SELECT o.orderId, ep.name

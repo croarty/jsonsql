@@ -1001,7 +1001,31 @@ jsonsql --data-dir example-data --query "SELECT name FROM products WHERE CAST(sp
 - `FROM table` - Table name (a mapping, a materialized view, or a CTE)
 - `FROM table alias` / `FROM table AS alias` - Table with alias
 - Mapping and view names are **case-sensitive** (`FROM Products` does not find `products`); CTE names are case-insensitive.
-- Derived tables (`FROM (SELECT ...) AS t`) are not supported and fail with a "No mapping or materialized view found" error — use a `WITH` clause instead.
+- `FROM (SELECT ...) t` - A **derived table**: the subquery's result used as a table named `t` (see [Derived Tables](#derived-tables))
+
+### Derived Tables
+
+A subquery in parentheses, with an alias, can stand anywhere a table can: in `FROM`, and in every kind of join.
+
+```sql
+-- Each product beside the average price of its category
+SELECT p.name, p.price, a.avg_price
+FROM products p
+JOIN (SELECT category, AVG(price) AS avg_price FROM products GROUP BY category) a ON p.category = a.category
+
+-- Group set operations, which run left to right: (A UNION B) INTERSECT C
+SELECT * FROM (SELECT id FROM a UNION SELECT id FROM b) t
+INTERSECT
+SELECT id FROM c
+```
+
+- The alias is required: `FROM (SELECT ...)` without one is rejected with `A derived table needs an alias, as in FROM (SELECT ...) t`. Column names after the alias, as in `t(x, y)`, are rejected; name the columns inside the subquery.
+- The subquery can be anything a query can be: joins, grouping, calculations, `ORDER BY` and `LIMIT`, its own derived tables, and a `UNION`, `INTERSECT` or `EXCEPT`.
+- It runs once, before the query that reads it, and can read the statement's CTEs (and, inside a CTE body, the CTEs defined before it). A `WITH` inside the subquery is rejected: put the CTEs at the top of the statement.
+- It runs on its own, so it can't refer to the outer query's tables: such a name finds nothing and reads `null`, like any field that doesn't exist. `LATERAL` is rejected.
+- Errors inside it are reported when the query is parsed, and `--dry-run` checks the mappings and files it reads. Warnings from it appear once, and `--strict` makes them an error.
+- Index pruning applies to the subquery's own `FROM` table, from its own `WHERE`, not from the outer query's.
+- Other things in `FROM` are rejected with a clear error: `VALUES`, table functions such as `generate_series(...)`, `UNNEST(...)` directly after `FROM` (write `FROM t, UNNEST(t.items) AS i(item)`), and parentheses around joins.
 
 ### WHERE Clause
 
@@ -1364,10 +1388,10 @@ Rules:
 - `INTERSECT` keeps the rows of the left side that are also in the right side, and `EXCEPT` those that are not. Both remove duplicates, and keep the left side's rows, in its order. Rows match as they do for `UNION` and `DISTINCT`: by position, compared by the [usual rules](#where-clause), so `10` and `10.0` are the same row, `10` and `"10"` are not, and two `NULL`s are the same.
 - Operators run left to right: `A EXCEPT B UNION C` is `(A EXCEPT B) UNION C`, and `A INTERSECT B UNION C` is `(A INTERSECT B) UNION C`.
 - An `INTERSECT` after a `UNION`, `UNION ALL` or `EXCEPT` is rejected, because databases disagree on what it means: PostgreSQL, MySQL and SQL Server run `INTERSECT` first, while SQLite and Oracle run left to right. Write the `INTERSECT` first: `B INTERSECT C UNION A` instead of `A UNION B INTERSECT C`. `INTERSECT` after `INTERSECT` is fine.
-- Parentheses around a set operation, as in `(A UNION B) INTERSECT C`, are rejected; write the operations in the order they should run.
+- Parentheses around a set operation, as in `(A UNION B) INTERSECT C`, are rejected. To group operations, use a [derived table](#derived-tables): `SELECT * FROM (A UNION B) t INTERSECT C`.
 - `INTERSECT ALL` and `EXCEPT ALL` are rejected. `MINUS` is rejected with a hint to write `EXCEPT`.
 - After a set operation, `ORDER BY` takes an output column name or a position, not a calculation, as in SQLite and PostgreSQL.
-- A `WITH` clause may precede a set operation, and its CTEs are visible to every branch. A set operation cannot be used inside a CTE, so a materialized view cannot be one, but its branches can read a view.
+- A `WITH` clause may precede a set operation, and its CTEs are visible to every branch. A set operation cannot be the body of a CTE, but a CTE can read one through a derived table: `WITH x AS (SELECT * FROM (A UNION B) t) ...`.
 
 ### Known Limitations
 
@@ -1398,7 +1422,9 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 | An aggregate in WHERE | `Function in WHERE: COUNT(*) > 1 is not supported (use HAVING to filter on an aggregate)` |
 | An aggregate in GROUP BY | `Function in GROUP BY: COUNT(*) + 1 is not supported (an aggregate can't be used here)` |
 | A calculation in the `ORDER BY` after a `UNION` | `Expression in ORDER BY: price * 2 is not supported (...)` |
-| Derived tables (`FROM (SELECT ...) t`) | `No mapping or materialized view found for table: ...` |
+| A derived table without an alias | `A derived table needs an alias, as in FROM (SELECT ...) t` |
+| `WITH` inside a subquery | `WITH inside a subquery is not supported (put the CTEs at the top of the statement)` |
+| `LATERAL`, `VALUES`, table functions and parentheses around joins in `FROM` | `LATERAL is not supported (...)`, `VALUES is not supported (use a mapped table)`, ... |
 
 These checks run at parse time, so `--dry-run` reports them too, and they apply inside CTE bodies and UNION branches as well.
 
@@ -1773,7 +1799,8 @@ Planned features for future releases, organized by priority:
 
 **Query Features:**
 
-- Subqueries (e.g., `WHERE price > (SELECT AVG(price) FROM products)`) and derived tables in `FROM`
+- Subqueries in conditions and values (e.g., `WHERE price > (SELECT AVG(price) FROM products)`, `IN (SELECT ...)`)
+- ✅ Derived tables in `FROM` and joins (`FROM (SELECT ...) t`) - **IMPLEMENTED**
 - ✅ Calculated fields in SELECT (e.g., `SELECT price * 1.1 AS price_with_tax`), with `||`, `CASE` and `CAST` - **IMPLEMENTED**
 - ✅ Calculations in `WHERE` and `ORDER BY` (e.g., `WHERE price * stock > 5000 ORDER BY price * stock DESC`) - **IMPLEMENTED**
 - ✅ Calculations in `GROUP BY` and `HAVING`, and inside and around aggregates (e.g., `SUM(price * qty)`, `SUM(price) * 2`) - **IMPLEMENTED**

@@ -175,7 +175,8 @@ public class QueryParser {
                 if (select instanceof ParenthesedSelect parenthesed
                         && parenthesed.getSelect() instanceof net.sf.jsqlparser.statement.select.SetOperationList) {
                     throw new QueryParseException("Parentheses around UNION, INTERSECT or EXCEPT are not supported "
-                        + "(they run left to right, so write them in the order they should run)");
+                        + "(they run left to right; to group them, use a derived table, as in "
+                        + "SELECT * FROM (SELECT ... UNION SELECT ...) t INTERSECT SELECT ...)");
                 }
                 throw new QueryParseException("Query " + (i + 1) + " in UNION must be a SELECT query");
             }
@@ -839,7 +840,32 @@ public class QueryParser {
         return condition;
     }
 
-    private TableInfo extractTableInfo(FromItem fromItem) {
+    /**
+     * A table in FROM or a join: a mapped table, CTE or view by name, or a derived table,
+     * (SELECT ...) t. Other kinds of FROM item are rejected here, where they used to be taken
+     * as a table name and fail as one with no mapping.
+     */
+    private TableInfo extractTableInfo(FromItem fromItem) throws QueryParseException {
+        if (fromItem instanceof LateralSubSelect) {
+            throw unsupported("LATERAL", "a derived table can't refer to the outer query");
+        }
+        if (fromItem instanceof ParenthesedSelect parenthesed) {
+            return derivedTable(parenthesed);
+        }
+        if (fromItem instanceof ParenthesedFromItem) {
+            throw unsupported("Parentheses in FROM: " + fromItem,
+                "put one pair of parentheses around a subquery, and none around joins");
+        }
+        if (fromItem instanceof TableFunction function) {
+            if (function.getFunction() != null && "UNNEST".equalsIgnoreCase(function.getFunction().getName())) {
+                throw unsupported("UNNEST in FROM", "write FROM t, UNNEST(t.items) AS i(item)");
+            }
+            throw unsupported("Table function in FROM: " + fromItem, "use a mapped table or a derived table");
+        }
+        if (!(fromItem instanceof net.sf.jsqlparser.schema.Table)) {
+            throw unsupported("FROM " + fromItem, "use a mapped table or a derived table");
+        }
+
         TableInfo tableInfo = new TableInfo();
         
         String tableName = fromItem.toString();
@@ -858,6 +884,54 @@ public class QueryParser {
         tableInfo.setAlias(alias);
         
         return tableInfo;
+    }
+
+    /**
+     * FROM (SELECT ...) t: the subquery is parsed now, so its errors are reported at parse
+     * time, and run once when the query runs, as a table named t.
+     */
+    private TableInfo derivedTable(ParenthesedSelect parenthesed) throws QueryParseException {
+        Alias alias = parenthesed.getAlias();
+        if (alias == null || alias.getName() == null || alias.getName().isBlank()) {
+            throw new QueryParseException("A derived table needs an alias, as in FROM (SELECT ...) t");
+        }
+        ParsedQuery subquery = parseNested(parenthesed.getSelect());
+        if (alias.getAliasColumns() != null && !alias.getAliasColumns().isEmpty()) {
+            throw new QueryParseException("Column names after a derived table's alias are not supported "
+                + "(name the columns inside the subquery)");
+        }
+        TableInfo tableInfo = new TableInfo();
+        tableInfo.setSubquery(subquery);
+        tableInfo.setTableName("(" + parenthesed.getSelect() + ")");
+        tableInfo.setAlias(unquote(alias.getName()));
+        return tableInfo;
+    }
+
+    /**
+     * A subquery: a plain SELECT or a set operation. CTEs belong at the top of the
+     * statement, where every part of it can read them.
+     */
+    private ParsedQuery parseNested(Select select) throws QueryParseException {
+        if (select.getWithItemsList() != null && !select.getWithItemsList().isEmpty()) {
+            throw unsupported("WITH inside a subquery", "put the CTEs at the top of the statement");
+        }
+        if (select instanceof PlainSelect plainSelect) {
+            return buildParsedQuery(plainSelect);
+        }
+        if (select instanceof SetOperationList setOperation) {
+            ParsedQuery query = new ParsedQuery();
+            UnionQuery unionQuery = parseUnionQuery(setOperation, query);
+            unionQuery.validateColumnConsistency();
+            query.setUnionQuery(unionQuery);
+            return query;
+        }
+        if (select instanceof ParenthesedSelect parenthesed) {
+            return parseNested(parenthesed.getSelect());
+        }
+        if (select instanceof net.sf.jsqlparser.statement.select.Values) {
+            throw unsupported("VALUES", "use a mapped table");
+        }
+        throw unsupported("Subquery: " + select);
     }
 
     private UnnestInfo extractUnnestInfo(net.sf.jsqlparser.statement.select.TableFunction tableFunction) throws QueryParseException {

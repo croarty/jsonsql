@@ -91,6 +91,10 @@ public class IndexPlanner {
 
     private List<File> doPrune(TableInfo fromTable, ParsedQuery query, List<File> currentFiles) {
         String table = fromTable.getTableName();
+        // A derived table has no files of its own; its subquery prunes its own FROM table
+        if (fromTable.getSubquery() != null) {
+            return currentFiles;
+        }
         if (table == null || !indexManager.hasIndexesForTable(table) || !query.hasWhere()
                 || keepsUnmatchedJoinedRows(query)) {
             return currentFiles;
