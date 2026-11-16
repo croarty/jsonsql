@@ -384,7 +384,7 @@ public class QueryExecutor implements FieldAccessor {
      */
     private void reportLeftOut(List<String> found, List<String> leftOut) {
         if (strict && !found.isEmpty()) {
-            throw new IllegalStateException(String.join("; ", found));
+            throw new StrictModeException(String.join("; ", found));
         }
         leftOut.forEach(warningSink);
     }

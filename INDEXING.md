@@ -60,8 +60,9 @@ Notes:
 - Index **definitions** are stored in `.jsonsql-indexes.json` in the current working
   directory (override with `--indexes-file`). Per-file **summaries** are stored under
   `.jsonsql-index/` inside the data directory (alongside the optional `.jsonsql-cache/`).
-- `--rebuild-indexes` exits with code `1` if any declared index fails to build (for
-  example, a definition whose table no longer has a mapping).
+- `--rebuild-indexes` exits with a code other than `0` if any declared index fails to
+  build: `1` for a definition whose table no longer has a mapping, or `3` for a data file
+  that can't be read. It rebuilds the rest first, and gives the higher code if both happen.
 
 ## How a query uses indexes
 

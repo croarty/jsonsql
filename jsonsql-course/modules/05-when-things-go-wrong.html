@@ -116,7 +116,9 @@
 
         <div class="badge-list animate-in">
           <div class="badge-item"><code class="badge-code">exit 0</code><span class="badge-desc">Success. Scripts can carry on.</span></div>
-          <div class="badge-item"><code class="badge-code">exit 1</code><span class="badge-desc">Something failed. The reason is on stderr, starting with "Error".</span></div>
+          <div class="badge-item"><code class="badge-code">exit 1</code><span class="badge-desc">The query is at fault: bad SQL, or a table that isn't mapped. The reason is on stderr, starting with "Error".</span></div>
+          <div class="badge-item"><code class="badge-code">exit 2</code><span class="badge-desc">The command line is at fault: an unknown option, or two actions at once.</span></div>
+          <div class="badge-item"><code class="badge-code">exit 3</code><span class="badge-desc">The data is at fault: a file that is missing or isn't valid JSON.</span></div>
         </div>
       </section>
 

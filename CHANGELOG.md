@@ -28,6 +28,13 @@ Decimals are now exact. They used to be read as floating-point numbers, which ro
 - `-0.0` prints as `0.0`.
 - Other numbers print exactly as before: `20.5`, `100.0`, `5`.
 
+The exit code now says what kind of thing went wrong. Every error used to exit with 1, apart from an unknown option, which already gave 2.
+
+- `1` still means the query is at fault: SQL that isn't valid or isn't supported, a table with no mapping, or a saved query, index or view that doesn't exist.
+- `2` now means the command line is at fault: two actions at once, `--save-query` or `--materialize-view` without `--query`, an unknown `--format`, a `--param` that is missing, malformed or rejected, or no action at all.
+- `3` now means the data or another file is at fault: a data file that is missing, isn't valid JSON or isn't UTF-8, a `--data-dir` that doesn't exist, a mappings, queries, indexes or views file that can't be read, or output that can't be written.
+- An unknown `--format` is reported before the query runs. It used to be reported after, as `Error writing output`.
+
 To find affected queries, look for:
 
 | Look for | To fix |
@@ -40,6 +47,7 @@ To find affected queries, look for:
 | `SUM` or `AVG` on a field that holds some text | Run the query and read the warning. If the text should count, convert it: `SUM(CAST(weight AS REAL))` |
 | Anything that reads numbers out of the results as text, such as a script matching `1.0E-4` | Parse the output as JSON or CSV numbers, which read both forms the same |
 | Materialized views built by an earlier version | Run `--rebuild-views`. Until then a view still holds the rounded numbers it was built with |
+| A script that tests for exit code 1, such as `if [ $? -eq 1 ]` | Test for any failure with `-ne 0`, or handle `1`, `2` and `3` separately. A script that only tests for success or failure needs no change |
 
 `--describe <table>` shows whether a field holds numbers or text.
 
@@ -53,7 +61,7 @@ Cache files from earlier versions are ignored, because they hold rounded numbers
 - Functions, in every clause: `UPPER`, `LOWER`, `LENGTH`, `SUBSTR` (and `SUBSTRING`), `TRIM`, `LTRIM`, `RTRIM`, `REPLACE`, `ROUND`, `ABS`, `COALESCE`, `IFNULL` and `NULLIF`. For example, `SELECT category, ROUND(AVG(price), 2) FROM products WHERE LOWER(name) LIKE '%hub%' GROUP BY category`
 - `CAST(value AS INTEGER | REAL | TEXT)`, which reads the number at the start of text, so `CAST('15.6 inch' AS REAL)` is `15.6`
 - A warning when arithmetic, `ROUND` or `ABS` meets a value that is not a number, as for `SUM` and `AVG`. The result for that row is `null`
-- `--strict`, which turns those warnings into an error with exit code 1
+- `--strict`, which turns those warnings into an error with exit code 3
 
 Where calculated columns differ from other databases:
 

@@ -108,21 +108,21 @@ class JsonSqlCliTest {
     @Test
     void testMutuallyExclusiveActionsRejected() {
         CliResult r = runCli(withConfig("--list-tables", "-q", "SELECT * FROM products"));
-        assertEquals(1, r.exitCode());
+        assertEquals(2, r.exitCode());
         assertTrue(r.err().toLowerCase().contains("multiple actions"));
     }
 
     @Test
     void testRunQueryWithInlineQueryRejected() {
         CliResult r = runCli(withConfig("--run-query", "foo", "-q", "SELECT * FROM products"));
-        assertEquals(1, r.exitCode());
+        assertEquals(2, r.exitCode());
         assertTrue(r.err().toLowerCase().contains("cannot combine"));
     }
 
     @Test
     void testNoActionShowsHelp() {
         CliResult r = runCli(withConfig());
-        assertEquals(1, r.exitCode());
+        assertEquals(2, r.exitCode());
         assertTrue(r.err().contains("No action specified"));
         // Help should enumerate the available actions
         assertTrue(r.err().contains("--query"));
@@ -139,7 +139,7 @@ class JsonSqlCliTest {
             "-c", mappingFile.toString(),
             "--queries-file", queriesFile.toString(),
             "-q", "SELECT * FROM products");
-        assertEquals(1, r.exitCode());
+        assertEquals(3, r.exitCode());
         assertTrue(r.err().toLowerCase().contains("data directory"));
     }
 
@@ -154,7 +154,7 @@ class JsonSqlCliTest {
     @Test
     void testAddMappingInvalidRejected() {
         CliResult r = runCli(withConfig("--add-mapping", "bad", "not-a-jsonpath"));
-        assertEquals(1, r.exitCode());
+        assertEquals(2, r.exitCode());
         assertTrue(r.err().toLowerCase().contains("error adding mapping"));
     }
 
@@ -169,7 +169,7 @@ class JsonSqlCliTest {
     void testCorruptMappingConfigSurfacesError() throws Exception {
         Files.writeString(mappingFile, "{ not valid json ]");
         CliResult r = runCli(withConfig("--list-tables"));
-        assertEquals(1, r.exitCode());
+        assertEquals(3, r.exitCode());
         assertTrue(r.err().toLowerCase().contains("error loading configuration"));
     }
 
@@ -201,7 +201,7 @@ class JsonSqlCliTest {
     void testStrictTurnsTheWarningIntoAnError() {
         CliResult r = runCli(withConfig("-q", "SELECT SUM(id) AS ids, SUM(name) AS names FROM products", "--strict"));
 
-        assertEquals(1, r.exitCode());
+        assertEquals(3, r.exitCode());
         assertEquals("", r.out());
         assertEquals("Error executing query: SUM(name) found 2 values that are not numbers, such as \"Widget\"", r.err().trim());
     }
@@ -229,7 +229,7 @@ class JsonSqlCliTest {
     @Test
     void testUnsupportedOutputFormatRejected() {
         CliResult r = runCli(withConfig("-q", "SELECT * FROM products", "--format", "xml"));
-        assertEquals(1, r.exitCode());
+        assertEquals(2, r.exitCode());
         assertTrue(r.err().toLowerCase().contains("unsupported output format"));
     }
 
@@ -253,7 +253,7 @@ class JsonSqlCliTest {
     @Test
     void testDescribeCannotCombineWithQuery() {
         CliResult r = runCli(withConfig("--describe", "products", "-q", "SELECT * FROM products"));
-        assertEquals(1, r.exitCode());
+        assertEquals(2, r.exitCode());
         assertTrue(r.err().toLowerCase().contains("multiple actions"));
     }
 

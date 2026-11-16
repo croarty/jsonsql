@@ -20,12 +20,14 @@ import com.jsonsql.output.OutputFormat;
 import com.jsonsql.output.OutputHandler;
 import com.jsonsql.query.DryRunReporter;
 import com.jsonsql.query.QueryExecutor;
+import com.jsonsql.query.StrictModeException;
 import com.jsonsql.query.TableFileResolver;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.Callable;
 
@@ -139,9 +141,29 @@ public class JsonSqlCli implements Callable<Integer> {
     @Option(names = {"--rebuild-views"}, description = "Rebuild all materialized views")
     private boolean rebuildViews;
 
+    /** The query is at fault: its SQL, or a table, saved query, index or view it names. */
+    static final int EXIT_QUERY_ERROR = 1;
+    /** The command line is at fault. Picocli gives the same code for an option it doesn't know. */
+    static final int EXIT_USAGE_ERROR = CommandLine.ExitCode.USAGE;
+    /** The data or another file is at fault: it can't be read or written, or strict mode refused it. */
+    static final int EXIT_DATA_ERROR = 3;
+
     public static void main(String[] args) {
         int exitCode = new CommandLine(new JsonSqlCli()).execute(args);
         System.exit(exitCode);
+    }
+
+    /**
+     * The exit code for a failure: a data error when a file was behind it or strict mode
+     * refused the data, and otherwise a query error.
+     */
+    private static int exitCodeFor(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof IOException || cause instanceof StrictModeException) {
+                return EXIT_DATA_ERROR;
+            }
+        }
+        return EXIT_QUERY_ERROR;
     }
 
     @Override
@@ -150,7 +172,7 @@ public class JsonSqlCli implements Callable<Integer> {
         String exclusivityError = checkActionExclusivity();
         if (exclusivityError != null) {
             System.err.println("Error: " + exclusivityError);
-            return 1;
+            return EXIT_USAGE_ERROR;
         }
 
         // Construct config-backed managers, surfacing corrupt-config errors as friendly messages.
@@ -164,7 +186,7 @@ public class JsonSqlCli implements Callable<Integer> {
             if (isDebugEnabled()) {
                 e.printStackTrace();
             }
-            return 1;
+            return EXIT_DATA_ERROR;
         }
 
         // Handle list-tables command
@@ -184,18 +206,19 @@ public class JsonSqlCli implements Callable<Integer> {
                 if (isDebugEnabled()) {
                     e.printStackTrace();
                 }
-                return 1;
+                // A name or path that can't be used, or a mappings file that can't be saved
+                return e instanceof IllegalArgumentException ? EXIT_USAGE_ERROR : EXIT_DATA_ERROR;
             }
             System.out.println("Mapping added: " + alias + " -> " + jsonPath);
             return 0;
         }
-        
+
         // Handle clear-cache command
         if (clearCache) {
             String dataDirError = validateDataDirectory();
             if (dataDirError != null) {
                 System.err.println("Error: " + dataDirError);
-                return 1;
+                return EXIT_DATA_ERROR;
             }
             CacheManager cacheManager = new CacheManager(dataDirectory);
             int clearedCount = cacheManager.clearAllCaches();
@@ -217,7 +240,7 @@ public class JsonSqlCli implements Callable<Integer> {
             String dataDirError = validateDataDirectory();
             if (dataDirError != null) {
                 System.err.println("Error: " + dataDirError);
-                return 1;
+                return EXIT_DATA_ERROR;
             }
             try {
                 CacheManager cacheManager = enableCache ? new CacheManager(dataDirectory) : null;
@@ -228,13 +251,13 @@ public class JsonSqlCli implements Callable<Integer> {
                 return 0;
             } catch (IllegalArgumentException e) {
                 System.err.println("Error: " + e.getMessage());
-                return 1;
+                return EXIT_QUERY_ERROR;
             } catch (Exception e) {
                 System.err.println("Error describing table: " + e.getMessage());
                 if (isDebugEnabled()) {
                     e.printStackTrace();
                 }
-                return 1;
+                return exitCodeFor(e);
             }
         }
         
@@ -254,7 +277,7 @@ public class JsonSqlCli implements Callable<Integer> {
         if (saveQueryName != null) {
             if (query == null) {
                 System.err.println("Error: --query must be provided when saving a query");
-                return 1;
+                return EXIT_USAGE_ERROR;
             }
             try {
                 queryManager.saveQuery(saveQueryName, query);
@@ -263,10 +286,11 @@ public class JsonSqlCli implements Callable<Integer> {
                 return 0;
             } catch (Exception e) {
                 System.err.println("Error saving query: " + e.getMessage());
-                return 1;
+                // A name or query that can't be used, or a queries file that can't be saved
+                return e instanceof IllegalArgumentException ? EXIT_USAGE_ERROR : EXIT_DATA_ERROR;
             }
         }
-        
+
         // Handle delete-query command
         if (deleteQueryName != null) {
             try {
@@ -275,16 +299,16 @@ public class JsonSqlCli implements Callable<Integer> {
                 return 0;
             } catch (Exception e) {
                 System.err.println("Error deleting query: " + e.getMessage());
-                return 1;
+                return exitCodeFor(e);
             }
         }
-        
+
         // Handle run-query command
         if (runQueryName != null) {
             if (!queryManager.hasQuery(runQueryName)) {
                 System.err.println("Error: Query not found: " + runQueryName);
                 System.err.println("Use --list-queries to see all saved queries");
-                return 1;
+                return EXIT_QUERY_ERROR;
             }
             query = queryManager.getQuery(runQueryName);
             // Informational messages go to stderr so stdout carries only result data (pipe-friendly)
@@ -301,11 +325,14 @@ public class JsonSqlCli implements Callable<Integer> {
             String dataDirError = validateDataDirectory();
             if (dataDirError != null) {
                 System.err.println("Error: " + dataDirError);
-                return 1;
+                return EXIT_DATA_ERROR;
             }
 
-            String result;
+            // Check what the command line asked for before running anything
+            OutputFormat format;
             try {
+                format = parseOutputFormat(outputFormat);
+
                 // Parse and replace parameters if any
                 Map<String, String> paramMap = parseParameters(parameters);
                 if (!paramMap.isEmpty() || QueryParameterReplacer.hasParameters(query)) {
@@ -314,7 +341,13 @@ public class JsonSqlCli implements Callable<Integer> {
                         System.err.println("SQL (with parameters): " + query);
                     }
                 }
-                
+            } catch (IllegalArgumentException e) {
+                System.err.println("Error: " + e.getMessage());
+                return EXIT_USAGE_ERROR;
+            }
+
+            String result;
+            try {
                 // Create CacheManager if caching is enabled
                 CacheManager cacheManager = enableCache ? new CacheManager(dataDirectory) : null;
                 IndexManager indexManager = noIndex ? null : loadIndexManagerQuietly();
@@ -328,20 +361,19 @@ public class JsonSqlCli implements Callable<Integer> {
                 }
                 result = executor.execute(query);
             } catch (IllegalArgumentException e) {
-                // Parameter / mapping / query argument errors
+                // A table with no mapping, or a query the executor can't run
                 System.err.println("Error: " + e.getMessage());
-                return 1;
+                return EXIT_QUERY_ERROR;
             } catch (Exception e) {
                 System.err.println("Error executing query: " + e.getMessage());
                 if (isDebugEnabled()) {
                     e.printStackTrace();
                 }
-                return 1;
+                return exitCodeFor(e);
             }
 
             // Output handling has its own error reporting, distinct from query execution
             try {
-                OutputFormat format = parseOutputFormat(outputFormat);
                 OutputHandler outputHandler = new OutputHandler(prettyPrint, format);
                 outputHandler.handleOutput(result, outputFile, clipboard);
             } catch (Exception e) {
@@ -349,7 +381,7 @@ public class JsonSqlCli implements Callable<Integer> {
                 if (isDebugEnabled()) {
                     e.printStackTrace();
                 }
-                return 1;
+                return EXIT_DATA_ERROR;
             }
 
             return 0;
@@ -373,7 +405,7 @@ public class JsonSqlCli implements Callable<Integer> {
         System.err.println("  --show-view <name>      Show one materialized view");
         System.err.println("  --rebuild-view <name>   Rebuild a materialized view");
         System.err.println("  (Use -h or --help for the full option list)");
-        return 1;
+        return EXIT_USAGE_ERROR;
     }
 
     /**
@@ -479,14 +511,14 @@ public class JsonSqlCli implements Callable<Integer> {
         String dataDirError = validateDataDirectory();
         if (dataDirError != null) {
             System.err.println("Error: " + dataDirError);
-            return 1;
+            return EXIT_DATA_ERROR;
         }
         IndexManager indexManager;
         try {
             indexManager = new IndexManager(indexesFile);
         } catch (RuntimeException e) {
             System.err.println("Error loading index definitions: " + e.getMessage());
-            return 1;
+            return EXIT_DATA_ERROR;
         }
         IndexStore indexStore = new IndexStore(dataDirectory);
         MaterializedViewManager viewManager = loadViewManagerQuietly();
@@ -501,7 +533,7 @@ public class JsonSqlCli implements Callable<Integer> {
             boolean isView = viewManager != null && viewManager.hasView(table);
             if (!mappingManager.hasMapping(table) && !isView) {
                 System.err.println("Error: No mapping or materialized view found for table: " + table);
-                return 1;
+                return EXIT_QUERY_ERROR;
             }
             try {
                 boolean added = indexManager.addIndex(table, field);
@@ -515,7 +547,7 @@ public class JsonSqlCli implements Callable<Integer> {
                 if (isDebugEnabled()) {
                     e.printStackTrace();
                 }
-                return 1;
+                return exitCodeFor(e);
             }
         }
 
@@ -526,7 +558,7 @@ public class JsonSqlCli implements Callable<Integer> {
             indexStore.delete(table, field);
             if (!removed) {
                 System.err.println("No such index: " + table + "." + field);
-                return 1;
+                return EXIT_QUERY_ERROR;
             }
             System.out.println("Index dropped: " + table + "." + field);
             return 0;
@@ -542,7 +574,7 @@ public class JsonSqlCli implements Callable<Integer> {
             String field = rebuildIndex[1];
             if (!indexManager.hasIndex(table, field)) {
                 System.err.println("Error: No declared index: " + table + "." + field);
-                return 1;
+                return EXIT_QUERY_ERROR;
             }
             try {
                 TableIndex idx = builder.build(table, field);
@@ -554,7 +586,7 @@ public class JsonSqlCli implements Callable<Integer> {
                 if (isDebugEnabled()) {
                     e.printStackTrace();
                 }
-                return 1;
+                return exitCodeFor(e);
             }
         }
 
@@ -566,6 +598,7 @@ public class JsonSqlCli implements Callable<Integer> {
             }
             int ok = 0;
             int failed = 0;
+            int exitCode = 0;
             for (IndexDefinition def : defs) {
                 try {
                     builder.build(def.getTable(), def.getField());
@@ -574,11 +607,12 @@ public class JsonSqlCli implements Callable<Integer> {
                 } catch (Exception e) {
                     System.err.println("Failed: " + def + " - " + e.getMessage());
                     failed++;
+                    exitCode = Math.max(exitCode, exitCodeFor(e));
                 }
             }
             System.out.println("Rebuilt " + ok + " index(es)"
                 + (failed > 0 ? ", " + failed + " failed" : "") + ".");
-            return failed > 0 ? 1 : 0;
+            return exitCode;
         }
 
         return 0;
@@ -683,14 +717,14 @@ public class JsonSqlCli implements Callable<Integer> {
         String dataDirError = validateDataDirectory();
         if (dataDirError != null) {
             System.err.println("Error: " + dataDirError);
-            return 1;
+            return EXIT_DATA_ERROR;
         }
         MaterializedViewManager viewManager;
         try {
             viewManager = new MaterializedViewManager(viewsFile);
         } catch (RuntimeException e) {
             System.err.println("Error loading materialized views: " + e.getMessage());
-            return 1;
+            return EXIT_DATA_ERROR;
         }
         MaterializedViewStore viewStore = new MaterializedViewStore(dataDirectory);
         IndexManager indexManager = loadIndexManagerQuietly();
@@ -700,7 +734,7 @@ public class JsonSqlCli implements Callable<Integer> {
         if (materializeViewName != null) {
             if (query == null) {
                 System.err.println("Error: --query is required with --materialize-view");
-                return 1;
+                return EXIT_USAGE_ERROR;
             }
             try {
                 MaterializedViewDefinition def = builder.materialize(materializeViewName, query, indexManager);
@@ -713,7 +747,7 @@ public class JsonSqlCli implements Callable<Integer> {
                 if (isDebugEnabled()) {
                     e.printStackTrace();
                 }
-                return 1;
+                return exitCodeFor(e);
             }
         }
 
@@ -728,7 +762,7 @@ public class JsonSqlCli implements Callable<Integer> {
             }
             if (!removed) {
                 System.err.println("No such materialized view: " + dropMaterializedViewName);
-                return 1;
+                return EXIT_QUERY_ERROR;
             }
             System.out.println("Materialized view dropped: " + dropMaterializedViewName);
             return 0;
@@ -746,7 +780,7 @@ public class JsonSqlCli implements Callable<Integer> {
         if (rebuildViewName != null) {
             if (!viewManager.hasView(rebuildViewName)) {
                 System.err.println("Error: No materialized view: " + rebuildViewName);
-                return 1;
+                return EXIT_QUERY_ERROR;
             }
             try {
                 MaterializedViewDefinition def = builder.rebuild(rebuildViewName, indexManager);
@@ -758,7 +792,7 @@ public class JsonSqlCli implements Callable<Integer> {
                 if (isDebugEnabled()) {
                     e.printStackTrace();
                 }
-                return 1;
+                return exitCodeFor(e);
             }
         }
 
@@ -770,6 +804,7 @@ public class JsonSqlCli implements Callable<Integer> {
             }
             int ok = 0;
             int failed = 0;
+            int exitCode = 0;
             for (MaterializedViewDefinition def : defs) {
                 try {
                     builder.rebuild(def.getName(), indexManager);
@@ -778,11 +813,12 @@ public class JsonSqlCli implements Callable<Integer> {
                 } catch (Exception e) {
                     System.err.println("Failed: " + def.getName() + " - " + e.getMessage());
                     failed++;
+                    exitCode = Math.max(exitCode, exitCodeFor(e));
                 }
             }
             System.out.println("Rebuilt " + ok + " view(s)"
                 + (failed > 0 ? ", " + failed + " failed" : "") + ".");
-            return failed > 0 ? 1 : 0;
+            return exitCode;
         }
 
         return 0;
@@ -813,7 +849,7 @@ public class JsonSqlCli implements Callable<Integer> {
         MaterializedViewDefinition def = viewManager.getView(name);
         if (def == null) {
             System.err.println("No materialized view: " + name);
-            return 1;
+            return EXIT_QUERY_ERROR;
         }
         SourceFingerprint.warnIfDataDirectoryMismatch(def, dataDirectory);
         String status = SourceFingerprint.isFresh(def, mappingManager, dataDirectory) ? "FRESH" : "STALE";
