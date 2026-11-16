@@ -230,14 +230,15 @@ The following analytics features are **not implemented yet**. They are listed he
 
 | Feature | Current behavior |
 |---|---|
-| A calculation in the `ORDER BY` after a `UNION` | Error: `Expression in ORDER BY: ... is not supported`. Sort by a column of the result |
+| A calculation in the `ORDER BY` after a `UNION`, `INTERSECT` or `EXCEPT` | Error: `Expression in ORDER BY: ... is not supported`. Sort by a column or position of the result. Not planned: SQLite and PostgreSQL reject it too |
 | Functions other than `UPPER`, `LOWER`, `LENGTH`, `SUBSTR`, `TRIM`, `REPLACE`, `ROUND`, `ABS`, `COALESCE`, `IFNULL` and `NULLIF`: for example `CONCAT`, date functions (`DATE_FORMAT`, `MONTH`, `NOW`, ...) and JSON functions (`JSON_CONTAINS`, `JSON_LENGTH`, ...) | Error: `Function or aggregate in SELECT list: ... is not supported (available functions: ...)` |
 | `FETCH` | Error: `FETCH is not supported` |
 | `NATURAL JOIN` | Error: `NATURAL JOIN is not supported (...)`. Write `JOIN ... ON` |
-| `INTERSECT`, `EXCEPT` | Error: `INTERSECT is not supported (...)` |
+| `INTERSECT ALL`, `EXCEPT ALL`, `MINUS` | Error: `INTERSECT ALL is not supported (write INTERSECT, ...)` / `MINUS is not supported (write EXCEPT)` |
+| `INTERSECT` after `UNION` or `EXCEPT` | Error: `INTERSECT after UNION is not supported (...)`. Write the `INTERSECT` first |
 | Subqueries in `WHERE` (`IN (SELECT ...)`, `EXISTS`) | Error: unsupported expression |
 | Subqueries in `FROM` / `JOIN` (derived tables) | Error: no mapping found (use `WITH` instead) |
 
-`UNION` / `UNION ALL` **are** supported — see [UNION Queries](README.md#union-queries). So are `RIGHT`, `FULL` and `CROSS` joins — see [JOIN Clause](README.md#join-clause).
+`UNION`, `UNION ALL`, `INTERSECT` and `EXCEPT` **are** supported — see [UNION, INTERSECT and EXCEPT Queries](README.md#union-intersect-and-except-queries). So are `RIGHT`, `FULL` and `CROSS` joins — see [JOIN Clause](README.md#join-clause).
 
 For the authoritative list of supported syntax, see the [SQL Syntax Support](README.md#sql-syntax-support) and [Known Limitations](README.md#known-limitations) sections of the README.

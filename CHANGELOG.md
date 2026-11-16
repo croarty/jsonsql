@@ -10,6 +10,8 @@
 - `RIGHT [OUTER] JOIN` keeps every row of the joined table, and `FULL [OUTER] JOIN` keeps every row of both sides, with `null` for the other side's columns where nothing matched. An unprefixed name that belongs to an earlier table reads `null` on an unmatched joined row, not the joined table's field of the same name. Unmatched joined rows come after the matched rows, in their own order.
 - `CROSS JOIN` and comma joins between tables (`FROM a, b`) pair every row with every row. They used to work only with `UNNEST`.
 - The FROM table of a query with a `RIGHT` or `FULL JOIN` is read in full, without index pruning, which would change which joined rows count as unmatched.
+- `INTERSECT` keeps the rows of the first query that are also in the second, and `EXCEPT` those that are not, with duplicates removed. Rows match as `UNION` and `DISTINCT` match them, the left side's rows are kept in its order, and the operators run left to right with `UNION`. A trailing `ORDER BY`, `LIMIT` and `OFFSET` apply to the whole result.
+- An `INTERSECT` after a `UNION`, `UNION ALL` or `EXCEPT` is rejected, because PostgreSQL, MySQL and SQL Server would run the `INTERSECT` first while SQLite and Oracle run left to right. Write the `INTERSECT` first. `INTERSECT ALL`, `EXCEPT ALL` and parentheses around a set operation are rejected, and `MINUS` says to write `EXCEPT`.
 - `NATURAL JOIN` now says to write `JOIN ... ON`, and `ON` after `CROSS JOIN` or a comma is rejected.
 - A bad `ON` is reported when the query is parsed, so `--dry-run` reports it: an aggregate, a subquery, a function that isn't available, or more than one `ON` for a join. `JOIN ... USING (...)` now says to write `ON a.x = b.x` instead.
 

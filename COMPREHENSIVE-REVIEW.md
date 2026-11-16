@@ -5,11 +5,11 @@
 JsonSQL is a well-architected SQL-like query engine for JSON data. This document provides a thorough review of existing functionality and prioritized suggestions for new features.
 
 **Current Status:**
-- **Test Coverage**: 3940 tests across 83 test classes, all passing ✅
+- **Test Coverage**: 4010 tests across 85 test classes, all passing ✅
 - **Core Features**: Fully functional SQL-like query engine
 - **Recent Additions**: DISTINCT, ILIKE, CTEs, `UNION` / `UNION ALL`, CSV output, schema introspection (`--describe`), dry-run validation (`--dry-run`), declared indexes / file-level pruning (`--add-index`), materialized CTE views (`--materialize-view`)
 - **Architecture**: Clean separation of concerns, well-structured, maintainable
-- **Error handling**: unimplemented SQL (`NATURAL` joins, `USING`, `INTERSECT`/`EXCEPT`) is rejected at parse time, as is a function that is not available — see [Part 2.0](#20-unsupported-syntax-handling-high-priority)
+- **Error handling**: unimplemented SQL (`NATURAL` joins, `USING`, `INTERSECT ALL`/`EXCEPT ALL`/`MINUS`, an `INTERSECT` after a `UNION` or `EXCEPT`) is rejected at parse time, as is a function that is not available — see [Part 2.0](#20-unsupported-syntax-handling-high-priority)
 
 ---
 
@@ -106,7 +106,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - NULL and missing values sort together
 - **Strengths**: Uses the same comparison as WHERE, MIN/MAX, GROUP BY, DISTINCT and joins (`Values`): numbers are exact, numbers sort before text, and text is never read as a number
 - **Limitations**:
-  - Calculations (✅ **IMPLEMENTED**), such as `ORDER BY price * qty DESC` or `ORDER BY SUM(qty) * 2`, except after a UNION
+  - Calculations (✅ **IMPLEMENTED**), such as `ORDER BY price * qty DESC` or `ORDER BY SUM(qty) * 2`, except after a UNION, INTERSECT or EXCEPT, as in SQLite and PostgreSQL
   - A position needs an explicit column list
   - Text such as `"15.6 inch"` sorts as text; use `ORDER BY CAST(size AS REAL)` to sort by the number
 
@@ -159,10 +159,12 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - Trailing `ORDER BY` and `LIMIT` over the combined result
   - Per-branch `TOP` / parenthesized `LIMIT`
   - Mixed `UNION` / `UNION ALL` evaluated left to right, as in standard SQL
+  - `INTERSECT` and `EXCEPT` (✅ **IMPLEMENTED**), left to right with `UNION`, checked against SQLite
   - CTEs shared across branches
 - **Limitations**:
-  - `INTERSECT` / `EXCEPT` / `MINUS` are rejected
-- **Test Coverage**: `UnionTest.java`
+  - An `INTERSECT` after a `UNION`, `UNION ALL` or `EXCEPT` is rejected, because databases disagree on which runs first
+  - `INTERSECT ALL` / `EXCEPT ALL` / `MINUS` and parenthesised set operations are rejected
+- **Test Coverage**: `UnionTest.java`, `IntersectExceptTest.java`, `UnionQueryTest.java`
 
 ### 1.2 Data Management Features ✅
 
@@ -209,7 +211,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Strengths
 - Clean separation of concerns
 - Well-structured packages
-- Comprehensive test coverage (3940 tests, all passing)
+- Comprehensive test coverage (4010 tests, all passing)
 - Good error handling, with an exit code for each kind of failure: 1 for the query, 2 for the command line, 3 for the data (`JsonSqlCliExitCodesTest`)
 - Flexible field accessor pattern
 - Efficient JSONPath integration
@@ -282,7 +284,8 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 | `NATURAL JOIN`, `JOIN` without `ON`, `ON` after `CROSS JOIN` or a comma | Rejected |
 | Any `WHERE` condition in `JOIN ... ON` (`AND`, `OR`, ranges, functions) | ✅ Implemented |
 | `JOIN ... USING`, more than one `ON`, an aggregate or subquery in `ON` | Rejected |
-| `INTERSECT`, `EXCEPT`, `MINUS` | Rejected (previously executed as `UNION`) |
+| `INTERSECT`, `EXCEPT` | ✅ Implemented |
+| `INTERSECT` after `UNION` or `EXCEPT`, `INTERSECT ALL`, `EXCEPT ALL`, `MINUS` | Rejected |
 | `LIMIT` after a `UNION` | ✅ Implemented — limits the whole result |
 | Mixed `UNION` / `UNION ALL` | ✅ Implemented — left-associative, as in standard SQL |
 | `ORDER BY alias` / `ORDER BY 2` | ✅ Implemented |
@@ -537,7 +540,8 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
    - Medium value
 
 8. **UNION / UNION ALL** ✅ DONE (including whole-union `LIMIT` and mixed operators)
-   - Remaining: column-name unification, `INTERSECT` / `EXCEPT`
+   - `INTERSECT` / `EXCEPT` ✅ DONE
+   - Remaining: column-name unification
 
 9. **Subqueries** ⭐
    - Complex to implement
@@ -586,7 +590,7 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 - DISTINCT implementation uses canonical JSON string representation
 
 ### 6.2 Testing Strategy
-- Maintain high test coverage (currently 3940 tests, all passing)
+- Maintain high test coverage (currently 4010 tests, all passing)
 - Add integration tests for new features
 - Test edge cases (nulls, empty arrays, etc.)
 - Test files organized by feature:
@@ -621,7 +625,7 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 ### Current Strengths
 ✅ Robust WHERE clause with complex logic (AND, OR, NOT, parentheses)
 ✅ Excellent JOIN support (INNER, LEFT, RIGHT, FULL, CROSS; any condition in ON)
-✅ UNION / UNION ALL
+✅ UNION, UNION ALL, INTERSECT and EXCEPT
 ✅ UNNEST functionality (well-tested)
 ✅ DISTINCT keyword (fully implemented)
 ✅ ILIKE for case-insensitive pattern matching
@@ -652,6 +656,6 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 
 JsonSQL is a solid foundation with excellent core functionality. Recent additions of DISTINCT, ILIKE, CTEs, UNION, indexes, and materialized views demonstrate the system's extensibility. The suggested enhancements would transform it from a good tool into a comprehensive SQL-like query engine for JSON data. The prioritized roadmap focuses on high-impact features that provide the most value to users.
 
-**Current Test Status**: ✅ 3940 tests passing
+**Current Test Status**: ✅ 4010 tests passing
 **Code Quality**: ✅ High - Clean architecture, good separation of concerns
 **Documentation**: ✅ Comprehensive - README, examples, saved queries reference
