@@ -103,6 +103,16 @@ class QueryExecutorIndexPruningTest {
     }
 
     @Test
+    void derivedTablesPruneTheirOwnFromTable() throws Exception {
+        assertSameResult("SELECT t.id FROM (SELECT id, category FROM products WHERE category = 'Furniture') t");
+        assertSameResult("SELECT t.id FROM (SELECT id, category FROM products) t WHERE category = 'Furniture'");
+        assertSameResult("SELECT p.id, t.id FROM products p JOIN (SELECT id, price FROM products WHERE price > 40) t ON p.id = t.id"
+            + " WHERE p.category = 'Office'");
+        assertEquals("[{\"id\":3}]",
+            indexed.execute("SELECT t.id FROM (SELECT id, category FROM products) t WHERE category = 'Furniture'"));
+    }
+
+    @Test
     void equalityResultsMatchFullScan() throws Exception {
         assertSameResult("SELECT id, category FROM products WHERE category = 'Furniture'");
         assertSameResult("SELECT id FROM products WHERE category = 'Tools'");

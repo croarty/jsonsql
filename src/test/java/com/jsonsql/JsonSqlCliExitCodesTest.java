@@ -136,6 +136,20 @@ class JsonSqlCliExitCodesTest {
     }
 
     @Test
+    void dryRunLooksInsideDerivedTables() {
+        assertExit(OK, run("-q", "SELECT t.id FROM (SELECT id FROM products) t", "--dry-run"));
+        assertExit(QUERY, run("-q", "SELECT t.id FROM (SELECT id FROM nope) t", "--dry-run"));
+        assertExit(QUERY, run("-q", "SELECT p.id FROM products p JOIN (SELECT id FROM nope) t ON p.id = t.id", "--dry-run"));
+        assertExit(DATA, run("-q", "SELECT t.id FROM (SELECT id FROM missing) t", "--dry-run"));
+        assertExit(DATA, run("-q", "SELECT t.id FROM (SELECT id FROM products UNION SELECT id FROM missing) t", "--dry-run"));
+        assertExit(QUERY, run("-q", "SELECT id FROM (SELECT id FROM products)", "--dry-run"));
+
+        CliResult nested = run("-q", "SELECT u.id FROM (SELECT t.id FROM (SELECT id FROM nope) t) u", "--dry-run");
+        assertExit(QUERY, nested);
+        assertTrue(nested.err().contains("No mapping or materialized view found for table: nope"), nested.err());
+    }
+
+    @Test
     void dryRunReportsABadJoinCondition() {
         CliResult result = run("-q", "SELECT * FROM products p JOIN products q ON SUM(p.id) = q.id", "--dry-run");
 

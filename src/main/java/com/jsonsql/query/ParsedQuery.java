@@ -211,6 +211,25 @@ public class ParsedQuery {
         return commonTableExpressions != null && !commonTableExpressions.isEmpty();
     }
 
+    /**
+     * The queries of the derived tables in this query's FROM and joins, in order. Each is a
+     * plain query or a set operation, and may hold derived tables of its own.
+     */
+    public List<ParsedQuery> nestedQueries() {
+        List<ParsedQuery> nested = new ArrayList<>();
+        if (fromTable != null && fromTable.getSubquery() != null) {
+            nested.add(fromTable.getSubquery());
+        }
+        if (joins != null) {
+            for (JoinInfo join : joins) {
+                if (join.getTable() != null && join.getTable().getSubquery() != null) {
+                    nested.add(join.getTable().getSubquery());
+                }
+            }
+        }
+        return nested;
+    }
+
     public UnionQuery getUnionQuery() {
         return unionQuery;
     }

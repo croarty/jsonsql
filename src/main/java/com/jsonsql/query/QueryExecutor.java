@@ -167,15 +167,26 @@ public class QueryExecutor implements FieldAccessor {
 
     private void validateTableReferences(ParsedQuery query, Set<String> availableCtes,
                                          Set<String> resolvedTables) throws IOException {
-        if (query.getFromTable() != null) {
+        if (query.isUnionQuery()) {
+            // A set operation inside a derived table
+            for (ParsedQuery branch : query.getUnionQuery().getSubQueries()) {
+                validateTableReferences(branch, availableCtes, resolvedTables);
+            }
+            return;
+        }
+        if (query.getFromTable() != null && query.getFromTable().getSubquery() == null) {
             ensureTableAccessible(query.getFromTable().getTableName(), availableCtes, resolvedTables);
         }
         if (query.hasJoins()) {
             for (JoinInfo join : query.getJoins()) {
-                if (join.getTable() != null) {
+                if (join.getTable() != null && join.getTable().getSubquery() == null) {
                     ensureTableAccessible(join.getTable().getTableName(), availableCtes, resolvedTables);
                 }
             }
+        }
+        // A derived table reads its own tables, and the same CTEs
+        for (ParsedQuery nested : query.nestedQueries()) {
+            validateTableReferences(nested, availableCtes, resolvedTables);
         }
     }
 
@@ -215,14 +226,35 @@ public class QueryExecutor implements FieldAccessor {
      * Execute a parsed query and return the result rows as a list (for materialization).
      */
     public List<JsonNode> executeToRowList(ParsedQuery parsedQuery) throws Exception {
-        QueryExecutionContext context = new QueryExecutionContext();
-        String json = executeQuery(parsedQuery, context);
+        return runToRows(parsedQuery, new QueryExecutionContext());
+    }
+
+    /**
+     * Run a plain query or a set operation and return its rows, reading the CTEs already in
+     * the context.
+     */
+    private List<JsonNode> runToRows(ParsedQuery query, QueryExecutionContext context) throws Exception {
+        String json = query.isUnionQuery()
+            ? executeUnionQuery(query.getUnionQuery(), context)
+            : executeQuery(query, context);
         JsonNode array = objectMapper.readTree(json);
         List<JsonNode> rows = new ArrayList<>();
         if (array.isArray()) {
             array.forEach(rows::add);
         }
         return rows;
+    }
+
+    /**
+     * The rows of a table in FROM or a join: a derived table's rows, run now, or else a CTE's,
+     * a view's or a mapped table's, wrapped under the table's name.
+     */
+    private List<JsonNode> loadSource(TableInfo tableInfo, QueryExecutionContext context,
+                                      ParsedQuery pruningQuery) throws Exception {
+        if (tableInfo.getSubquery() != null) {
+            return wrapTableData(runToRows(tableInfo.getSubquery(), context), tableInfo);
+        }
+        return loadTableData(tableInfo, context, pruningQuery);
     }
     
     /**
@@ -231,7 +263,7 @@ public class QueryExecutor implements FieldAccessor {
     private String executeQuery(ParsedQuery parsedQuery, QueryExecutionContext context) throws Exception {
         // Load data from FROM table (checks CTE context first). The query is passed so the
         // index planner can prune backing files for the FROM table before loading.
-        List<JsonNode> fromData = loadTableData(parsedQuery.getFromTable(), context, parsedQuery);
+        List<JsonNode> fromData = loadSource(parsedQuery.getFromTable(), context, parsedQuery);
 
         // Apply UNNEST operations if any (must happen before JOINs so UNNEST columns can be used in JOIN conditions)
         List<JsonNode> unnestedData = fromData;
@@ -577,14 +609,7 @@ public class QueryExecutor implements FieldAccessor {
             }
             
             // Not cached (or caching disabled), execute the CTE query
-            String cteResultJson = executeQuery(cteQuery, context);
-            
-            // Parse the JSON result into List<JsonNode>
-            JsonNode cteResultArray = objectMapper.readTree(cteResultJson);
-            cteData = new ArrayList<>();
-            if (cteResultArray.isArray()) {
-                cteResultArray.forEach(cteData::add);
-            }
+            cteData = runToRows(cteQuery, context);
             
             // Save to cache if enabled
             if (cacheManager != null && !cteData.isEmpty()) {
@@ -714,9 +739,33 @@ public class QueryExecutor implements FieldAccessor {
         return keyBuilder.toString();
     }
 
+    /**
+     * The source fingerprints of a derived table's query: its FROM and joins, or each branch
+     * of a set operation. A derived table inside it adds its own sources the same way.
+     */
+    private void appendQuerySources(StringBuilder keyBuilder, ParsedQuery query, Map<String, String> upstreamCteKeys) {
+        if (query.isUnionQuery()) {
+            for (ParsedQuery branch : query.getUnionQuery().getSubQueries()) {
+                appendQuerySources(keyBuilder, branch, upstreamCteKeys);
+            }
+            return;
+        }
+        appendSourceFingerprint(keyBuilder, "SRC", query.getFromTable(), upstreamCteKeys);
+        for (JoinInfo join : query.getJoins()) {
+            appendSourceFingerprint(keyBuilder, "JOINSRC", join.getTable(), upstreamCteKeys);
+        }
+    }
+
     private void appendSourceFingerprint(StringBuilder keyBuilder, String label, TableInfo tableInfo,
                                          Map<String, String> upstreamCteKeys) {
         if (tableInfo == null || tableInfo.getTableName() == null) {
+            return;
+        }
+        if (tableInfo.getSubquery() != null) {
+            // A derived table: the fingerprints of everything it reads
+            StringBuilder derived = new StringBuilder();
+            appendQuerySources(derived, tableInfo.getSubquery(), upstreamCteKeys);
+            keyBuilder.append(label).append(":DERIVED[").append(derived).append("]:");
             return;
         }
         // CTE references shadow mappings/views, mirroring loadTableData's resolution order.
@@ -954,7 +1003,7 @@ public class QueryExecutor implements FieldAccessor {
     /**
      * Execute JOIN operations.
      */
-    private List<JsonNode> executeJoins(List<JsonNode> leftData, ParsedQuery parsedQuery, QueryExecutionContext context) throws IOException {
+    private List<JsonNode> executeJoins(List<JsonNode> leftData, ParsedQuery parsedQuery, QueryExecutionContext context) throws Exception {
         List<JsonNode> result = leftData;
 
         // The names ON can use for the rows so far
@@ -967,7 +1016,7 @@ public class QueryExecutor implements FieldAccessor {
         }
 
         for (JoinInfo joinInfo : parsedQuery.getJoins()) {
-            List<JsonNode> rightData = loadTableData(joinInfo.getTable(), context);
+            List<JsonNode> rightData = loadSource(joinInfo.getTable(), context, null);
             result = performJoin(result, rightData, joinInfo, earlierTables);
             earlierTables.add(joinInfo.getTable().getEffectiveName());
         }

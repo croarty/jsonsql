@@ -317,6 +317,22 @@ class JsonSqlCliTest {
     }
 
     @Test
+    void testDerivedTable() throws Exception {
+        String sql = "SELECT p.name, t.n FROM products p JOIN (SELECT id, id * 10 AS n FROM products WHERE id > 1) t ON p.id = t.id";
+        CliResult json = runCli(withConfig("-q", sql));
+        assertEquals(0, json.exitCode(), json.err());
+        assertEquals("[{\"name\":\"Gadget\",\"n\":20}]", objectMapper.readTree(json.out()).toString());
+
+        CliResult csv = runCli(withConfig("-q", sql, "--format", "csv"));
+        assertEquals(0, csv.exitCode(), csv.err());
+        assertEquals("name,n\nGadget,20", csv.out().strip().replace("\r", ""));
+
+        CliResult dryRun = runCli(withConfig("-q", sql, "--dry-run"));
+        assertEquals(0, dryRun.exitCode(), dryRun.err());
+        assertTrue(dryRun.out().contains("products"), dryRun.out());
+    }
+
+    @Test
     void testIntersectAndExcept() throws Exception {
         CliResult json = runCli(withConfig("-q",
             "SELECT id, name FROM products INTERSECT SELECT id, name FROM products WHERE id = 2"));
