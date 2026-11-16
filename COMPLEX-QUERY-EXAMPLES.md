@@ -237,8 +237,7 @@ The following analytics features are **not implemented yet**. They are listed he
 | `INTERSECT ALL`, `EXCEPT ALL`, `MINUS` | Error: `INTERSECT ALL is not supported (write INTERSECT, ...)` / `MINUS is not supported (write EXCEPT)` |
 | `INTERSECT` after `UNION` or `EXCEPT` | Error: `INTERSECT after UNION is not supported (...)`. Write the `INTERSECT` first |
 | Subqueries in `WHERE` (`IN (SELECT ...)`, `EXISTS`) | Error: unsupported expression |
-| Subqueries in `FROM` / `JOIN` (derived tables) | Error: no mapping found (use `WITH` instead) |
 
-`UNION`, `UNION ALL`, `INTERSECT` and `EXCEPT` **are** supported — see [UNION, INTERSECT and EXCEPT Queries](README.md#union-intersect-and-except-queries). So are `RIGHT`, `FULL` and `CROSS` joins — see [JOIN Clause](README.md#join-clause).
+`UNION`, `UNION ALL`, `INTERSECT` and `EXCEPT` **are** supported — see [UNION, INTERSECT and EXCEPT Queries](README.md#union-intersect-and-except-queries). So are `RIGHT`, `FULL` and `CROSS` joins — see [JOIN Clause](README.md#join-clause) — and derived tables in `FROM` and joins — see [Derived Tables](README.md#derived-tables).
 
 For the authoritative list of supported syntax, see the [SQL Syntax Support](README.md#sql-syntax-support) and [Known Limitations](README.md#known-limitations) sections of the README.
