@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `VALUES` in `FROM` or a join always gives `VALUES is not supported (use a mapped table)`. One row of `VALUES` gave `Table function in FROM: ...`, or, in parentheses, `Parentheses in FROM: ... (put one pair of parentheses around a subquery, ...)`, which didn't help.
+- A table function after a join or a comma, such as `JOIN generate_series(1, 3) g` or `JOIN VALUES (1, 2)`, gave `Invalid UNNEST syntax`. It now gives the same message as in `FROM`. Both were already errors, so no query that worked is affected.
+
 ## 3.1.0 - 2026-11-16
 
 This release adds subqueries, derived tables, `INTERSECT` and `EXCEPT`, the remaining join types, and any condition in `ON`. It also fixes joins and `UNNEST` forms that silently gave the wrong rows, so a few existing queries return different results: see [Upgrading from 3.0](#upgrading-from-30).

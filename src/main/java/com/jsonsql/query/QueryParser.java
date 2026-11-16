@@ -831,9 +831,9 @@ public class QueryParser {
         for (Join join : joins) {
             FromItem rightItem = join.getRightItem();
             
-            // Check if this is an UNNEST operation (TableFunction)
-            if (rightItem instanceof net.sf.jsqlparser.statement.select.TableFunction) {
-                UnnestInfo unnestInfo = extractUnnestInfo((net.sf.jsqlparser.statement.select.TableFunction) rightItem);
+            // UNNEST(...); any other table function is rejected by extractTableInfo below
+            if (rightItem instanceof TableFunction function && isNamed(function, "UNNEST")) {
+                UnnestInfo unnestInfo = extractUnnestInfo(function);
                 unnestInfo.setOuter(unnestJoin(join));
                 unnestInfos.add(unnestInfo);
             } else {
@@ -939,6 +939,9 @@ public class QueryParser {
      * as a table name and fail as one with no mapping.
      */
     private TableInfo extractTableInfo(FromItem fromItem) throws QueryParseException {
+        if (isValues(fromItem)) {
+            throw unsupported("VALUES", "use a mapped table");
+        }
         if (fromItem instanceof LateralSubSelect) {
             throw unsupported("LATERAL", "a derived table can't refer to the outer query");
         }
@@ -950,7 +953,7 @@ public class QueryParser {
                 "put one pair of parentheses around a subquery, and none around joins");
         }
         if (fromItem instanceof TableFunction function) {
-            if (function.getFunction() != null && "UNNEST".equalsIgnoreCase(function.getFunction().getName())) {
+            if (isNamed(function, "UNNEST")) {
                 throw unsupported("UNNEST in FROM", "write FROM t, UNNEST(t.items) AS i(item)");
             }
             throw unsupported("Table function in FROM: " + fromItem, "use a mapped table or a derived table");
@@ -975,8 +978,28 @@ public class QueryParser {
         
         tableInfo.setTableName(tableName);
         tableInfo.setAlias(alias);
-        
+
         return tableInfo;
+    }
+
+    /**
+     * VALUES in FROM or a join. JSqlParser reads several rows of VALUES as a Values select,
+     * which parseNested rejects, but one row, VALUES (1, 2), as a table function named VALUES,
+     * with or without parentheses around it.
+     */
+    private static boolean isValues(FromItem item) {
+        if (item instanceof TableFunction function) {
+            return isNamed(function, "VALUES");
+        }
+        if (item instanceof ParenthesedFromItem parenthesed) {
+            return (parenthesed.getJoins() == null || parenthesed.getJoins().isEmpty())
+                && isValues(parenthesed.getFromItem());
+        }
+        return false;
+    }
+
+    private static boolean isNamed(TableFunction function, String name) {
+        return function.getFunction() != null && name.equalsIgnoreCase(function.getFunction().getName());
     }
 
     /**
