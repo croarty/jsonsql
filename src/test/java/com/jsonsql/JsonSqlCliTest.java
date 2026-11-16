@@ -317,6 +317,35 @@ class JsonSqlCliTest {
     }
 
     @Test
+    void testLeftJoinUnnest() throws Exception {
+        Files.writeString(dataDir.resolve("baskets.json"), """
+            [{"id": 1, "items": ["x", "y"]}, {"id": 2, "items": []}]
+            """);
+        Files.writeString(mappingFile,
+            "{\"products\": \"products.json:$.products\", \"baskets\": \"baskets.json:$[*]\"}");
+        String sql = "SELECT b.id, item FROM baskets b LEFT JOIN UNNEST(b.items) AS i(item)";
+
+        CliResult json = runCli(withConfig("-q", sql));
+        assertEquals(0, json.exitCode(), json.err());
+        assertEquals("[{\"id\":1,\"item\":\"x\"},{\"id\":1,\"item\":\"y\"},{\"id\":2,\"item\":null}]",
+            objectMapper.readTree(json.out()).toString());
+
+        CliResult csv = runCli(withConfig("-q", sql, "--format", "csv"));
+        assertEquals(0, csv.exitCode(), csv.err());
+        assertEquals("id,item\n1,x\n1,y\n2,", csv.out().strip().replace("\r", ""));
+
+        CliResult rejected = runCli(withConfig("-q",
+            "SELECT b.id, item FROM baskets b RIGHT JOIN UNNEST(b.items) AS i(item)", "--dry-run"));
+        assertEquals(1, rejected.exitCode());
+        assertTrue(rejected.err().contains("RIGHT JOIN UNNEST is not supported"), rejected.err());
+
+        CliResult on = runCli(withConfig("-q",
+            "SELECT b.id, item FROM baskets b JOIN UNNEST(b.items) AS i(item) ON item = 'x'", "--dry-run"));
+        assertEquals(1, on.exitCode());
+        assertTrue(on.err().contains("ON after UNNEST is not supported"), on.err());
+    }
+
+    @Test
     void testDerivedTable() throws Exception {
         String sql = "SELECT p.name, t.n FROM products p JOIN (SELECT id, id * 10 AS n FROM products WHERE id > 1) t ON p.id = t.id";
         CliResult json = runCli(withConfig("-q", sql));

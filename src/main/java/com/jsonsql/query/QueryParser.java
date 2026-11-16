@@ -834,6 +834,7 @@ public class QueryParser {
             // Check if this is an UNNEST operation (TableFunction)
             if (rightItem instanceof net.sf.jsqlparser.statement.select.TableFunction) {
                 UnnestInfo unnestInfo = extractUnnestInfo((net.sf.jsqlparser.statement.select.TableFunction) rightItem);
+                unnestInfo.setOuter(unnestJoin(join));
                 unnestInfos.add(unnestInfo);
             } else {
                 // Regular JOIN
@@ -847,6 +848,45 @@ public class QueryParser {
 
         query.setJoins(joinInfos);
         query.setUnnests(unnestInfos);
+    }
+
+    /**
+     * How UNNEST is joined: true for LEFT JOIN UNNEST, false for a comma, CROSS JOIN, JOIN
+     * or INNER JOIN. Each row is paired with its own list, so there is nothing for ON to
+     * say: only an ON that is always true is accepted, as in PostgreSQL's LEFT JOIN ... ON true.
+     */
+    private static boolean unnestJoin(Join join) throws QueryParseException {
+        if (join.isRight()) {
+            throw unsupported("RIGHT JOIN UNNEST", "use LEFT JOIN UNNEST, or a comma");
+        }
+        if (join.isFull()) {
+            throw unsupported("FULL JOIN UNNEST", "use LEFT JOIN UNNEST, or a comma");
+        }
+        if (join.isNatural()) {
+            throw unsupported("NATURAL JOIN UNNEST", "use a comma or JOIN UNNEST");
+        }
+        if (join.getUsingColumns() != null && !join.getUsingColumns().isEmpty()) {
+            throw unsupported("USING after UNNEST", "put the condition in WHERE");
+        }
+        java.util.Collection<Expression> on = join.getOnExpressions();
+        if (on != null && !on.isEmpty() && (on.size() > 1 || !alwaysTrue(on.iterator().next()))) {
+            throw unsupported("ON after UNNEST", join.isLeft()
+                ? "put the condition in WHERE; note that a condition in WHERE on the element also removes the rows "
+                    + "LEFT JOIN UNNEST keeps for an empty list"
+                : "put the condition in WHERE");
+        }
+        return join.isLeft();
+    }
+
+    /** Exactly ON true, in any case, or ON 1 = 1. */
+    private static boolean alwaysTrue(Expression on) {
+        if (on instanceof Column column) {
+            return column.getTable() == null && !column.toString().startsWith("\"")
+                && "true".equalsIgnoreCase(column.getColumnName());
+        }
+        return on instanceof EqualsTo equals
+            && equals.getLeftExpression() instanceof LongValue left && left.getValue() == 1
+            && equals.getRightExpression() instanceof LongValue right && right.getValue() == 1;
     }
 
     private JoinInfo.Type joinType(Join join) throws QueryParseException {

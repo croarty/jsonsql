@@ -8,6 +8,7 @@ public class UnnestInfo {
     private String arrayExpression;  // The array field to unnest (e.g., "tags", "characteristics")
     private String alias;           // The alias for the unnest result (e.g., "t", "c")
     private String elementColumn;   // The column name for array elements (e.g., "tag", "characteristic")
+    private boolean outer;          // LEFT JOIN UNNEST: keep a row whose list has no elements
 
     public UnnestInfo() {}
 
@@ -41,9 +42,21 @@ public class UnnestInfo {
         this.elementColumn = elementColumn;
     }
 
+    /**
+     * Whether this is LEFT JOIN UNNEST, which keeps a row whose list is empty, missing, null
+     * or not a list, once, with the element null. The other forms leave such a row out.
+     */
+    public boolean isOuter() {
+        return outer;
+    }
+
+    public void setOuter(boolean outer) {
+        this.outer = outer;
+    }
+
     @Override
     public String toString() {
-        return "UNNEST(" + arrayExpression + ") AS " + alias + "(" + elementColumn + ")";
+        return (outer ? "LEFT JOIN " : "") + "UNNEST(" + arrayExpression + ") AS " + alias + "(" + elementColumn + ")";
     }
 
     @Override
@@ -54,11 +67,12 @@ public class UnnestInfo {
         UnnestInfo that = (UnnestInfo) obj;
         return java.util.Objects.equals(arrayExpression, that.arrayExpression) &&
                java.util.Objects.equals(alias, that.alias) &&
-               java.util.Objects.equals(elementColumn, that.elementColumn);
+               java.util.Objects.equals(elementColumn, that.elementColumn) &&
+               outer == that.outer;
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(arrayExpression, alias, elementColumn);
+        return java.util.Objects.hash(arrayExpression, alias, elementColumn, outer);
     }
 }

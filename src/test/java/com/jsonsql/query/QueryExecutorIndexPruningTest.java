@@ -113,6 +113,28 @@ class QueryExecutorIndexPruningTest {
     }
 
     @Test
+    void leftJoinUnnestKeepsTheSameRowsWithAndWithoutIndexes() throws Exception {
+        // A product with no tags, in a file the index has no summary for, and one in a covered file
+        writeFile("products-multi/2025/p.json", """
+            { "products": [{"id": 5, "category": "Garden", "price": 5.0, "tags": []}]}""");
+        writeFile("products-multi/2024/p.json", """
+            { "products": [
+              {"id": 3, "category": "Furniture", "price": 50.0, "tags": ["d"],
+               "reviews": [{"user":"q","rating":5}]},
+              {"id": 4, "category": "Office", "price": 120.0, "tags": ["d","e"],
+               "reviews": [{"user":"r","rating":5}]}
+            ]}""");
+        String left = "SELECT id, tag FROM products LEFT JOIN UNNEST(tags) AS t(tag)";
+        assertSameResult(left);
+        assertSameResult(left + " WHERE tag = 'd'");
+        assertSameResult(left + " WHERE tag IS NULL");
+        assertSameResult(left + " WHERE category = 'Garden'");
+        assertSameResult(left + " WHERE tag IN ('a', 'e') OR tag IS NULL");
+        assertEquals("[{\"id\":5,\"tag\":null}]", indexed.execute(left + " WHERE tag IS NULL"));
+        assertEquals("[{\"id\":3,\"tag\":\"d\"},{\"id\":4,\"tag\":\"d\"}]", indexed.execute(left + " WHERE tag = 'd'"));
+    }
+
+    @Test
     void subqueriesAreNotUsedForPruning() throws Exception {
         assertSameResult("SELECT id FROM products WHERE category IN (SELECT category FROM products WHERE price > 100)");
         assertSameResult("SELECT id FROM products WHERE category NOT IN (SELECT category FROM products WHERE price > 100)");
