@@ -11,7 +11,8 @@
 
 ### Fixed
 
-- `ON p.a = p.b`, where both fields are in the joined table, matched nothing. It now keeps the joined rows where the two fields are equal, as in SQL. The same goes for `ON o.a = c.b` where both fields are in earlier tables.
+- `ON p.a = p.b`, where both fields are in the joined table, matched nothing. It now keeps the joined rows where the two fields are equal, as in SQL.
+- `ON o.a = c.b`, where both fields are in tables joined earlier, read `c.b` from the table being joined, so it matched nothing. Both fields are now read from the earlier tables, and the condition keeps the rows where they are equal.
 - A literal on one side of `ON`, such as `ON p.category = 'Tools'` or `ON p.inStock = true`, was read as a field name and matched nothing. It is now compared as a value.
 - A second `ON` for one join (`JOIN p ON a ON b`) was silently ignored. It is now an error.
 
