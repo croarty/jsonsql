@@ -96,6 +96,7 @@ Everything else is simply not used for pruning (the file is kept):
 - `OR` between predicates → the whole table is scanned (an `OR` branch can match anything).
 - `NOT (...)`, `LIKE` / `ILIKE`, `IS NULL`, `!=` / `<>`, `NOT IN`, `NOT BETWEEN`, etc.
 - Predicates on non-indexed fields.
+- Subqueries: `field IN (SELECT ...)` and `field > (SELECT ...)`. The subquery prunes its own `FROM` table as any query does.
 
 Because predicates are AND-ed, a single usable conjunct is enough to prune. For example,
 in `WHERE category = 'Furniture' AND name LIKE '%pro%'`, the indexed `category = 'Furniture'`

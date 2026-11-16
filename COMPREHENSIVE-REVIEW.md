@@ -5,7 +5,7 @@
 JsonSQL is a well-architected SQL-like query engine for JSON data. This document provides a thorough review of existing functionality and prioritized suggestions for new features.
 
 **Current Status:**
-- **Test Coverage**: 4072 tests across 86 test classes, all passing ✅
+- **Test Coverage**: 4161 tests across 87 test classes, all passing ✅
 - **Core Features**: Fully functional SQL-like query engine
 - **Recent Additions**: DISTINCT, ILIKE, CTEs, `UNION` / `UNION ALL`, CSV output, schema introspection (`--describe`), dry-run validation (`--dry-run`), declared indexes / file-level pruning (`--add-index`), materialized CTE views (`--materialize-view`)
 - **Architecture**: Clean separation of concerns, well-structured, maintainable
@@ -61,7 +61,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 - **Grouping**: Parentheses `()` for complex conditions
 - **Nested Field Access**: `WHERE profile.level = 'Gold'`
 - **Limitations**:
-  - No subqueries in WHERE (raises a clear error)
+  - Subqueries as values and after `IN` (✅ **IMPLEMENTED**, `SubqueryTest`, checked against SQLite); correlated subqueries and `EXISTS` are rejected
   - Calculations (✅ **IMPLEMENTED**): arithmetic, `||`, `CASE` and `CAST` on either side of a condition
   - Functions (✅ **IMPLEMENTED**), such as `WHERE LOWER(name) LIKE 'w%'`
 
@@ -211,7 +211,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Strengths
 - Clean separation of concerns
 - Well-structured packages
-- Comprehensive test coverage (4072 tests, all passing)
+- Comprehensive test coverage (4161 tests, all passing)
 - Good error handling, with an exit code for each kind of failure: 1 for the query, 2 for the command line, 3 for the data (`JsonSqlCliExitCodesTest`)
 - Flexible field accessor pattern
 - Efficient JSONPath integration
@@ -283,7 +283,9 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 | `RIGHT`, `FULL`, `CROSS` and comma joins | ✅ Implemented |
 | `NATURAL JOIN`, `JOIN` without `ON`, `ON` after `CROSS JOIN` or a comma | Rejected |
 | Any `WHERE` condition in `JOIN ... ON` (`AND`, `OR`, ranges, functions) | ✅ Implemented |
-| `JOIN ... USING`, more than one `ON`, an aggregate or subquery in `ON` | Rejected |
+| `JOIN ... USING`, more than one `ON`, an aggregate or `EXISTS` in `ON` | Rejected |
+| Subqueries as values and after `IN`, in every clause | ✅ Implemented |
+| Correlated subqueries, `EXISTS`, `ANY`/`SOME`/`ALL`, row values | Rejected |
 | `INTERSECT`, `EXCEPT` | ✅ Implemented |
 | `INTERSECT` after `UNION` or `EXCEPT`, `INTERSECT ALL`, `EXCEPT ALL`, `MINUS` | Rejected |
 | `LIMIT` after a `UNION` | ✅ Implemented — limits the whole result |
@@ -341,8 +343,8 @@ SELECT name, COALESCE(description, 'No description') AS desc FROM products
 **Current Status**: Partially Implemented
 
 **Missing Features**:
-- Subqueries: `WHERE price > (SELECT AVG(price) FROM products)`
-- `EXISTS` / `NOT EXISTS`
+- ✅ Subqueries: `WHERE price > (SELECT AVG(price) FROM products)` - **IMPLEMENTED** (uncorrelated)
+- `EXISTS` / `NOT EXISTS` and correlated subqueries (rejected; rewrite with `IN (SELECT ...)` or a CTE and a join)
 
 **Use Cases**:
 ```sql
@@ -543,7 +545,7 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
    - `INTERSECT` / `EXCEPT` ✅ DONE
    - Remaining: column-name unification
 
-9. **Subqueries** ⭐
+9. **Subqueries** ✅ DONE (derived tables, values, `IN (SELECT ...)`; uncorrelated)
    - Complex to implement
    - Medium-high complexity
    - Medium value
@@ -574,7 +576,7 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 2. **TSV/Table output** - Better usability (CSV already shipped)
 
 ### 5.3 Long-Term Goals
-1. **Subqueries** - Complex but powerful
+1. **Correlated subqueries and `EXISTS`** - Uncorrelated subqueries are done
 2. **Performance optimizations** - For large datasets
 
 ---
@@ -590,7 +592,7 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 - DISTINCT implementation uses canonical JSON string representation
 
 ### 6.2 Testing Strategy
-- Maintain high test coverage (currently 4072 tests, all passing)
+- Maintain high test coverage (currently 4161 tests, all passing)
 - Add integration tests for new features
 - Test edge cases (nulls, empty arrays, etc.)
 - Test files organized by feature:
@@ -644,11 +646,11 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 ### Key Gaps
 ❌ No date functions
 ❌ Limited output formats (JSON and CSV only; no TSV/table/XML)
-❌ No subqueries in conditions or values (derived tables are supported)
+❌ No correlated subqueries or `EXISTS` (uncorrelated subqueries and derived tables are supported)
 
 ### Recommended Next Steps
 1. **Medium-term**: Functions, and calculated fields in the remaining clauses
-2. **Long-term**: Advanced features (scalar and `IN (SELECT ...)` subqueries)
+2. **Long-term**: Advanced features (correlated subqueries, `EXISTS`)
 
 ---
 
@@ -656,6 +658,6 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 
 JsonSQL is a solid foundation with excellent core functionality. Recent additions of DISTINCT, ILIKE, CTEs, UNION, indexes, and materialized views demonstrate the system's extensibility. The suggested enhancements would transform it from a good tool into a comprehensive SQL-like query engine for JSON data. The prioritized roadmap focuses on high-impact features that provide the most value to users.
 
-**Current Test Status**: ✅ 4072 tests passing
+**Current Test Status**: ✅ 4161 tests passing
 **Code Quality**: ✅ High - Clean architecture, good separation of concerns
 **Documentation**: ✅ Comprehensive - README, examples, saved queries reference
