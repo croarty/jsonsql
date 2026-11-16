@@ -87,9 +87,8 @@ conjuncts** on an indexed field:
 - Membership: `field IN ('a', 'b', ...)`
 - Ranges: `field > n`, `field >= n`, `field < n`, `field <= n`
 
-Write the field on the left. The planner would also understand `150 <= price`, but the
-WHERE evaluator requires *field operator literal*, so a reversed comparison returns no rows
-with or without an index.
+The field can be on either side: `150 <= price` prunes, and returns the same rows, as
+`price >= 150`.
 
 Everything else is simply not used for pruning (the file is kept):
 

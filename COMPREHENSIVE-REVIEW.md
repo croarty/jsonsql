@@ -317,7 +317,6 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 - Functions (`Functions`, covered by `ScalarFunctionsTest`): `UPPER`, `LOWER`, `LENGTH`, `SUBSTR`/`SUBSTRING`, `TRIM`/`LTRIM`/`RTRIM`, `REPLACE`, `ROUND`, `ABS`, `COALESCE`, `IFNULL`, `NULLIF`, following SQLite
 
 **Missing Features**:
-- Calculations in the ORDER BY after a UNION
 - More functions: `FLOOR()`, `CEIL()`, `POWER()`, `CONCAT()` (`||` joins text today)
 - Date/Time functions: `YEAR()`, `MONTH()`, `DAY()`, `DATE()`, `DATEADD()`, `DATEDIFF()`
 
@@ -475,11 +474,9 @@ Validates SQL syntax, table mappings, and backing file existence without loading
 
 Backed by `QueryExecutor.dryRunValidate`, `DryRunReporter`, and `DryRunTest` / `JsonSqlCliTest`.
 
-#### Query Explain / Profile
-```bash
-jsonsql --query "SELECT * FROM products" --explain
-# Shows execution plan, row counts, performance metrics
-```
+#### Query Explain / Profile (NOT IMPLEMENTED)
+
+A possible `--explain` option that would show the execution plan, row counts and timings. There is no such option today; `--dry-run` and `DEBUG=1` are the nearest equivalents.
 
 #### Schema Introspection (IMPLEMENTED)
 
@@ -525,7 +522,7 @@ Backed by `TableDescriber` and covered by `TableDescriberTest` / `JsonSqlCliTest
 2. **Parameterized Queries** ✅ DONE
    - Implemented via `${var}`/`${var:default}` + `--param`
 
-3. **Calculated Fields** ✅ DONE in every clause, including inside and around aggregates; still to come in ORDER BY after a UNION
+3. **Calculated Fields** ✅ DONE in every clause, including inside and around aggregates. A calculation in the ORDER BY after a set operation stays rejected, as in SQLite and PostgreSQL
    - Very common in real queries
    - Medium complexity
    - High value
