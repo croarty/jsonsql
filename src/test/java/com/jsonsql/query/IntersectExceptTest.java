@@ -139,6 +139,21 @@ class IntersectExceptTest {
         assertEquals("[{\"x\":3,\"y\":4}]", executor.execute("SELECT * FROM s1 EXCEPT SELECT * FROM s2"));
     }
 
+    @Test
+    void withSelectStarRowsWithDifferentFieldNamesNeverMatch() throws Exception {
+        // With SELECT * in a branch, rows keep their own names, so {v: 1} and {w: 1} differ
+        table("sv", "[{\"v\": 1}, {\"v\": 2}]");
+        table("sw", "[{\"w\": 1}, {\"w\": 3}]");
+        assertEquals("[]", executor.execute("SELECT * FROM sv INTERSECT SELECT * FROM sw"));
+        assertEquals("[]", executor.execute("SELECT v FROM sv INTERSECT SELECT * FROM sw"));
+        assertEquals("[{\"v\":1},{\"v\":2}]", executor.execute("SELECT * FROM sv EXCEPT SELECT * FROM sw"));
+        assertEquals("[{\"v\":1},{\"v\":2},{\"w\":1},{\"w\":3}]", executor.execute("SELECT * FROM sv UNION SELECT * FROM sw"));
+        // Naming the columns matches them by position, and an alias can give them the same name
+        assertEquals("[{\"v\":1}]", executor.execute("SELECT v FROM sv INTERSECT SELECT w FROM sw"));
+        assertEquals("[{\"v\":2}]", executor.execute("SELECT v FROM sv EXCEPT SELECT w FROM sw"));
+        assertEquals("[{\"v\":1}]", executor.execute("SELECT * FROM sv INTERSECT SELECT w AS v FROM sw"));
+    }
+
     // -- chains, left to right ---------------------------------------------------------
 
     @Test
