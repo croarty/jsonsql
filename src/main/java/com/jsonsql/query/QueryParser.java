@@ -558,10 +558,14 @@ public class QueryParser {
                 validateValue(in.getLeftExpression(), whole, clause, grouped);
                 valueSubquery(subquery, true);
             }
-            case ExistsExpression _ -> throw unsupported("EXISTS", "use IN (SELECT ...) or a join");
             // Anything else, in every clause, is rejected here rather than when a row reaches it
-            default -> throw unsupported("Condition in " + clause + ": " + whole,
-                "compare values with =, <, >, BETWEEN, LIKE, IN or IS NULL");
+            default -> {
+                if (expression instanceof ExistsExpression) {
+                    throw unsupported("EXISTS", "use IN (SELECT ...) or a join");
+                }
+                throw unsupported("Condition in " + clause + ": " + whole,
+                    "compare values with =, <, >, BETWEEN, LIKE, IN or IS NULL");
+            }
         }
     }
 
