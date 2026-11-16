@@ -34,7 +34,7 @@ import java.util.concurrent.Callable;
 @Command(
     name = "jsonsql",
     mixinStandardHelpOptions = true,
-    version = "JsonSQL 3.0.0",
+    version = "JsonSQL 3.1.0",
     description = "Query JSON files using SQL-like syntax"
 )
 public class JsonSqlCli implements Callable<Integer> {

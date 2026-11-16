@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 3.1.0 - 2026-11-16
+
+This release adds subqueries, derived tables, `INTERSECT` and `EXCEPT`, the remaining join types, and any condition in `ON`. It also fixes joins and `UNNEST` forms that silently gave the wrong rows, so a few existing queries return different results: see [Upgrading from 3.0](#upgrading-from-30).
 
 ### Added
 
@@ -34,6 +36,11 @@
 
 ### Upgrading from 3.0
 
+Queries that worked in 3.0 give the same results, with these exceptions. Each one gave a wrong answer or no error before.
+
+- Look for a join whose `ON` isn't a plain `earlier.field = joined.field`: two fields of the same table, a literal such as `= 'Tools'`, a calculation or function, or an unprefixed name before an earlier table's (`ON id = o.productId`). These matched nothing in 3.0, so an inner join returned no rows and a `LEFT JOIN` returned every left row with nulls. They now return the rows the condition describes.
+- Look for a second `ON` on one join. It was ignored, and is now an error.
+- Look for scripts that rely on a query with an unsupported `WHERE` condition, such as `EXISTS` or a bare field, returning no rows on an empty table. It now fails with exit code 1 whatever the data.
 - Look for `LEFT JOIN UNNEST` in saved queries and scripts. It now keeps rows whose list is empty or missing, with the element `null`, where it used to drop them. Use a comma or `JOIN UNNEST` to drop them as before.
 - Look for `ON`, `USING`, `RIGHT`, `FULL` or `NATURAL` with `UNNEST`. Each is now an error, except `ON true` and `ON 1 = 1`; it used to be ignored. Move an `ON` condition to `WHERE`.
 

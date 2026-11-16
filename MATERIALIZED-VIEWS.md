@@ -128,7 +128,7 @@ The bundled `example-data/catalog-large/` tree has **16 partition files** (4 cat
 
 ```bash
 # One-time setup (from repo root)
-JAR=target/jsonsql-3.0.0.jar
+JAR=target/jsonsql-3.1.0.jar
 CFG=/tmp/jsonsql-mv-mappings.json
 DATA=example-data
 
