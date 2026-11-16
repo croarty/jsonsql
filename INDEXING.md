@@ -104,6 +104,8 @@ still prunes files even though the `LIKE` part is ignored by the planner.
 
 ### Arrays and UNNEST
 
+Pruning on an `UNNEST` element is the same for `LEFT JOIN UNNEST`: a row it keeps for an empty list has a `null` element, which an `=`, `IN` or range predicate never matches, so leaving out a file can't lose such a row. `tag IS NULL` is not used for pruning.
+
 Array fields are summarized as the **union of element values** seen in each file, and the
 index is marked *multi-valued*. The planner maps an `UNNEST` element column back to the
 indexed source field:

@@ -726,9 +726,14 @@ jsonsql --query "SELECT name, tag FROM products, UNNEST(tags) AS t(tag) WHERE ta
 
 # JOIN UNNEST(...) is equivalent to the comma form, and the element can be used as a join key
 jsonsql --query "SELECT o.orderId, p.name FROM orders o JOIN UNNEST(o.items) AS oi(item) JOIN products p ON item.productId = p.id"
+
+# LEFT JOIN UNNEST keeps a customer with no benefits list, once, with benefit null
+jsonsql --query "SELECT c.name, benefit FROM customers c LEFT JOIN UNNEST(c.vipStatus.benefits) AS b(benefit)"
 ```
 
-These examples assume `products`, `orders`, and `customers` are mapped to the `complex-*.json` fixtures (see [COMPLEX-QUERY-EXAMPLES.md](COMPLEX-QUERY-EXAMPLES.md#data-setup)). The syntax is `UNNEST(<array field>) AS <alias>(<column>)`; the element is exposed under `<column>` (if you omit `(<column>)` it is named `value`). Rows whose field is missing, null, or not an array are dropped (there is no "outer" UNNEST).
+These examples assume `products`, `orders`, and `customers` are mapped to the `complex-*.json` fixtures (see [COMPLEX-QUERY-EXAMPLES.md](COMPLEX-QUERY-EXAMPLES.md#data-setup)). The syntax is `UNNEST(<array field>) AS <alias>(<column>)`; the element is exposed under `<column>` (if you omit `(<column>)` it is named `value`). With a comma, `CROSS JOIN`, `JOIN` or `INNER JOIN`, a row whose list is empty, missing, null or not a list is dropped. `LEFT [OUTER] JOIN UNNEST(...)` keeps such a row once, with the element `null`; a nested field of it, such as `item.productId`, is `null` too. A condition in `WHERE` on the element, such as `tag = 'a'`, also removes those kept rows, as in any `LEFT JOIN`; `WHERE tag IS NULL` finds them.
+
+`UNNEST` pairs each row with its own list, so there is no condition to give: `ON` after `UNNEST` is rejected (`ON after UNNEST is not supported (put the condition in WHERE)`), except an `ON` that is always true, exactly `ON true` or `ON 1 = 1`, as in PostgreSQL's `LEFT JOIN UNNEST(...) ON true`. `USING`, `RIGHT`, `FULL` and `NATURAL JOIN UNNEST` are rejected. Every `UNNEST` runs before the joins to tables, whichever order they are written in, and each is `LEFT` or not on its own.
 
 ### Output Options
 
@@ -1449,6 +1454,8 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 | `SELECT t.*` | `SELECT t.* is not supported (use SELECT * or list the columns)` |
 | `FETCH` | `FETCH is not supported (use LIMIT and OFFSET)` |
 | `NATURAL JOIN` | `NATURAL JOIN is not supported (write JOIN ... ON with the matching fields)` |
+| `ON` after `UNNEST`, other than `ON true` or `ON 1 = 1` | `ON after UNNEST is not supported (put the condition in WHERE)` |
+| `RIGHT`, `FULL`, `NATURAL JOIN UNNEST`, and `USING` after `UNNEST` | `RIGHT JOIN UNNEST is not supported (use LEFT JOIN UNNEST, or a comma)`, ... |
 | `JOIN` without `ON` | `JOIN requires ON condition` |
 | `ON` after `CROSS JOIN` or a comma | `ON after CROSS JOIN is not supported (use JOIN ... ON, or CROSS JOIN without ON)` |
 | `JOIN ... USING (...)` | `JOIN ... USING is not supported (write ON a.x = b.x instead)` |
@@ -1888,7 +1895,7 @@ Planned features for future releases, organized by priority:
 
 **Array/Collection Operations:**
 
-- ✅ `UNNEST` for flattening arrays
+- ✅ `UNNEST` for flattening arrays, and `LEFT JOIN UNNEST` to keep rows with no elements
 - Array contains/length operations
 - JSONPath expressions in SELECT
 

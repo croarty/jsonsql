@@ -28,6 +28,14 @@
 - A literal on one side of `ON`, such as `ON p.category = 'Tools'` or `ON p.inStock = true`, was read as a field name and matched nothing. It is now compared as a value.
 - A calculation or function on one side of `ON`, such as `ON o.productId + 1 = p.id` or `ON LOWER(o.code) = LOWER(c.code)`, was also read as a field name and matched nothing. It is now worked out for each row.
 - A second `ON` for one join (`JOIN p ON a ON b`) was silently ignored. It is now an error.
+- `LEFT JOIN UNNEST(...)` was run as a plain `UNNEST`, so it dropped every row whose list was empty, missing, null or not a list. It now keeps each such row once, with the element `null`, as `LEFT JOIN` does.
+- An `ON` after `UNNEST` was ignored, so `JOIN UNNEST(t.tags) AS x(tag) ON tag = 'a'` returned every element. It is now an error that says to put the condition in `WHERE`. `ON true` and `ON 1 = 1` are still accepted, as in PostgreSQL.
+- `RIGHT JOIN UNNEST` and `FULL JOIN UNNEST` were run as a plain `UNNEST`, and `NATURAL JOIN UNNEST` and `USING` after `UNNEST` were ignored. They are now errors.
+
+### Upgrading from 3.0
+
+- Look for `LEFT JOIN UNNEST` in saved queries and scripts. It now keeps rows whose list is empty or missing, with the element `null`, where it used to drop them. Use a comma or `JOIN UNNEST` to drop them as before.
+- Look for `ON`, `USING`, `RIGHT`, `FULL` or `NATURAL` with `UNNEST`. Each is now an error, except `ON true` and `ON 1 = 1`; it used to be ignored. Move an `ON` condition to `WHERE`.
 
 ## 3.0.0 - 2026-11-16
 

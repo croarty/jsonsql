@@ -768,7 +768,8 @@ public class QueryExecutor implements FieldAccessor {
         // Add UNNESTs if any
         if (cteQuery.hasUnnests()) {
             for (var unnest : cteQuery.getUnnests()) {
-                keyBuilder.append("UNNEST:").append(unnest.getArrayExpression())
+                // A plain UNNEST keeps its 3.0 key
+                keyBuilder.append(unnest.isOuter() ? "LEFTUNNEST:" : "UNNEST:").append(unnest.getArrayExpression())
                     .append(":").append(unnest.getAlias()).append(":");
             }
         }
@@ -1450,26 +1451,31 @@ public class QueryExecutor implements FieldAccessor {
             // Get the array field to unnest
             JsonNode arrayField = getFieldValue(row, unnest.getArrayExpression());
             
-            if (arrayField != null && arrayField.isArray()) {
+            if (arrayField != null && arrayField.isArray() && !arrayField.isEmpty()) {
                 // For each element in the array, create a new row
                 for (JsonNode arrayElement : arrayField) {
                     ObjectNode newRow = objectMapper.createObjectNode();
-                    
+
                     // Copy all original fields
                     row.properties().forEach(entry -> {
                         newRow.set(entry.getKey(), entry.getValue());
                     });
-                    
+
                     // Add the unnested element with the specified alias and column name
                     newRow.set(unnest.getElementColumn(), arrayElement);
-                    
+
                     result.add(newRow);
                 }
-            } else {
-                // If the array field is null or not an array, skip this row entirely
-                // This follows SQL standard behavior for UNNEST
-                // No row is added to the result
+            } else if (unnest.isOuter()) {
+                // LEFT JOIN UNNEST keeps a row with no elements, once, with the element null.
+                // A filled-in null, so a nested name such as item.pid reads null here rather
+                // than being looked for in a later table.
+                ObjectNode newRow = objectMapper.createObjectNode();
+                newRow.setAll((ObjectNode) row);
+                newRow.set(unnest.getElementColumn(), FilledNull.INSTANCE);
+                result.add(newRow);
             }
+            // Otherwise a row whose list is empty, null, missing or not a list is left out, as in SQL
         }
         
         return result;

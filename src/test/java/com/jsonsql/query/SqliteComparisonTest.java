@@ -95,6 +95,12 @@ class SqliteComparisonTest {
         "price = 20.0", "price = 2e1", "price > -1.5", "price = '20'", "name = 5", "name > 5",
         "name = 'O''Brien'", "name LIKE '50!%!_off' ESCAPE '!'", "name LIKE 'Widge!t' ESCAPE '!'", "price = NULL", "cat LIKE NULL");
 
+    /** Lists for UNNEST: SQLite reads them with json_each, which gives no rows for an empty, missing or null list. */
+    private static final String LISTS = """
+        [{"id": 1, "tags": ["a", "b"]}, {"id": 2, "tags": []}, {"id": 3}, {"id": 4, "tags": ["c", "a"]},
+         {"id": 5, "tags": null}, {"id": 6, "tags": ["a"]}]
+        """;
+
     private static final String JOIN_COLUMNS = "p.id AS pi, o.id AS oi, o.n AS n, p.name AS nm";
 
     /**
@@ -131,12 +137,14 @@ class SqliteComparisonTest {
             statement.execute("CREATE TABLE c (id, st, label)");
             statement.execute("CREATE TABLE k (cat)");
             statement.execute("CREATE TABLE m (id, v)");
+            statement.execute("CREATE TABLE u (id, tags)");
         }
         load(mappings, "p", PRODUCTS, "id", "name", "price", "cat", "qty");
         load(mappings, "o", ORDERS, "id", "pid", "n", "st");
         load(mappings, "c", CODES, "id", "st", "label");
         load(mappings, "k", KINDS, "cat");
         load(mappings, "m", MIXED, "id", "v");
+        load(mappings, "u", LISTS, "id", "tags");
         jsonSql = new QueryExecutor(mappings, dataDir);
     }
 
@@ -151,6 +159,9 @@ class SqliteComparisonTest {
                     JsonNode value = row.get(columns[i]);
                     if (value == null || value.isNull()) {
                         insert.setObject(i + 1, null);
+                    } else if (value.isContainerNode()) {
+                        // As JSON text, which json_each reads
+                        insert.setString(i + 1, value.toString());
                     } else if (value.isNumber()) {
                         insert.setDouble(i + 1, value.asDouble());
                     } else {
@@ -474,7 +485,26 @@ class SqliteComparisonTest {
             any("SELECT id FROM p WHERE id IN (SELECT pid FROM o) EXCEPT SELECT id FROM c"),
             any("SELECT t.id AS i FROM (SELECT id FROM p WHERE price < (SELECT AVG(price) FROM p)) t"),
             any("WITH x AS (SELECT pid FROM o WHERE st = 'open') SELECT id FROM p WHERE id IN (SELECT pid FROM x)"),
-            any("WITH x AS (SELECT id FROM p WHERE price > (SELECT AVG(price) FROM p)) SELECT id FROM x"));
+            any("WITH x AS (SELECT id FROM p WHERE price > (SELECT AVG(price) FROM p)) SELECT id FROM x"),
+            // UNNEST, modelled in SQLite with json_each; LEFT JOIN keeps a row whose list is empty, missing or null
+            prefixedForSqlite("SELECT u.id AS i, tag AS t FROM u, UNNEST(u.tags) AS x(tag)",
+                "SELECT u.id AS i, x.value AS t FROM u, json_each(u.tags) AS x"),
+            prefixedForSqlite("SELECT u.id AS i, tag AS t FROM u LEFT JOIN UNNEST(u.tags) AS x(tag)",
+                "SELECT u.id AS i, x.value AS t FROM u LEFT JOIN json_each(u.tags) AS x ON true"),
+            prefixedForSqlite("SELECT u.id AS i, tag AS t FROM u LEFT JOIN UNNEST(u.tags) AS x(tag) ON true",
+                "SELECT u.id AS i, x.value AS t FROM u LEFT JOIN json_each(u.tags) AS x ON true"),
+            prefixedForSqlite("SELECT u.id AS i FROM u LEFT JOIN UNNEST(u.tags) AS x(tag) WHERE tag IS NULL",
+                "SELECT u.id AS i FROM u LEFT JOIN json_each(u.tags) AS x ON true WHERE x.value IS NULL"),
+            prefixedForSqlite("SELECT u.id AS i FROM u LEFT JOIN UNNEST(u.tags) AS x(tag) WHERE tag = 'a'",
+                "SELECT u.id AS i FROM u LEFT JOIN json_each(u.tags) AS x ON true WHERE x.value = 'a'"),
+            prefixedForSqlite("SELECT u.id AS i, COUNT(tag) AS n, COUNT(*) AS r FROM u LEFT JOIN UNNEST(u.tags) AS x(tag) GROUP BY u.id",
+                "SELECT u.id AS i, COUNT(x.value) AS n, COUNT(*) AS r FROM u LEFT JOIN json_each(u.tags) AS x ON true GROUP BY u.id"),
+            prefixedForSqlite("SELECT tag AS t, COUNT(*) AS n FROM u LEFT JOIN UNNEST(u.tags) AS x(tag) GROUP BY tag",
+                "SELECT x.value AS t, COUNT(*) AS n FROM u LEFT JOIN json_each(u.tags) AS x ON true GROUP BY x.value"),
+            prefixedForSqlite("SELECT u.id AS i, tag AS t FROM u LEFT JOIN UNNEST(u.tags) AS x(tag) ORDER BY tag, u.id",
+                "SELECT u.id AS i, x.value AS t FROM u LEFT JOIN json_each(u.tags) AS x ON true ORDER BY x.value, u.id", "t", "i"),
+            prefixedForSqlite("SELECT u.id AS i, c.label AS l FROM u LEFT JOIN UNNEST(u.tags) AS x(tag) LEFT JOIN c ON c.id = u.id AND tag IS NULL",
+                "SELECT u.id AS i, c.label AS l FROM u LEFT JOIN json_each(u.tags) AS x ON true LEFT JOIN c ON c.id = u.id AND x.value IS NULL"));
     }
 
     static Stream<Query> aggregateQueries() {
