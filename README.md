@@ -10,7 +10,7 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
   - Functions - `UPPER`, `LOWER`, `LENGTH`, `SUBSTR`, `TRIM`, `REPLACE`, `ROUND`, `ABS`, `COALESCE`, `IFNULL`, `NULLIF`
   - `FROM` - Specify data sources with table aliases
   - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses, LIKE, ILIKE, IN, IS NULL)
-  - `JOIN` / `LEFT JOIN` - Combine data from multiple sources (single equi-join condition)
+  - `JOIN` / `LEFT JOIN` - Combine data from multiple sources, on any condition `WHERE` accepts
   - `UNION` / `UNION ALL` - Combine result sets from multiple queries
   - `WITH` - Common Table Expressions (CTEs) for composing queries
   - `UNNEST` - Flatten arrays into individual rows
@@ -322,7 +322,7 @@ Use this before writing queries to discover field names and nesting. Schema is i
 jsonsql --query "SELECT p.name, o.orderId FROM orders o JOIN products p ON o.productId = p.id" --data-dir example-data --dry-run
 ```
 
-Validates SQL syntax, confirms every referenced table has a mapping (or is a CTE or materialized view), and checks that backing JSON files exist — without loading data or returning results. Unsupported syntax that is rejected at parse time (`RIGHT JOIN`, `FETCH`, a function that isn't available, an ungrouped column with `GROUP BY`, ...) also fails the dry run. It does **not** check that referenced *fields* exist (see [Known Limitations](#known-limitations)):
+Validates SQL syntax, confirms every referenced table has a mapping (or is a CTE or materialized view), and checks that backing JSON files exist — without loading data or returning results. Unsupported syntax that is rejected at parse time (`RIGHT JOIN`, `FETCH`, a function that isn't available, an ungrouped column with `GROUP BY`, an aggregate in `JOIN ... ON`, ...) also fails the dry run. It does **not** check that referenced *fields* exist (see [Known Limitations](#known-limitations)):
 
 ```
 Dry run OK.
@@ -1063,19 +1063,26 @@ Examples:
 ```sql
 JOIN products p ON o.productId = p.id
 LEFT JOIN customers c ON o.customerId = c.id
+JOIN products p ON o.productId = p.id AND o.region = p.region
+JOIN bands b ON p.price >= b.low AND p.price < b.high
+JOIN codes c ON LOWER(o.code) = LOWER(c.code)
+LEFT JOIN products p ON o.productId = p.id AND o.status = 'open'
 ```
 
-**JOIN constraints:**
+**JOIN behaviour:**
 
-- Only a single **equi-join** is supported: the `ON` condition must be one `left = right` equality. Compound conditions (`... AND ...`) and range operators (`>`, `>=`, `<`, `<=`, etc.) in `ON` raise a clear error.
-- The two sides of `ON` can be written in either order (`o.productId = p.id` or `p.id = o.productId`).
+- `ON` takes any condition `WHERE` takes: `AND`, `OR`, `NOT`, every comparison, `BETWEEN`, `IN`, `LIKE`, `IS NULL`, arithmetic, `CASE`, `CAST` and [functions](#functions). A pair of rows joins only when the whole condition is true; a condition that is `NULL` (unknown) does not join.
+- `LEFT JOIN` keeps a left row when no row of the joined table passes the whole condition, and fills the joined table's columns with `null`. So `LEFT JOIN products p ON o.productId = p.id AND o.status = 'open'` keeps every order and fills in the product only for open ones, while the same test in `WHERE` would drop the other orders.
+- **Which table a name is read from.** A `field = field` comparison, on its own or as one of the parts joined by `AND`, is a join key. Its side that names the joined table (`p.id` when joining `products p`) is read from the joined table, and the other side from the rows so far. If neither side names the joined table, the left side is read from the rows so far and the right side from the joined table. So the two sides can be written in either order (`o.productId = p.id` or `p.id = o.productId`). Every other part of the condition is read from the combined row, as `WHERE` is after a join, so an unqualified name there is looked up in the earlier tables first: qualify names in `ON` when tables share field names.
+- A `field = field` comparison between two fields of the joined table (`ON p.a = p.b`), or between two fields of earlier tables, isn't a join key: it is a filter like any other part.
+- A join with at least one `field = field` key looks rows up by those keys, so its cost grows with the size of the tables. A join with no such key (`ON p.price >= b.low AND p.price < b.high`, or a top-level `OR`) compares every pair of rows, so its cost grows with the product of the table sizes.
+- An aggregate, a subquery, a function that isn't available, or more than one `ON` for a join is rejected at parse time, so `--dry-run` reports it too.
 - Join keys match by the same rules as `=` in `WHERE` (see [Comparison behavior](#where-clause)): `5` matches `5.0` but not `"5"`. If one file stores an id as a number and another stores it as text, the join finds no matches. Convert one side in a CTE first: `WITH o AS (SELECT orderId, CAST(productId AS INTEGER) AS productId FROM orders) SELECT ... FROM o JOIN products p ON o.productId = p.id`.
 - SQL `NULL` join keys never match anything (including other nulls).
 - Unmatched `LEFT JOIN` rows return `null` for every selected right-hand column.
 - `INNER JOIN` and `LEFT OUTER JOIN` are accepted as synonyms for `JOIN` and `LEFT JOIN`.
-- `RIGHT JOIN`, `FULL [OUTER] JOIN`, `CROSS JOIN`, and `NATURAL JOIN` are rejected (`RIGHT JOIN is not supported`, ...). Comma joins between tables (`FROM a, b`) and `JOIN ... USING (...)` are rejected with `JOIN requires ON condition`. The comma and `CROSS JOIN` forms are only valid with `UNNEST(...)`.
+- `RIGHT JOIN`, `FULL [OUTER] JOIN`, `CROSS JOIN`, and `NATURAL JOIN` are rejected (`RIGHT JOIN is not supported`, ...). Comma joins between tables (`FROM a, b`) are rejected with `JOIN requires ON condition`, and `JOIN ... USING (...)` with `JOIN ... USING is not supported (write ON a.x = b.x instead)`. The comma and `CROSS JOIN` forms are only valid with `UNNEST(...)`.
 - Self-joins work as long as each side has its own alias (`FROM products a JOIN products b ON a.id = b.id`).
-- Joins use a hash lookup on the joined table, so cost grows with the size of the tables, not their product.
 
 ### DISTINCT Clause
 
@@ -1340,6 +1347,10 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 | `SELECT t.*` | `SELECT t.* is not supported (use SELECT * or list the columns)` |
 | `FETCH` | `FETCH is not supported (use LIMIT and OFFSET)` |
 | `RIGHT`, `FULL [OUTER]`, `CROSS` (except with `UNNEST`), `NATURAL` joins | `RIGHT JOIN is not supported`, ... |
+| `JOIN ... USING (...)` | `JOIN ... USING is not supported (write ON a.x = b.x instead)` |
+| More than one `ON` for a join (`JOIN p ON a ON b`) | `More than one ON for JOIN p is not supported (join the conditions with AND)` |
+| An aggregate in `ON` | `Function in JOIN ON: SUM(p.id) = o.productId is not supported (an aggregate can't be used here)` |
+| A subquery or `EXISTS` in `ON` | `Condition in JOIN ON: ... is not supported (...)`, or `Expression in JOIN ON: ...` for `= (SELECT ...)` |
 | `INTERSECT`, `EXCEPT`, `MINUS` | `INTERSECT is not supported (only UNION and UNION ALL are supported)` |
 | `IN (SELECT ...)`, `EXISTS` in WHERE | `Unsupported WHERE expression: ...` |
 | An aggregate in WHERE | `Function in WHERE: COUNT(*) > 1 is not supported (use HAVING to filter on an aggregate)` |
@@ -1733,8 +1744,10 @@ Planned features for future releases, organized by priority:
 **JOIN Enhancements:**
 
 - `RIGHT JOIN` and `FULL OUTER JOIN` (currently rejected with an error)
-- Compound (`AND`) and non-equality `ON` conditions
-- ✅ Hash joins instead of nested-loop joins - **IMPLEMENTED**
+- ✅ Any condition in `ON`: compound (`AND`, `OR`), non-equality, functions and calculations - **IMPLEMENTED**
+- ✅ Hash joins instead of nested-loop joins - **IMPLEMENTED** (for joins with a `field = field` key)
+- Hash lookups on calculated keys such as `LOWER(a.x) = LOWER(b.x)` (these work, but compare every pair of rows)
+- Index pruning for joined tables
 
 **String & Data Functions:**
 

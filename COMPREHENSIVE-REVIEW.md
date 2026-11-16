@@ -5,7 +5,7 @@
 JsonSQL is a well-architected SQL-like query engine for JSON data. This document provides a thorough review of existing functionality and prioritized suggestions for new features.
 
 **Current Status:**
-- **Test Coverage**: 3764 tests across 80 test classes, all passing ✅
+- **Test Coverage**: 3857 tests across 82 test classes, all passing ✅
 - **Core Features**: Fully functional SQL-like query engine
 - **Recent Additions**: DISTINCT, ILIKE, CTEs, `UNION` / `UNION ALL`, CSV output, schema introspection (`--describe`), dry-run validation (`--dry-run`), declared indexes / file-level pruning (`--add-index`), materialized CTE views (`--materialize-view`)
 - **Architecture**: Clean separation of concerns, well-structured, maintainable
@@ -74,11 +74,13 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
   - JOIN with WHERE clauses
   - JOIN with UNNEST (execution order fixed)
   - JOIN with CTEs (✅ **IMPLEMENTED**)
-  - Self-joins with distinct aliases (works; verified manually, no dedicated test yet)
+  - Self-joins with distinct aliases (`JoinOnConditionTest`, `SqliteComparisonTest`)
+  - Any condition `WHERE` accepts in `ON` (✅ **IMPLEMENTED**): `AND`, `OR`, ranges, functions, calculations. Each `field = field` part joined by `AND` is a hash key; the rest is checked on each candidate pair. Checked against SQLite in `SqliteComparisonTest`
 - **Limitations**:
   - No `RIGHT JOIN` / `FULL OUTER JOIN` / `NATURAL JOIN` — rejected with an error
   - No `CROSS JOIN` or comma joins between tables (rejected; both forms work only with `UNNEST`)
-  - Only a single equi-join condition in `ON`
+  - No `JOIN ... USING` (rejected; write `ON a.x = b.x`)
+  - A join with no `field = field` key, such as a range join or a calculated key like `LOWER(a.x) = LOWER(b.x)`, compares every pair of rows
 
 #### UNNEST Operations
 - **Status**: Fully Implemented
@@ -206,7 +208,7 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 #### Strengths
 - Clean separation of concerns
 - Well-structured packages
-- Comprehensive test coverage (3764 tests, all passing)
+- Comprehensive test coverage (3857 tests, all passing)
 - Good error handling, with an exit code for each kind of failure: 1 for the query, 2 for the command line, 3 for the data (`JsonSqlCliExitCodesTest`)
 - Flexible field accessor pattern
 - Efficient JSONPath integration
@@ -276,6 +278,8 @@ JsonSQL is a well-architected SQL-like query engine for JSON data. This document
 | `OFFSET` / `LIMIT m, n` | ✅ Implemented |
 | `FETCH` | Rejected |
 | `RIGHT`, `FULL`, `CROSS` (non-`UNNEST`), `NATURAL` joins | Rejected |
+| Any `WHERE` condition in `JOIN ... ON` (`AND`, `OR`, ranges, functions) | ✅ Implemented |
+| `JOIN ... USING`, more than one `ON`, an aggregate or subquery in `ON` | Rejected |
 | `INTERSECT`, `EXCEPT`, `MINUS` | Rejected (previously executed as `UNION`) |
 | `LIMIT` after a `UNION` | ✅ Implemented — limits the whole result |
 | Mixed `UNION` / `UNION ALL` | ✅ Implemented — left-associative, as in standard SQL |
@@ -353,7 +357,8 @@ WHERE price > (SELECT AVG(price) FROM products)
 - `RIGHT JOIN` (currently rejected)
 - `FULL OUTER JOIN` (currently rejected)
 - `CROSS JOIN` (explicit)
-- Test coverage for self-joins (same table, different aliases), which already work
+- Hash lookups on calculated join keys such as `LOWER(a.x) = LOWER(b.x)`, which work today by comparing every pair of rows
+- Index pruning for joined tables
 
 **Use Cases**:
 ```sql
@@ -581,7 +586,7 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 - DISTINCT implementation uses canonical JSON string representation
 
 ### 6.2 Testing Strategy
-- Maintain high test coverage (currently 3764 tests, all passing)
+- Maintain high test coverage (currently 3857 tests, all passing)
 - Add integration tests for new features
 - Test edge cases (nulls, empty arrays, etc.)
 - Test files organized by feature:
@@ -648,6 +653,6 @@ Recently completed: fail-loudly parse checks for unsupported SQL, whole-union `L
 
 JsonSQL is a solid foundation with excellent core functionality. Recent additions of DISTINCT, ILIKE, CTEs, UNION, indexes, and materialized views demonstrate the system's extensibility. The suggested enhancements would transform it from a good tool into a comprehensive SQL-like query engine for JSON data. The prioritized roadmap focuses on high-impact features that provide the most value to users.
 
-**Current Test Status**: ✅ 3764 tests passing
+**Current Test Status**: ✅ 3857 tests passing
 **Code Quality**: ✅ High - Clean architecture, good separation of concerns
 **Documentation**: ✅ Comprehensive - README, examples, saved queries reference

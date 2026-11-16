@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `JOIN ... ON` takes any condition `WHERE` takes: `AND`, `OR`, `NOT`, every comparison, `BETWEEN`, `IN`, `LIKE`, `IS NULL`, arithmetic, `CASE`, `CAST` and functions. For example `ON o.productId = p.id AND o.region = p.region`, `ON p.price >= b.low AND p.price < b.high` or `ON LOWER(o.code) = LOWER(c.code)`. These used to fail when the query ran.
+- `LEFT JOIN` keeps a left row when no joined row passes the whole condition, so `LEFT JOIN products p ON o.productId = p.id AND o.status = 'open'` keeps every order and fills in the product only for open ones.
+- Each `field = field` part joined by `AND` is a join key looked up by hash, so `ON a.x = b.x AND a.y = b.y` stays fast. A join with no such part compares every pair of rows.
+- A bad `ON` is reported when the query is parsed, so `--dry-run` reports it: an aggregate, a subquery, a function that isn't available, or more than one `ON` for a join. `JOIN ... USING (...)` now says to write `ON a.x = b.x` instead.
+
+### Fixed
+
+- `ON p.a = p.b`, where both fields are in the joined table, matched nothing. It now keeps the joined rows where the two fields are equal, as in SQL. The same goes for `ON o.a = c.b` where both fields are in earlier tables.
+- A literal on one side of `ON`, such as `ON p.category = 'Tools'` or `ON p.inStock = true`, was read as a field name and matched nothing. It is now compared as a value.
+- A second `ON` for one join (`JOIN p ON a ON b`) was silently ignored. It is now an error.
+
 ## 3.0.0 - 2026-11-16
 
 This release adds calculations and functions in every clause, makes every clause compare values the same way, and makes decimals exact. Several of those changes alter results for existing queries, so read [Upgrading from 2.x](#upgrading-from-2x) first.

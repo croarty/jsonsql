@@ -64,6 +64,13 @@ jsonsql --data-dir example-data --query "SELECT o.orderId, p.name FROM orders o 
 
 # Complex query with multiple filters
 jsonsql --data-dir example-data --query "SELECT TOP 5 p.name, p.category, o.quantity FROM orders o JOIN products p ON o.productId = p.id WHERE p.inStock = true"
+
+# ON takes any condition WHERE takes: here, orders worth more than 100 (orders 103 and 105)
+jsonsql --data-dir example-data --query "SELECT o.orderId, p.name, o.quantity FROM orders o JOIN products p ON o.productId = p.id AND o.quantity * p.price > 100"
+
+# A condition in a LEFT JOIN's ON keeps every order, and fills in the product only when it is in stock
+# (order 104 is for Doohickey, which is out of stock, so its name is null)
+jsonsql --data-dir example-data --query "SELECT o.orderId, p.name FROM orders o LEFT JOIN products p ON o.productId = p.id AND p.inStock = true"
 ```
 
 ## Example 4: Output Options
