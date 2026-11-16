@@ -3,6 +3,8 @@ package com.jsonsql.query;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class QueryParserTest {
@@ -83,8 +85,25 @@ class QueryParserTest {
     @Test
     void testJoinWithoutOnIsRejected() {
         QueryParseException ex = assertThrows(QueryParseException.class,
-            () -> parser.parse("SELECT * FROM orders o, products p"));
+            () -> parser.parse("SELECT * FROM orders o JOIN products p"));
         assertEquals("JOIN requires ON condition", ex.getMessage());
+    }
+
+    @Test
+    void testJoinTypes() throws QueryParseException {
+        List<JoinInfo> joins = parser.parse("SELECT * FROM a JOIN b ON a.x = b.x INNER JOIN c ON a.x = c.x"
+            + " LEFT JOIN d ON a.x = d.x LEFT OUTER JOIN e ON a.x = e.x RIGHT JOIN f ON a.x = f.x"
+            + " RIGHT OUTER JOIN g ON a.x = g.x FULL JOIN h ON a.x = h.x FULL OUTER JOIN i ON a.x = i.x"
+            + " CROSS JOIN j, k").getJoins();
+
+        assertEquals(List.of(JoinInfo.Type.INNER, JoinInfo.Type.INNER, JoinInfo.Type.LEFT, JoinInfo.Type.LEFT,
+                JoinInfo.Type.RIGHT, JoinInfo.Type.RIGHT, JoinInfo.Type.FULL, JoinInfo.Type.FULL,
+                JoinInfo.Type.CROSS, JoinInfo.Type.CROSS),
+            joins.stream().map(JoinInfo::getType).toList());
+        assertNull(joins.get(8).getOn());
+        assertNull(joins.get(9).getOn());
+        assertTrue(joins.get(2).isLeftJoin());
+        assertFalse(joins.get(4).isLeftJoin());
     }
 
     @Test

@@ -309,11 +309,34 @@ class JsonSqlCliTest {
     void testSavedQueryWithUnsupportedSyntaxFailsWhenRun() {
         // Saving does not validate SQL; running it must still fail loudly.
         CliResult save = runCli(withConfig("--save-query", "bad", "-q",
-            "SELECT p.name FROM products p RIGHT JOIN products q ON p.id = q.id"));
+            "SELECT p.name FROM products p NATURAL JOIN products q"));
         assertEquals(0, save.exitCode());
         CliResult run = runCli(withConfig("--run-query", "bad"));
         assertEquals(1, run.exitCode());
-        assertTrue(run.err().contains("RIGHT JOIN is not supported"), run.err());
+        assertTrue(run.err().contains("NATURAL JOIN is not supported"), run.err());
+    }
+
+    @Test
+    void testOuterAndCrossJoins() throws Exception {
+        Files.writeString(dataDir.resolve("stock.json"), """
+            [{"pid": 1, "shop": "north"}, {"pid": 3, "shop": "south"}]
+            """);
+        Files.writeString(mappingFile,
+            "{\"products\": \"products.json:$.products\", \"stock\": \"stock.json:$[*]\"}");
+
+        CliResult full = runCli(withConfig("-q",
+            "SELECT p.name, s.shop FROM products p FULL JOIN stock s ON s.pid = p.id"));
+        assertEquals(0, full.exitCode(), full.err());
+        assertEquals("[{\"name\":\"Widget\",\"shop\":\"north\"},{\"name\":\"Gadget\",\"shop\":null},"
+            + "{\"name\":null,\"shop\":\"south\"}]", objectMapper.readTree(full.out()).toString());
+
+        CliResult cross = runCli(withConfig("-q", "SELECT COUNT(*) AS n FROM products p, stock s", "--format", "csv"));
+        assertEquals(0, cross.exitCode(), cross.err());
+        assertEquals("n\n4", cross.out().strip().replace("\r", ""));
+
+        CliResult dryRun = runCli(withConfig("-q", "SELECT * FROM products p CROSS JOIN stock s ON p.id = s.pid", "--dry-run"));
+        assertEquals(1, dryRun.exitCode());
+        assertTrue(dryRun.err().contains("ON after CROSS JOIN is not supported"), dryRun.err());
     }
 
     @Test

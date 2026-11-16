@@ -55,11 +55,12 @@ class UnsupportedSyntaxTest {
     @ParameterizedTest
     @CsvSource(delimiter = '|', quoteCharacter = '"', value = {
         "SELECT name FROM products OFFSET 5 ROWS FETCH NEXT 2 ROWS ONLY         | FETCH is not supported",
-        "SELECT o.orderId FROM orders o RIGHT JOIN products p ON o.productId = p.id      | RIGHT JOIN is not supported",
-        "SELECT o.orderId FROM orders o FULL OUTER JOIN products p ON o.productId = p.id | FULL OUTER JOIN is not supported",
-        "SELECT o.orderId FROM orders o FULL JOIN products p ON o.productId = p.id       | FULL OUTER JOIN is not supported",
-        "SELECT o.orderId FROM orders o CROSS JOIN products p                   | CROSS JOIN is not supported",
-        "SELECT o.orderId FROM orders o NATURAL JOIN products p                 | NATURAL JOIN is not supported",
+        "SELECT o.orderId FROM orders o NATURAL JOIN products p                 | NATURAL JOIN is not supported (write JOIN ... ON with the matching fields)",
+        "SELECT o.orderId FROM orders o CROSS JOIN products p ON o.productId = p.id | ON after CROSS JOIN is not supported (use JOIN ... ON, or CROSS JOIN without ON)",
+        "SELECT o.orderId FROM orders o, products p ON o.productId = p.id       | ON after a comma join is not supported (use JOIN ... ON, or a comma without ON)",
+        "SELECT o.orderId FROM orders o RIGHT JOIN products p USING (id)        | JOIN ... USING is not supported (write ON a.x = b.x instead)",
+        "SELECT o.orderId FROM orders o FULL JOIN products p ON SUM(p.id) = 1   | Function in JOIN ON: SUM(p.id) = 1 is not supported",
+        "SELECT o.orderId FROM orders o JOIN products p                         | JOIN requires ON condition",
         "SELECT p.* FROM products p                                             | SELECT p.* is not supported",
         "SELECT SOUNDEX(name) FROM products                                       | Function or aggregate in SELECT list: SOUNDEX(name) is not supported",
         "SELECT price * HEX(name) AS x FROM products                         | Function or aggregate in SELECT list: price * HEX(name) is not supported",
@@ -127,8 +128,8 @@ class UnsupportedSyntaxTest {
     @Test
     void rejectedInJoinedQueryEvenWhenLaterJoinsAreValid() {
         QueryParseException ex = rejected("SELECT o.orderId FROM orders o "
-            + "JOIN products p ON o.productId = p.id RIGHT JOIN products q ON o.productId = q.id");
-        assertTrue(ex.getMessage().contains("RIGHT JOIN"));
+            + "JOIN products p ON o.productId = p.id NATURAL JOIN products q");
+        assertTrue(ex.getMessage().contains("NATURAL JOIN"));
     }
 
     @Test
@@ -136,7 +137,7 @@ class UnsupportedSyntaxTest {
         assertThrows(QueryParseException.class,
             () -> executor.execute("SELECT SOUNDEX(category) FROM products"));
         assertThrows(QueryParseException.class,
-            () -> executor.execute("SELECT o.orderId FROM orders o RIGHT JOIN products p ON o.productId = p.id"));
+            () -> executor.execute("SELECT o.orderId FROM orders o NATURAL JOIN products p"));
     }
 
     @Test
@@ -171,6 +172,12 @@ class UnsupportedSyntaxTest {
         "SELECT o.orderId, p.name FROM orders o JOIN products p ON o.productId = p.id AND p.price > 1",
         "SELECT o.orderId, p.name FROM orders o JOIN products p ON o.productId <= p.id OR p.name LIKE 'W%'",
         "SELECT o.orderId, p.name FROM orders o JOIN products p ON UPPER(p.category) = 'TOOLS'",
+        "SELECT o.orderId, p.name FROM orders o RIGHT JOIN products p ON o.productId = p.id",
+        "SELECT o.orderId, p.name FROM orders o RIGHT OUTER JOIN products p ON o.productId = p.id",
+        "SELECT o.orderId, p.name FROM orders o FULL JOIN products p ON o.productId = p.id",
+        "SELECT o.orderId, p.name FROM orders o FULL OUTER JOIN products p ON o.productId = p.id",
+        "SELECT o.orderId, p.name FROM orders o CROSS JOIN products p",
+        "SELECT o.orderId, p.name FROM orders o, products p",
         "SELECT name, tag FROM products, UNNEST(tags) AS t(tag)",
         "SELECT name, tag FROM products JOIN UNNEST(tags) AS t(tag)",
         "SELECT name, tag FROM products CROSS JOIN UNNEST(tags) AS t(tag)",

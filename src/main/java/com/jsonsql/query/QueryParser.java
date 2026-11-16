@@ -728,29 +728,53 @@ public class QueryParser {
                 UnnestInfo unnestInfo = extractUnnestInfo((net.sf.jsqlparser.statement.select.TableFunction) rightItem);
                 unnestInfos.add(unnestInfo);
             } else {
-                rejectUnsupportedJoinType(join);
                 // Regular JOIN
                 JoinInfo joinInfo = new JoinInfo();
-                joinInfo.setLeftJoin(join.isLeft());
+                joinInfo.setType(joinType(join));
                 joinInfo.setTable(extractTableInfo(rightItem));
-                joinInfo.setOn(joinCondition(join));
+                joinInfo.setOn(joinCondition(join, joinInfo.getType()));
                 joinInfos.add(joinInfo);
             }
         }
-        
+
         query.setJoins(joinInfos);
         query.setUnnests(unnestInfos);
     }
 
+    private JoinInfo.Type joinType(Join join) throws QueryParseException {
+        if (join.isNatural()) {
+            throw unsupported("NATURAL JOIN", "write JOIN ... ON with the matching fields");
+        }
+        if (join.isCross() || join.isSimple()) {
+            return JoinInfo.Type.CROSS;
+        }
+        if (join.isFull()) {
+            return JoinInfo.Type.FULL;
+        }
+        if (join.isRight()) {
+            return JoinInfo.Type.RIGHT;
+        }
+        return join.isLeft() ? JoinInfo.Type.LEFT : JoinInfo.Type.INNER;
+    }
+
     /**
-     * A join's ON condition, which can be anything WHERE accepts.
+     * A join's ON condition, which can be anything WHERE accepts, or null for a cross join.
      */
-    private Expression joinCondition(Join join) throws QueryParseException {
+    private Expression joinCondition(Join join, JoinInfo.Type type) throws QueryParseException {
         if (join.getUsingColumns() != null && !join.getUsingColumns().isEmpty()) {
             throw unsupported("JOIN ... USING", "write ON a.x = b.x instead");
         }
         java.util.Collection<Expression> on = join.getOnExpressions();
-        if (on == null || on.isEmpty()) {
+        boolean hasOn = on != null && !on.isEmpty();
+        if (type == JoinInfo.Type.CROSS) {
+            if (hasOn) {
+                throw join.isCross()
+                    ? unsupported("ON after CROSS JOIN", "use JOIN ... ON, or CROSS JOIN without ON")
+                    : unsupported("ON after a comma join", "use JOIN ... ON, or a comma without ON");
+            }
+            return null;
+        }
+        if (!hasOn) {
             throw new QueryParseException("JOIN requires ON condition");
         }
         if (on.size() > 1) {
@@ -759,21 +783,6 @@ public class QueryParser {
         Expression condition = on.iterator().next();
         validateValueCondition(condition, condition, JOIN_ON, null);
         return condition;
-    }
-
-    private void rejectUnsupportedJoinType(Join join) throws QueryParseException {
-        if (join.isRight()) {
-            throw unsupported("RIGHT JOIN");
-        }
-        if (join.isFull()) {
-            throw unsupported("FULL OUTER JOIN");
-        }
-        if (join.isCross()) {
-            throw unsupported("CROSS JOIN");
-        }
-        if (join.isNatural()) {
-            throw unsupported("NATURAL JOIN");
-        }
     }
 
     private TableInfo extractTableInfo(FromItem fromItem) {

@@ -35,11 +35,15 @@ final class JoinCondition {
     }
 
     /**
-     * @param on            the whole ON condition
+     * @param on            the whole ON condition, or null for a cross join
      * @param joined        the table being joined
      * @param earlierTables the names of the FROM table, earlier joins and UNNEST aliases
      */
     static JoinCondition of(Expression on, TableInfo joined, Set<String> earlierTables) {
+        if (on == null) {
+            // A cross join: no keys and nothing to check
+            return new JoinCondition(List.of(), null);
+        }
         Expression whole = on instanceof Parenthesis parenthesis ? parenthesis.getExpression() : on;
         List<Expression> parts = new ArrayList<>();
         addParts(whole, parts);

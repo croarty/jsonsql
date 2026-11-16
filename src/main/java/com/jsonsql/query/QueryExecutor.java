@@ -614,7 +614,9 @@ public class QueryExecutor implements FieldAccessor {
         // Add JOINs if any
         if (cteQuery.hasJoins()) {
             for (var join : cteQuery.getJoins()) {
-                keyBuilder.append(join.isLeftJoin() ? "LEFTJOIN:" : "JOIN:").append(join.getTable().getTableName())
+                // INNER and LEFT keep their 3.0 keys: JOIN: and LEFTJOIN:
+                String type = join.getType() == JoinInfo.Type.INNER ? "" : join.getType().name();
+                keyBuilder.append(type).append("JOIN:").append(join.getTable().getTableName())
                     .append(":").append(join.getOnCondition()).append(":");
             }
         }
@@ -947,7 +949,8 @@ public class QueryExecutor implements FieldAccessor {
 
     /**
      * Perform a single JOIN operation. Rows come out in the order of the rows so far and,
-     * for each, in the order of the joined table.
+     * for each, in the order of the joined table. A RIGHT or FULL JOIN then adds the joined
+     * rows that matched nothing, in their own order.
      */
     private List<JsonNode> performJoin(
         List<JsonNode> leftData,
@@ -965,6 +968,9 @@ public class QueryExecutor implements FieldAccessor {
             .<java.util.function.Function<JsonNode, JsonNode>>map(key -> row -> getFieldValue(row, key.rightField()))
             .toList());
         WhereEvaluator evaluator = new WhereEvaluator(this);
+        JoinInfo.Type type = joinInfo.getType();
+        // By identity: two joined rows with the same content are still two rows
+        Set<JsonNode> matchedRight = Collections.newSetFromMap(new IdentityHashMap<>());
 
         for (JsonNode leftRow : leftData) {
             List<JsonNode> candidates = rightData;
@@ -985,12 +991,22 @@ public class QueryExecutor implements FieldAccessor {
                 if (residual == null || evaluator.evaluate(mergedRow, residual)) {
                     result.add(mergedRow);
                     matched = true;
+                    matchedRight.add(rightRow);
                 }
             }
 
-            // For LEFT JOIN, include left row even if no match found
-            if (joinInfo.isLeftJoin() && !matched) {
+            // For LEFT and FULL JOIN, include left row even if no match found
+            if (type.keepsUnmatchedLeft() && !matched) {
                 result.add(leftRow);
+            }
+        }
+
+        // For RIGHT and FULL JOIN, then the joined rows that matched nothing, in their order
+        if (type.keepsUnmatchedRight()) {
+            for (JsonNode rightRow : rightData) {
+                if (!matchedRight.contains(rightRow)) {
+                    result.add(rightRow);
+                }
             }
         }
 
