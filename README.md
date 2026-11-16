@@ -1478,7 +1478,7 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 | A calculation in the `ORDER BY` after a `UNION` | `Expression in ORDER BY: price * 2 is not supported (...)` |
 | A derived table without an alias | `A derived table needs an alias, as in FROM (SELECT ...) t` |
 | `WITH` inside a subquery | `WITH inside a subquery is not supported (put the CTEs at the top of the statement)` |
-| `LATERAL`, `VALUES`, table functions and parentheses around joins in `FROM` | `LATERAL is not supported (...)`, `Table function in FROM: VALUES(1, 2) is not supported (...)`, `Parentheses in FROM: ... is not supported (...)` |
+| `LATERAL`, `VALUES`, table functions and parentheses around joins in `FROM` | `LATERAL is not supported (...)`, `VALUES is not supported (use a mapped table)`, ... |
 
 These checks run at parse time, so `--dry-run` reports them too, and they apply inside CTE bodies and UNION branches as well.
 
