@@ -68,6 +68,13 @@ jsonsql --data-dir example-data --query "SELECT TOP 5 p.name, p.category, o.quan
 # ON takes any condition WHERE takes: here, orders worth more than 100 (orders 103 and 105)
 jsonsql --data-dir example-data --query "SELECT o.orderId, p.name, o.quantity FROM orders o JOIN products p ON o.productId = p.id AND o.quantity * p.price > 100"
 
+# RIGHT JOIN keeps every product: Thingamajig has no orders, so its orderId is null
+jsonsql --data-dir example-data --query "SELECT p.name, o.orderId FROM orders o RIGHT JOIN products p ON o.productId = p.id"
+
+# FULL JOIN keeps unmatched rows from both sides; a CROSS JOIN (or a comma) pairs every row with every row
+jsonsql --data-dir example-data --query "SELECT p.name, o.orderId FROM orders o FULL JOIN products p ON o.productId = p.id AND o.status = 'completed'"
+jsonsql --data-dir example-data --query "SELECT COUNT(*) AS pairs FROM orders o CROSS JOIN products p"
+
 # A condition in a LEFT JOIN's ON keeps every order, and fills in the product only when it is in stock
 # (order 104 is for Doohickey, which is out of stock, so its name is null)
 jsonsql --data-dir example-data --query "SELECT o.orderId, p.name FROM orders o LEFT JOIN products p ON o.productId = p.id AND p.inStock = true"

@@ -233,11 +233,11 @@ The following analytics features are **not implemented yet**. They are listed he
 | A calculation in the `ORDER BY` after a `UNION` | Error: `Expression in ORDER BY: ... is not supported`. Sort by a column of the result |
 | Functions other than `UPPER`, `LOWER`, `LENGTH`, `SUBSTR`, `TRIM`, `REPLACE`, `ROUND`, `ABS`, `COALESCE`, `IFNULL` and `NULLIF`: for example `CONCAT`, date functions (`DATE_FORMAT`, `MONTH`, `NOW`, ...) and JSON functions (`JSON_CONTAINS`, `JSON_LENGTH`, ...) | Error: `Function or aggregate in SELECT list: ... is not supported (available functions: ...)` |
 | `FETCH` | Error: `FETCH is not supported` |
-| `RIGHT JOIN`, `FULL OUTER JOIN` | Error: `RIGHT JOIN is not supported` / `FULL OUTER JOIN is not supported` |
+| `NATURAL JOIN` | Error: `NATURAL JOIN is not supported (...)`. Write `JOIN ... ON` |
 | `INTERSECT`, `EXCEPT` | Error: `INTERSECT is not supported (...)` |
 | Subqueries in `WHERE` (`IN (SELECT ...)`, `EXISTS`) | Error: unsupported expression |
 | Subqueries in `FROM` / `JOIN` (derived tables) | Error: no mapping found (use `WITH` instead) |
 
-`UNION` / `UNION ALL` **are** supported — see [UNION Queries](README.md#union-queries).
+`UNION` / `UNION ALL` **are** supported — see [UNION Queries](README.md#union-queries). So are `RIGHT`, `FULL` and `CROSS` joins — see [JOIN Clause](README.md#join-clause).
 
 For the authoritative list of supported syntax, see the [SQL Syntax Support](README.md#sql-syntax-support) and [Known Limitations](README.md#known-limitations) sections of the README.

@@ -10,7 +10,8 @@ A powerful command-line tool that enables SQL-like querying of JSON files withou
   - Functions - `UPPER`, `LOWER`, `LENGTH`, `SUBSTR`, `TRIM`, `REPLACE`, `ROUND`, `ABS`, `COALESCE`, `IFNULL`, `NULLIF`
   - `FROM` - Specify data sources with table aliases
   - `WHERE` - Filter results with complex conditions (AND, OR, NOT, parentheses, LIKE, ILIKE, IN, IS NULL)
-  - `JOIN` / `LEFT JOIN` - Combine data from multiple sources, on any condition `WHERE` accepts
+  - `JOIN`, `LEFT JOIN`, `RIGHT JOIN`, `FULL JOIN` - Combine data from multiple sources, on any condition `WHERE` accepts
+  - `CROSS JOIN` and comma joins (`FROM a, b`) - Every row paired with every row
   - `UNION` / `UNION ALL` - Combine result sets from multiple queries
   - `WITH` - Common Table Expressions (CTEs) for composing queries
   - `UNNEST` - Flatten arrays into individual rows
@@ -322,7 +323,7 @@ Use this before writing queries to discover field names and nesting. Schema is i
 jsonsql --query "SELECT p.name, o.orderId FROM orders o JOIN products p ON o.productId = p.id" --data-dir example-data --dry-run
 ```
 
-Validates SQL syntax, confirms every referenced table has a mapping (or is a CTE or materialized view), and checks that backing JSON files exist — without loading data or returning results. Unsupported syntax that is rejected at parse time (`RIGHT JOIN`, `FETCH`, a function that isn't available, an ungrouped column with `GROUP BY`, an aggregate in `JOIN ... ON`, ...) also fails the dry run. It does **not** check that referenced *fields* exist (see [Known Limitations](#known-limitations)):
+Validates SQL syntax, confirms every referenced table has a mapping (or is a CTE or materialized view), and checks that backing JSON files exist — without loading data or returning results. Unsupported syntax that is rejected at parse time (`NATURAL JOIN`, `FETCH`, a function that isn't available, an ungrouped column with `GROUP BY`, an aggregate in `JOIN ... ON`, ...) also fails the dry run. It does **not** check that referenced *fields* exist (see [Known Limitations](#known-limitations)):
 
 ```
 Dry run OK.
@@ -673,6 +674,12 @@ jsonsql --query "SELECT p.name, o.quantity, o.orderDate FROM orders o JOIN produ
 
 # LEFT JOIN
 jsonsql --query "SELECT o.orderId, p.name FROM orders o LEFT JOIN products p ON o.productId = p.id"
+
+# RIGHT JOIN: every product, with its orders; products nobody ordered have a null orderId
+jsonsql --query "SELECT p.name, o.orderId FROM orders o RIGHT JOIN products p ON o.productId = p.id"
+
+# Products nobody ordered
+jsonsql --query "SELECT p.name FROM orders o RIGHT JOIN products p ON o.productId = p.id WHERE o.orderId IS NULL"
 
 # JOIN with WHERE
 jsonsql --query "SELECT p.name, o.quantity FROM orders o JOIN products p ON o.productId = p.id WHERE o.status = 'active'"
@@ -1055,14 +1062,20 @@ Trailing zeros are dropped. A whole number that was written as a decimal keeps o
 
 ### JOIN Clause
 
-- `JOIN table ON condition` - Inner join
-- `LEFT JOIN table ON condition` - Left outer join
+- `JOIN table ON condition` - Inner join: only pairs of rows that pass the condition
+- `LEFT JOIN table ON condition` - Also keeps each row so far that matches nothing
+- `RIGHT JOIN table ON condition` - Also keeps each row of the joined table that matches nothing
+- `FULL JOIN table ON condition` - Keeps the unmatched rows of both sides
+- `CROSS JOIN table`, or a comma (`FROM a, b`) - Pairs every row with every row; there is no `ON`
 
 Examples:
 
 ```sql
 JOIN products p ON o.productId = p.id
 LEFT JOIN customers c ON o.customerId = c.id
+RIGHT JOIN products p ON o.productId = p.id
+FULL JOIN customers c ON o.customerId = c.id
+CROSS JOIN sizes s
 JOIN products p ON o.productId = p.id AND o.region = p.region
 JOIN bands b ON p.price >= b.low AND p.price < b.high
 JOIN codes c ON LOWER(o.code) = LOWER(c.code)
@@ -1079,9 +1092,12 @@ LEFT JOIN products p ON o.productId = p.id AND o.status = 'open'
 - An aggregate, a subquery, a function that isn't available, or more than one `ON` for a join is rejected at parse time, so `--dry-run` reports it too.
 - Join keys match by the same rules as `=` in `WHERE` (see [Comparison behavior](#where-clause)): `5` matches `5.0` but not `"5"`. If one file stores an id as a number and another stores it as text, the join finds no matches. Convert one side in a CTE first: `WITH o AS (SELECT orderId, CAST(productId AS INTEGER) AS productId FROM orders) SELECT ... FROM o JOIN products p ON o.productId = p.id`.
 - SQL `NULL` join keys never match anything (including other nulls).
-- Unmatched `LEFT JOIN` rows return `null` for every selected right-hand column.
-- `INNER JOIN` and `LEFT OUTER JOIN` are accepted as synonyms for `JOIN` and `LEFT JOIN`.
-- `RIGHT JOIN`, `FULL [OUTER] JOIN`, `CROSS JOIN`, and `NATURAL JOIN` are rejected (`RIGHT JOIN is not supported`, ...). Comma joins between tables (`FROM a, b`) are rejected with `JOIN requires ON condition`, and `JOIN ... USING (...)` with `JOIN ... USING is not supported (write ON a.x = b.x instead)`. The comma and `CROSS JOIN` forms are only valid with `UNNEST(...)`.
+- Unmatched `LEFT JOIN` rows return `null` for every selected right-hand column, and unmatched `RIGHT JOIN` rows return `null` for every column of the earlier tables. `FULL JOIN` does both. With `SELECT *`, an unmatched row has only the fields of the side it came from.
+- **Row order:** rows come out in the order of the rows so far and, for each, in the order of the joined table. A `RIGHT` or `FULL JOIN` then adds the joined rows that matched nothing, in their own order. Use `ORDER BY` when the order matters.
+- `RIGHT JOIN` keeps every joined row however many joins came before it, so in `FROM o JOIN p ON ... RIGHT JOIN s ON ...` every row of `s` is kept, and a later `LEFT JOIN` keeps every row that the `RIGHT JOIN` produced.
+- `CROSS JOIN` and commas have no condition, so they produce every pair of rows: 1,000 rows by 1,000 rows is a million rows. `FROM a, b WHERE a.id = b.id` gives the same rows as `FROM a JOIN b ON a.id = b.id`, but compares every pair first, so prefer `JOIN ... ON`.
+- `INNER JOIN`, `LEFT OUTER JOIN`, `RIGHT OUTER JOIN` and `FULL OUTER JOIN` are accepted as synonyms for `JOIN`, `LEFT JOIN`, `RIGHT JOIN` and `FULL JOIN`.
+- `NATURAL JOIN` is rejected, and so are `JOIN ... USING (...)`, `JOIN` without `ON`, and `ON` after `CROSS JOIN` or a comma (see [Unsupported SQL](#known-limitations)).
 - Self-joins work as long as each side has its own alias (`FROM products a JOIN products b ON a.id = b.id`).
 
 ### DISTINCT Clause
@@ -1346,7 +1362,9 @@ Only `SELECT` statements are accepted. Unimplemented SQL fails with a clear erro
 | `SUM(*)`, or an aggregate with several arguments | `Aggregate argument is not supported: SUM(*) (use a single value, or COUNT(*))` |
 | `SELECT t.*` | `SELECT t.* is not supported (use SELECT * or list the columns)` |
 | `FETCH` | `FETCH is not supported (use LIMIT and OFFSET)` |
-| `RIGHT`, `FULL [OUTER]`, `CROSS` (except with `UNNEST`), `NATURAL` joins | `RIGHT JOIN is not supported`, ... |
+| `NATURAL JOIN` | `NATURAL JOIN is not supported (write JOIN ... ON with the matching fields)` |
+| `JOIN` without `ON` | `JOIN requires ON condition` |
+| `ON` after `CROSS JOIN` or a comma | `ON after CROSS JOIN is not supported (use JOIN ... ON, or CROSS JOIN without ON)` |
 | `JOIN ... USING (...)` | `JOIN ... USING is not supported (write ON a.x = b.x instead)` |
 | More than one `ON` for a join (`JOIN p ON a ON b`) | `More than one ON for JOIN p is not supported (join the conditions with AND)` |
 | An aggregate in `ON` | `Function in JOIN ON: SUM(p.id) = o.productId is not supported (an aggregate can't be used here)` |
@@ -1557,7 +1575,7 @@ How it works:
 - Index **definitions** live in `.jsonsql-indexes.json`; the per-file **summaries** live under `.jsonsql-index/` in the data directory.
 - Each summary records, per file, the distinct values (up to a cardinality cap), `min`/`max`, value type, and a freshness fingerprint (last-modified time + size).
 - Pruning is **correctness-preserving**: a file is skipped only when a fresh summary proves no row can satisfy a mandatory `AND` predicate (`=`, `IN`, or a range `>`,`>=`,`<`,`<=`). Anything uncertain (no index, an `OR`, a stale/missing summary, mixed types, a changed mapping) falls back to a full scan, so results are always identical to running without an index.
-- Indexes are used automatically when present, for the **FROM table** of each `SELECT` (main query, CTE bodies, UNION branches) but not for JOINed tables; pass `--no-index` to force a full scan.
+- Indexes are used automatically when present, for the **FROM table** of each `SELECT` (main query, CTE bodies, UNION branches) but not for JOINed tables, and not for the FROM table of a query with a `RIGHT` or `FULL JOIN`, where leaving out FROM rows would change which joined rows count as unmatched; pass `--no-index` to force a full scan.
 - After upgrading from 1.x, run `--rebuild-indexes` once. See the [upgrade guide](CHANGELOG.md#upgrading-from-1x).
 - Indexes are not rebuilt automatically when data changes — modified files simply stop being pruned until you `--rebuild-index`/`--rebuild-indexes`.
 
@@ -1736,14 +1754,14 @@ Planned features for future releases, organized by priority:
 - ✅ Calculations in `WHERE` and `ORDER BY` (e.g., `WHERE price * stock > 5000 ORDER BY price * stock DESC`) - **IMPLEMENTED**
 - ✅ Calculations in `GROUP BY` and `HAVING`, and inside and around aggregates (e.g., `SUM(price * qty)`, `SUM(price) * 2`) - **IMPLEMENTED**
 - Calculations in the `ORDER BY` after a `UNION`
-- ✅ **Unsupported SQL fails loudly** — `RIGHT`/`FULL`/`CROSS`/`NATURAL` joins, `INTERSECT`/`EXCEPT`, and non-column SELECT items are rejected at parse time instead of being silently ignored - **IMPLEMENTED**
+- ✅ **Unsupported SQL fails loudly** — `NATURAL` joins, `INTERSECT`/`EXCEPT`, and non-column SELECT items are rejected at parse time instead of being silently ignored - **IMPLEMENTED**
 - ✅ `ORDER BY` on a SELECT alias or column position - **IMPLEMENTED**
 
 ### Medium Priority (Advanced Features)
 
 **JOIN Enhancements:**
 
-- `RIGHT JOIN` and `FULL OUTER JOIN` (currently rejected with an error)
+- ✅ `RIGHT JOIN`, `FULL OUTER JOIN`, `CROSS JOIN` and comma joins - **IMPLEMENTED**
 - ✅ Any condition in `ON`: compound (`AND`, `OR`), non-equality, functions and calculations - **IMPLEMENTED**
 - ✅ Hash joins instead of nested-loop joins - **IMPLEMENTED** (for joins with a `field = field` key)
 - Hash lookups on calculated keys such as `LOWER(a.x) = LOWER(b.x)` (these work, but compare every pair of rows)
