@@ -285,7 +285,7 @@ public class QueryExecutor implements FieldAccessor {
     }
     
     /**
-     * Execute a UNION query and return the combined results.
+     * Execute a set operation (UNION, UNION ALL, INTERSECT, EXCEPT) and return the combined results.
      */
     private String executeUnionQuery(UnionQuery unionQuery, QueryExecutionContext context) throws Exception {
         List<JsonNode> finalResults = new ArrayList<>();
@@ -299,20 +299,31 @@ public class QueryExecutor implements FieldAccessor {
             ParsedQuery subQuery = unionQuery.getSubQueries().get(i);
             
             if (DebugMode.isEnabled()) {
-                System.err.println("DEBUG: Executing UNION query part " + (i + 1));
+                System.err.println("DEBUG: Executing set operation query part " + (i + 1));
             }
             
             String resultJson = executeQuery(subQuery, context);
             JsonNode resultArray = objectMapper.readTree(resultJson);
-            
+            List<JsonNode> branchRows = new ArrayList<>();
             if (resultArray.isArray()) {
                 for (JsonNode node : resultArray) {
-                    finalResults.add(renameColumns(node, outputNames(subQuery), outputNames));
+                    branchRows.add(renameColumns(node, outputNames(subQuery), outputNames));
                 }
             }
+            if (i == 0) {
+                finalResults.addAll(branchRows);
+                continue;
+            }
 
-            if (i > 0 && !unionQuery.isAllAt(i - 1)) {
-                finalResults = applyDistinct(finalResults);
+            // Rows are equal as DISTINCT counts them, through rowToKey
+            switch (unionQuery.operatorAt(i - 1)) {
+                case UNION_ALL -> finalResults.addAll(branchRows);
+                case UNION -> {
+                    finalResults.addAll(branchRows);
+                    finalResults = applyDistinct(finalResults);
+                }
+                case INTERSECT -> finalResults = applyDistinct(keepRows(finalResults, branchRows, true));
+                case EXCEPT -> finalResults = applyDistinct(keepRows(finalResults, branchRows, false));
             }
         }
         
@@ -331,6 +342,23 @@ public class QueryExecutor implements FieldAccessor {
         return objectMapper.writeValueAsString(resultArray);
     }
     
+    /**
+     * The rows that are (for INTERSECT) or are not (for EXCEPT) among {@code others}, in order.
+     */
+    private List<JsonNode> keepRows(List<JsonNode> rows, List<JsonNode> others, boolean whenFound) {
+        Set<String> otherKeys = new HashSet<>();
+        for (JsonNode other : others) {
+            otherKeys.add(rowToKey(other));
+        }
+        List<JsonNode> kept = new ArrayList<>();
+        for (JsonNode row : rows) {
+            if (otherKeys.contains(rowToKey(row)) == whenFound) {
+                kept.add(row);
+            }
+        }
+        return kept;
+    }
+
     /**
      * Add the value of each calculated SELECT column and ORDER BY key to its row, under the
      * key it was given.

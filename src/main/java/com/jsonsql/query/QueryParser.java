@@ -63,6 +63,10 @@ public class QueryParser {
             
             return query;
         } catch (JSQLParserException e) {
+            QueryParseException modifier = setOperatorModifier(sql);
+            if (modifier != null) {
+                throw modifier;
+            }
             throw new QueryParseException("Invalid SQL syntax: " + syntaxErrorSummary(e), e);
         }
     }
@@ -92,17 +96,62 @@ public class QueryParser {
     }
 
     /**
-     * Parse a UNION query and build the UnionQuery object.
+     * The operator a set operation stands for. MINUS is Oracle's name for EXCEPT.
+     */
+    private static UnionQuery.Operator setOperator(net.sf.jsqlparser.statement.select.SetOperation op)
+            throws QueryParseException {
+        if (op instanceof net.sf.jsqlparser.statement.select.UnionOp union) {
+            return union.isAll() ? UnionQuery.Operator.UNION_ALL : UnionQuery.Operator.UNION;
+        }
+        if (op instanceof net.sf.jsqlparser.statement.select.IntersectOp) {
+            return UnionQuery.Operator.INTERSECT;
+        }
+        if (op instanceof net.sf.jsqlparser.statement.select.ExceptOp) {
+            return UnionQuery.Operator.EXCEPT;
+        }
+        if (op instanceof net.sf.jsqlparser.statement.select.MinusOp) {
+            throw unsupported("MINUS", "write EXCEPT");
+        }
+        throw unsupported(op.toString().trim(), "use UNION, UNION ALL, INTERSECT or EXCEPT");
+    }
+
+    /**
+     * JSqlParser 4.9 has no INTERSECT ALL, EXCEPT ALL or their DISTINCT forms, and gives a bare
+     * syntax error for them. Name the one written, and say what to write instead.
+     */
+    private static final java.util.regex.Pattern SET_OPERATOR_MODIFIER =
+        java.util.regex.Pattern.compile("(?i)\\b(INTERSECT|EXCEPT)\\s+(ALL|DISTINCT)\\b");
+
+    private static QueryParseException setOperatorModifier(String sql) {
+        // Text in quotes, such as 'except all', isn't an operator
+        java.util.regex.Matcher matcher = SET_OPERATOR_MODIFIER.matcher(sql.replaceAll("'(?:[^']|'')*'", "''"));
+        if (!matcher.find()) {
+            return null;
+        }
+        String operator = matcher.group(1).toUpperCase(Locale.ROOT);
+        return unsupported(operator + " " + matcher.group(2).toUpperCase(Locale.ROOT),
+            "write " + operator + ", which removes duplicates");
+    }
+
+    /**
+     * Parse a set operation (UNION, UNION ALL, INTERSECT, EXCEPT) and build the UnionQuery object.
      */
     private UnionQuery parseUnionQuery(net.sf.jsqlparser.statement.select.SetOperationList setOp, ParsedQuery parentQuery) 
             throws QueryParseException {
         UnionQuery unionQuery = new UnionQuery();
         
+        UnionQuery.Operator firstNotIntersect = null;
         for (net.sf.jsqlparser.statement.select.SetOperation op : setOp.getOperations()) {
-            if (!(op instanceof net.sf.jsqlparser.statement.select.UnionOp)) {
-                throw unsupported(op.toString().trim(), "only UNION and UNION ALL are supported");
+            UnionQuery.Operator operator = setOperator(op);
+            if (operator == UnionQuery.Operator.INTERSECT && firstNotIntersect != null) {
+                // PostgreSQL, MySQL and SQL Server run INTERSECT first; SQLite and Oracle left to right
+                throw unsupported("INTERSECT after " + firstNotIntersect.sql(), "databases disagree on which runs first; "
+                    + "write the INTERSECT first, as in SELECT ... INTERSECT SELECT ... UNION SELECT ...");
             }
-            unionQuery.addOperation(((net.sf.jsqlparser.statement.select.UnionOp) op).isAll());
+            if (operator != UnionQuery.Operator.INTERSECT && firstNotIntersect == null) {
+                firstNotIntersect = operator;
+            }
+            unionQuery.addOperation(operator);
         }
         
         // Get the list of SELECT statements
@@ -123,6 +172,11 @@ public class QueryParser {
             PlainSelect plainSelect = extractPlainSelect(select);
             
             if (plainSelect == null) {
+                if (select instanceof ParenthesedSelect parenthesed
+                        && parenthesed.getSelect() instanceof net.sf.jsqlparser.statement.select.SetOperationList) {
+                    throw new QueryParseException("Parentheses around UNION, INTERSECT or EXCEPT are not supported "
+                        + "(they run left to right, so write them in the order they should run)");
+                }
                 throw new QueryParseException("Query " + (i + 1) + " in UNION must be a SELECT query");
             }
             

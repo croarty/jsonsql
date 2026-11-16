@@ -317,6 +317,34 @@ class JsonSqlCliTest {
     }
 
     @Test
+    void testIntersectAndExcept() throws Exception {
+        CliResult json = runCli(withConfig("-q",
+            "SELECT id, name FROM products INTERSECT SELECT id, name FROM products WHERE id = 2"));
+        assertEquals(0, json.exitCode(), json.err());
+        assertEquals("[{\"id\":2,\"name\":\"Gadget\"}]", objectMapper.readTree(json.out()).toString());
+
+        CliResult csv = runCli(withConfig("-q",
+            "SELECT name FROM products EXCEPT SELECT name FROM products WHERE id = 2", "--format", "csv"));
+        assertEquals(0, csv.exitCode(), csv.err());
+        assertEquals("name\nWidget", csv.out().strip().replace("\r", ""));
+
+        CliResult dryRun = runCli(withConfig("-q",
+            "SELECT name FROM products UNION SELECT name FROM products INTERSECT SELECT name FROM products", "--dry-run"));
+        assertEquals(1, dryRun.exitCode());
+        assertTrue(dryRun.err().contains("INTERSECT after UNION is not supported"), dryRun.err());
+    }
+
+    @Test
+    void testSavedIntersectWithAParameter() throws Exception {
+        CliResult save = runCli(withConfig("--save-query", "both", "-q",
+            "SELECT name FROM products INTERSECT SELECT name FROM products WHERE id = ${id}"));
+        assertEquals(0, save.exitCode(), save.err());
+        CliResult run = runCli(withConfig("--run-query", "both", "--param", "id=1"));
+        assertEquals(0, run.exitCode(), run.err());
+        assertEquals("[{\"name\":\"Widget\"}]", objectMapper.readTree(run.out()).toString());
+    }
+
+    @Test
     void testOuterAndCrossJoins() throws Exception {
         Files.writeString(dataDir.resolve("stock.json"), """
             [{"pid": 1, "shop": "north"}, {"pid": 3, "shop": "south"}]

@@ -73,9 +73,19 @@ class UnsupportedSyntaxTest {
         "SELECT price IN (SELECT 1) FROM products                               | Condition in SELECT list",
         "SELECT NOT name FROM products                                          | Condition in SELECT list",
         "SELECT name FROM products ORDER BY SOUNDEX(name)                         | Function in ORDER BY: SOUNDEX(name) is not supported",
-        "SELECT name FROM products INTERSECT SELECT name FROM products          | INTERSECT is not supported",
-        "SELECT name FROM products EXCEPT SELECT name FROM products             | EXCEPT is not supported",
-        "SELECT name FROM products MINUS SELECT name FROM products              | MINUS is not supported",
+        "SELECT name FROM products MINUS SELECT name FROM products              | MINUS is not supported (write EXCEPT)",
+        "SELECT name FROM products INTERSECT ALL SELECT name FROM products      | INTERSECT ALL is not supported (write INTERSECT, which removes duplicates)",
+        "SELECT name FROM products EXCEPT ALL SELECT name FROM products         | EXCEPT ALL is not supported (write EXCEPT, which removes duplicates)",
+        "SELECT name FROM products except distinct SELECT name FROM products    | EXCEPT DISTINCT is not supported (write EXCEPT, which removes duplicates)",
+        "SELECT name FROM products UNION SELECT name FROM products INTERSECT SELECT name FROM products | INTERSECT after UNION is not supported (databases disagree on which runs first; write the INTERSECT first, as in SELECT ... INTERSECT SELECT ... UNION SELECT ...)",
+        "SELECT name FROM products UNION ALL SELECT name FROM products INTERSECT SELECT name FROM products | INTERSECT after UNION ALL is not supported",
+        "SELECT name FROM products EXCEPT SELECT name FROM products INTERSECT SELECT name FROM products | INTERSECT after EXCEPT is not supported",
+        "SELECT name FROM products INTERSECT SELECT name FROM products UNION SELECT name FROM products INTERSECT SELECT name FROM products | INTERSECT after UNION is not supported",
+        "(SELECT name FROM products UNION SELECT name FROM products) INTERSECT SELECT name FROM products | Parentheses around UNION, INTERSECT or EXCEPT are not supported (they run left to right, so write them in the order they should run)",
+        "SELECT name FROM products EXCEPT (SELECT name FROM products INTERSECT SELECT name FROM products) | Parentheses around UNION, INTERSECT or EXCEPT are not supported",
+        "SELECT name, price FROM products INTERSECT SELECT name FROM products   | INTERSECT queries must have the same number of columns. Query 1 has 2 columns, query 2 has 1 columns.",
+        "SELECT name FROM products UNION SELECT name FROM products EXCEPT SELECT name, price FROM products | EXCEPT queries must have the same number of columns. Query 1 has 1 columns, query 3 has 2 columns.",
+        "SELECT name, price FROM products UNION SELECT name FROM products       | UNION queries must have the same number of columns. Query 1 has 2 columns, query 2 has 1 columns.",
         "SELECT o.orderId FROM orders o JOIN products p USING (id)              | JOIN ... USING is not supported (write ON a.x = b.x instead)",
         "SELECT o.orderId FROM orders o JOIN products p ON o.productId = p.id ON o.orderId = p.id | More than one ON for JOIN products p is not supported (join the conditions with AND)",
         "SELECT o.orderId FROM orders o JOIN products p ON SUM(p.id) = o.productId | Function in JOIN ON: SUM(p.id) = o.productId is not supported (an aggregate can't be used here)",
@@ -106,9 +116,16 @@ class UnsupportedSyntaxTest {
     }
 
     @Test
-    void setOperationHintNamesSupportedOperators() {
-        assertTrue(rejected("SELECT name FROM products INTERSECT SELECT name FROM products")
-            .getMessage().contains("only UNION and UNION ALL are supported"));
+    void intersectAfterIntersectIsAllowed() throws Exception {
+        assertEquals("[{\"name\":\"Widget\"}]", executor.execute("SELECT name FROM products INTERSECT SELECT name FROM products"
+            + " INTERSECT SELECT name FROM products WHERE id = 1"));
+    }
+
+    @Test
+    void aRejectedOrderingIsReportedByDryRun() {
+        QueryParseException ex = assertThrows(QueryParseException.class, () -> executor.dryRunValidate(
+            "SELECT name FROM products EXCEPT SELECT name FROM orders INTERSECT SELECT name FROM products"));
+        assertTrue(ex.getMessage().startsWith("INTERSECT after EXCEPT"), ex.getMessage());
     }
 
     @Test
@@ -184,6 +201,11 @@ class UnsupportedSyntaxTest {
         "SELECT name FROM products ORDER BY price DESC LIMIT 1",
         "SELECT name FROM products UNION SELECT name FROM products",
         "SELECT name FROM products UNION ALL SELECT name FROM products",
+        "SELECT name FROM products INTERSECT SELECT name FROM products",
+        "SELECT name FROM products EXCEPT SELECT name FROM orders",
+        "SELECT name FROM products INTERSECT SELECT name FROM products UNION SELECT name FROM orders",
+        "SELECT name FROM products EXCEPT SELECT name FROM orders UNION ALL SELECT name FROM products",
+        "(SELECT name FROM products) INTERSECT (SELECT name FROM products)",
     })
     void supportedFormsStillExecute(String sql) throws Exception {
         JsonNode rows = objectMapper.readTree(executor.execute(sql));
