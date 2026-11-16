@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 3.0.0 - 2026-11-16
 
-These changes will be in 3.0.0. They alter results for existing queries.
+This release adds calculations and functions in every clause, makes every clause compare values the same way, and makes decimals exact. Several of those changes alter results for existing queries, so read [Upgrading from 2.x](#upgrading-from-2x) first.
 
 ### Breaking changes
 
@@ -35,7 +35,9 @@ The exit code now says what kind of thing went wrong. Every error used to exit w
 - `3` now means the data or another file is at fault: a data file that is missing, isn't valid JSON or isn't UTF-8, a `--data-dir` that doesn't exist, a mappings, queries, indexes or views file that can't be read, or output that can't be written.
 - An unknown `--format` is reported before the query runs. It used to be reported after, as `Error writing output`.
 
-To find affected queries, look for:
+### Upgrading from 2.x
+
+Check your saved queries and scripts for the following:
 
 | Look for | To fix |
 |---|---|
