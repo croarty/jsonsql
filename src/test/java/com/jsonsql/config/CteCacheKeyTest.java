@@ -84,6 +84,18 @@ class CteCacheKeyTest {
     }
 
     @Test
+    void testCteDifferingOnlyInTheSecondHalfOfOnNotConfused() throws Exception {
+        JsonNode cheap = run("WITH t AS (SELECT a.name FROM products a JOIN products b"
+            + " ON a.id = b.id AND b.price < 500) SELECT * FROM t");
+        assertEquals(2, cheap.size());
+
+        JsonNode dear = run("WITH t AS (SELECT a.name FROM products a JOIN products b"
+            + " ON a.id = b.id AND b.price > 500) SELECT * FROM t");
+        assertEquals(2, dear.size());
+        assertEquals("Laptop", dear.get(0).get("name").asText(), "CTE cache key must include the whole ON condition");
+    }
+
+    @Test
     void testCteCacheInvalidatedOnSourceChange() throws Exception {
         JsonNode first = run("WITH t AS (SELECT name FROM products) SELECT * FROM t");
         assertEquals(4, first.size());

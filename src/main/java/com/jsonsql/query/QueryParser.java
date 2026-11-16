@@ -285,6 +285,7 @@ public class QueryParser {
     private static final String ORDER_BY = "ORDER BY";
     private static final String GROUP_BY = "GROUP BY";
     private static final String HAVING = "HAVING";
+    private static final String JOIN_ON = "JOIN ON";
 
     /**
      * A calculation may only be built from parts ExpressionEvaluator works out. Anything
@@ -732,19 +733,32 @@ public class QueryParser {
                 JoinInfo joinInfo = new JoinInfo();
                 joinInfo.setLeftJoin(join.isLeft());
                 joinInfo.setTable(extractTableInfo(rightItem));
-                
-                if (join.getOnExpressions() != null && !join.getOnExpressions().isEmpty()) {
-                    joinInfo.setOnCondition(join.getOnExpressions().iterator().next().toString());
-                } else {
-                    throw new QueryParseException("JOIN requires ON condition");
-                }
-                
+                joinInfo.setOn(joinCondition(join));
                 joinInfos.add(joinInfo);
             }
         }
         
         query.setJoins(joinInfos);
         query.setUnnests(unnestInfos);
+    }
+
+    /**
+     * A join's ON condition, which can be anything WHERE accepts.
+     */
+    private Expression joinCondition(Join join) throws QueryParseException {
+        if (join.getUsingColumns() != null && !join.getUsingColumns().isEmpty()) {
+            throw unsupported("JOIN ... USING", "write ON a.x = b.x instead");
+        }
+        java.util.Collection<Expression> on = join.getOnExpressions();
+        if (on == null || on.isEmpty()) {
+            throw new QueryParseException("JOIN requires ON condition");
+        }
+        if (on.size() > 1) {
+            throw unsupported("More than one ON for JOIN " + join.getRightItem(), "join the conditions with AND");
+        }
+        Expression condition = on.iterator().next();
+        validateValueCondition(condition, condition, JOIN_ON, null);
+        return condition;
     }
 
     private void rejectUnsupportedJoinType(Join join) throws QueryParseException {

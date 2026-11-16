@@ -315,4 +315,22 @@ class JsonSqlCliTest {
         assertEquals(1, run.exitCode());
         assertTrue(run.err().contains("RIGHT JOIN is not supported"), run.err());
     }
+
+    @Test
+    void testCompoundJoinCondition() throws Exception {
+        Files.writeString(dataDir.resolve("stock.json"), """
+            [{"pid": 1, "shop": "north", "qty": 3}, {"pid": 1, "shop": "south", "qty": 0},
+             {"pid": 2, "shop": "north", "qty": 7}]
+            """);
+        Files.writeString(mappingFile,
+            "{\"products\": \"products.json:$.products\", \"stock\": \"stock.json:$[*]\"}");
+
+        CliResult r = runCli(withConfig("-q",
+            "SELECT p.name, s.shop FROM products p LEFT JOIN stock s ON s.pid = p.id AND s.qty > 0 AND s.shop <> 'south'"));
+
+        assertEquals(0, r.exitCode(), r.err());
+        assertEquals("[{\"name\":\"Widget\",\"shop\":\"north\"},{\"name\":\"Gadget\",\"shop\":\"north\"}]",
+            objectMapper.readTree(r.out()).toString());
+        assertEquals("", r.err());
+    }
 }

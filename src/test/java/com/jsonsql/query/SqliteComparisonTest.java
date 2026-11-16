@@ -264,7 +264,33 @@ class SqliteComparisonTest {
             any("SELECT p.id AS pi, o.id AS oi, c.label AS l FROM p JOIN o ON p.id = o.pid LEFT JOIN c ON c.st = o.st"),
             any("SELECT a.id AS x, b.id AS y FROM p a JOIN p b ON a.name = b.name"),
             any("SELECT a.id AS x, b.id AS y FROM p a JOIN p b ON a.cat = b.cat WHERE a.id < 4"),
-            any("SELECT a.id AS x, b.id AS y FROM p a LEFT JOIN p b ON b.cat = a.cat"));
+            any("SELECT a.id AS x, b.id AS y FROM p a LEFT JOIN p b ON b.cat = a.cat"),
+            // Conditions in ON beyond a single field = field
+            any("SELECT " + j + " FROM o JOIN p ON p.id = o.pid AND o.st = 'open'"),
+            any("SELECT " + j + " FROM o LEFT JOIN p ON p.id = o.pid AND o.st = 'open'"),
+            any("SELECT " + j + " FROM p LEFT JOIN o ON p.id = o.pid AND o.n > 1"),
+            any("SELECT " + j + " FROM p LEFT JOIN o ON p.id = o.pid AND p.price > 10"),
+            any("SELECT o.id AS oi, c.label AS l FROM o JOIN c ON o.st = c.st AND o.pid = c.id"),
+            any("SELECT o.id AS oi, c.label AS l FROM o LEFT JOIN c ON c.id = o.pid AND c.st = o.st"),
+            any("SELECT " + j + " FROM p JOIN o ON o.n BETWEEN p.qty - 1 AND p.qty"),
+            any("SELECT " + j + " FROM p JOIN o ON p.price > o.n * 5 AND p.price < o.n * 10"),
+            any("SELECT " + j + " FROM p LEFT JOIN o ON o.n > p.qty"),
+            any("SELECT " + j + " FROM p JOIN o ON p.id = o.pid OR o.n > 4"),
+            any("SELECT " + j + " FROM p LEFT JOIN o ON p.id = o.pid OR o.st IS NULL"),
+            any("SELECT " + j + " FROM p JOIN o ON p.id = o.pid AND NOT (o.st = 'open')"),
+            any("SELECT " + j + " FROM p JOIN o ON p.id = o.pid AND o.st IN ('open', NULL)"),
+            any("SELECT " + j + " FROM p JOIN o ON p.id = o.pid AND p.name LIKE 'W%'"),
+            any("SELECT a.id AS x, b.id AS y FROM p a JOIN p b ON LOWER(a.name) = LOWER(b.name)"),
+            any("SELECT a.id AS x, b.id AS y FROM p a LEFT JOIN p b ON a.id + 1 = b.id AND a.cat = b.cat"),
+            any("SELECT a.id AS x, b.id AS y FROM p a JOIN p b ON a.cat = b.cat AND a.id < b.id"),
+            any("SELECT a.id AS x, b.id AS y FROM p a JOIN p b ON CASE WHEN a.qty > 4 THEN a.id ELSE 0 END = b.id"),
+            any("SELECT a.id AS x, b.id AS y FROM m a JOIN m b ON a.v = b.v AND a.id < b.id"),
+            any("SELECT a.id AS x, b.id AS y FROM m a JOIN m b ON a.id + 1 = b.id AND a.v < b.v"),
+            any("SELECT c.id AS ci, o.id AS oi FROM c JOIN o ON o.n = o.pid"),
+            any("SELECT c.id AS ci, o.id AS oi FROM c LEFT JOIN o ON o.n = o.pid"),
+            any("SELECT p.id AS pi, o.id AS oi FROM p JOIN o ON p.id = p.qty AND o.n = 1"),
+            any("SELECT p.id AS pi, o.id AS oi, c.label AS l FROM p JOIN o ON p.id = o.pid JOIN c ON o.n = p.qty AND c.st = o.st"),
+            any("SELECT p.id AS pi, o.id AS oi, c.label AS l FROM p JOIN o ON p.id = o.pid LEFT JOIN c ON o.st = c.st AND p.qty > 2"));
     }
 
     static Stream<Query> unionAndCteQueries() {

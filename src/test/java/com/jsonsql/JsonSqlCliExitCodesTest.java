@@ -136,6 +136,25 @@ class JsonSqlCliExitCodesTest {
     }
 
     @Test
+    void dryRunReportsABadJoinCondition() {
+        CliResult result = run("-q", "SELECT * FROM products p JOIN products q ON SUM(p.id) = q.id", "--dry-run");
+
+        assertExit(QUERY, result);
+        assertTrue(result.err().contains("Function in JOIN ON: SUM(p.id) = q.id is not supported"), result.err());
+        assertExit(QUERY, run("-q", "SELECT * FROM products p JOIN products q USING (id)", "--dry-run"));
+        assertExit(OK, run("-q", "SELECT * FROM products p JOIN products q ON p.id = q.id AND q.price > 1", "--dry-run"));
+    }
+
+    @Test
+    void textInJoinArithmeticIsADataErrorInStrictMode() {
+        CliResult warned = run("-q", "SELECT p.id FROM products p JOIN products q ON p.id = q.id AND q.price + 1 > 0");
+        assertEquals(OK, warned.exitCode());
+        assertTrue(warned.err().contains("Warning: q.price + 1 left out 1 value"), warned.err());
+
+        assertExit(DATA, run("-q", "SELECT p.id FROM products p JOIN products q ON p.id = q.id AND q.price + 1 > 0", "--strict"));
+    }
+
+    @Test
     void aNameThatDoesNotExistIsAQueryError() {
         assertExit(QUERY, run("--run-query", "nope"));
         assertExit(QUERY, run("--delete-query", "nope"));

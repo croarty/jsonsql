@@ -119,22 +119,20 @@ class JoinConditionTest {
     }
 
     @Test
-    void testNonEquiJoinConditionThrows() throws Exception {
+    void testNonEquiJoinCondition() throws Exception {
         writeData("orders.json", """
-            {"orders": [{"orderId": 1, "productId": 1}]}
+            {"orders": [{"orderId": 1, "productId": 1}, {"orderId": 2, "productId": 2}]}
             """, "orders", "$.orders");
         writeData("products.json", """
-            {"products": [{"id": 1, "name": "Widget"}]}
+            {"products": [{"id": 1, "name": "Widget"}, {"id": 2, "name": "Gadget"}]}
             """, "products", "$.products");
 
-        Exception ex = assertThrows(Exception.class, () -> executor.execute(
-            "SELECT o.orderId FROM orders o JOIN products p ON o.productId >= p.id"));
-        assertTrue(ex.getMessage() == null || ex.getMessage().toLowerCase().contains("equi")
-            || ex.getMessage().toLowerCase().contains("join"));
+        assertEquals("[{\"orderId\":1,\"name\":\"Widget\"},{\"orderId\":2,\"name\":\"Widget\"},{\"orderId\":2,\"name\":\"Gadget\"}]",
+            executor.execute("SELECT o.orderId, p.name FROM orders o JOIN products p ON o.productId >= p.id"));
     }
 
     @Test
-    void testMultipleEqualsInOnConditionThrows() throws Exception {
+    void testChainedEqualsInOnConditionIsASyntaxError() throws Exception {
         writeData("orders.json", """
             {"orders": [{"orderId": 1, "productId": 1}]}
             """, "orders", "$.orders");
@@ -147,15 +145,15 @@ class JoinConditionTest {
     }
 
     @Test
-    void testAndInOnConditionThrows() throws Exception {
+    void testAndInOnCondition() throws Exception {
         writeData("orders.json", """
-            {"orders": [{"orderId": 1, "productId": 1, "x": 5}]}
+            {"orders": [{"orderId": 1, "productId": 1, "x": 5}, {"orderId": 2, "productId": 1, "x": 6}]}
             """, "orders", "$.orders");
         writeData("products.json", """
             {"products": [{"id": 1, "name": "Widget", "y": 5}]}
             """, "products", "$.products");
 
-        assertThrows(IllegalArgumentException.class, () -> executor.execute(
+        assertEquals("[{\"orderId\":1}]", executor.execute(
             "SELECT o.orderId FROM orders o JOIN products p ON o.productId = p.id AND o.x = p.y"));
     }
 }

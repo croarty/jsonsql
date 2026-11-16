@@ -75,6 +75,17 @@ class UnsupportedSyntaxTest {
         "SELECT name FROM products INTERSECT SELECT name FROM products          | INTERSECT is not supported",
         "SELECT name FROM products EXCEPT SELECT name FROM products             | EXCEPT is not supported",
         "SELECT name FROM products MINUS SELECT name FROM products              | MINUS is not supported",
+        "SELECT o.orderId FROM orders o JOIN products p USING (id)              | JOIN ... USING is not supported (write ON a.x = b.x instead)",
+        "SELECT o.orderId FROM orders o JOIN products p ON o.productId = p.id ON o.orderId = p.id | More than one ON for JOIN products p is not supported (join the conditions with AND)",
+        "SELECT o.orderId FROM orders o JOIN products p ON SUM(p.id) = o.productId | Function in JOIN ON: SUM(p.id) = o.productId is not supported (an aggregate can't be used here)",
+        "SELECT o.orderId FROM orders o JOIN products p ON o.productId = p.id AND COUNT(*) > 1 | Function in JOIN ON: o.productId = p.id AND COUNT(*) > 1 is not supported (an aggregate can't be used here)",
+        "SELECT o.orderId FROM orders o JOIN products p ON SOUNDEX(p.name) = o.productId | Function in JOIN ON: SOUNDEX(p.name) = o.productId is not supported (available functions:",
+        "SELECT o.orderId FROM orders o JOIN products p ON UPPER(p.name, p.id) = o.productId | UPPER takes 1 argument",
+        "SELECT o.orderId FROM orders o JOIN products p ON o.productId IN (SELECT id FROM products) | Condition in JOIN ON: o.productId IN (SELECT id FROM products) is not supported",
+        "SELECT o.orderId FROM orders o JOIN products p ON o.productId = (SELECT 1) | Expression in JOIN ON: o.productId = (SELECT 1) is not supported",
+        "SELECT o.orderId FROM orders o JOIN products p ON EXISTS (SELECT 1 FROM products) | Condition in JOIN ON: EXISTS (SELECT 1 FROM products) is not supported",
+        "SELECT o.orderId FROM orders o JOIN products p ON p.id                 | Condition in JOIN ON: p.id is not supported (compare values with",
+        "SELECT o.orderId FROM orders o JOIN products p ON CAST(p.id AS DATE) = o.productId | CAST to DATE in JOIN ON",
     })
     void unsupportedConstructIsRejectedWithClearMessage(String sql, String expectedMessage) {
         QueryParseException ex = rejected(sql);
@@ -132,6 +143,16 @@ class UnsupportedSyntaxTest {
     void dryRunAlsoRejects() {
         assertThrows(QueryParseException.class,
             () -> executor.dryRunValidate("SELECT SOUNDEX(name) FROM products"));
+        assertThrows(QueryParseException.class,
+            () -> executor.dryRunValidate("SELECT o.orderId FROM orders o JOIN products p ON SUM(p.id) = o.productId"));
+    }
+
+    @Test
+    void aBadJoinConditionIsRejectedInsideACteAndAUnionBranch() {
+        assertTrue(rejected("WITH c AS (SELECT o.orderId FROM orders o JOIN products p ON SOUNDEX(p.name) = o.productId) "
+            + "SELECT * FROM c").getMessage().contains("Function in JOIN ON"));
+        assertTrue(rejected("SELECT name FROM products UNION SELECT p.name FROM orders o JOIN products p ON p.id")
+            .getMessage().contains("Condition in JOIN ON"));
     }
 
     // -- forms that must remain accepted ----------------------------------------------
@@ -147,6 +168,9 @@ class UnsupportedSyntaxTest {
         "SELECT o.orderId, p.name FROM orders o INNER JOIN products p ON o.productId = p.id",
         "SELECT o.orderId, p.name FROM orders o LEFT JOIN products p ON o.productId = p.id",
         "SELECT o.orderId, p.name FROM orders o LEFT OUTER JOIN products p ON o.productId = p.id",
+        "SELECT o.orderId, p.name FROM orders o JOIN products p ON o.productId = p.id AND p.price > 1",
+        "SELECT o.orderId, p.name FROM orders o JOIN products p ON o.productId <= p.id OR p.name LIKE 'W%'",
+        "SELECT o.orderId, p.name FROM orders o JOIN products p ON UPPER(p.category) = 'TOOLS'",
         "SELECT name, tag FROM products, UNNEST(tags) AS t(tag)",
         "SELECT name, tag FROM products JOIN UNNEST(tags) AS t(tag)",
         "SELECT name, tag FROM products CROSS JOIN UNNEST(tags) AS t(tag)",
