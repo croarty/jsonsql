@@ -66,6 +66,13 @@ WHERE vipStatus.level = 'Gold'
 ORDER BY name, benefit
 ```
 
+`LEFT JOIN UNNEST` keeps a customer with no benefits list, once, with `benefit` null (David Brown here); the comma form leaves him out:
+
+```sql
+SELECT c.name, benefit
+FROM customers c LEFT JOIN UNNEST(c.vipStatus.benefits) AS b(benefit)
+```
+
 ## Order Queries
 
 ### Orders Shipped to New York
@@ -220,7 +227,7 @@ ORDER BY o.totals.total DESC
 ## What These Examples Demonstrate
 
 - Nested-object navigation (`vipStatus.level`, `o.totals.total`, `o.shippingAddress.state`)
-- Array flattening with `UNNEST` (string arrays like `tags`/`benefits` and object arrays like `reviews`/`items`)
+- Array flattening with `UNNEST` (string arrays like `tags`/`benefits` and object arrays like `reviews`/`items`), and `LEFT JOIN UNNEST` to keep rows with no elements
 - `INNER` and `LEFT` JOINs, including JOINs whose key comes from an unnested element
 - Filtering, sorting, de-duplication, and limiting of richly nested data
 
