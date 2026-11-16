@@ -121,6 +121,62 @@ class OuterAndCrossJoinTest {
             rows("SELECT id AS oid, p.name FROM orders o FULL JOIN products p ON o.pid = p.id ORDER BY id, p.name"));
     }
 
+    private void nestedTables() throws Exception {
+        table("n1", """
+            [{"id": 1, "k": 10, "profile": {"level": "gold"}}, {"id": 2, "k": 30, "profile": null}]
+            """);
+        table("n2", """
+            [{"id": 10, "profile": {"level": "p-ten"}}, {"id": 20, "profile": {"level": "p-twenty"}},
+             {"id": 30, "profile": {"level": "p-thirty"}}]
+            """);
+    }
+
+    @Test
+    void aNestedNameOfAnEarlierTableIsNullOnUnmatchedRows() throws Exception {
+        nestedTables();
+        assertEquals(List.of("1:10:gold", "2:30:p-thirty", "null:20:null"),
+            rows("SELECT a.id AS a, b.id AS b, profile.level AS lvl FROM n1 a RIGHT JOIN n2 b ON a.k = b.id"));
+        assertEquals(List.of("1:10:gold", "2:30:p-thirty", "null:20:null"),
+            rows("SELECT a.id AS a, b.id AS b, profile.level AS lvl FROM n1 a FULL JOIN n2 b ON a.k = b.id"));
+    }
+
+    @Test
+    void aNestedNameOfAnEarlierTableInWhereOrderByAndGroupBy() throws Exception {
+        nestedTables();
+        String from = " FROM n1 a RIGHT JOIN n2 b ON a.k = b.id";
+        assertEquals(List.of("20"), rows("SELECT b.id" + from + " WHERE profile.level IS NULL"));
+        assertEquals(List.of(), rows("SELECT b.id" + from + " WHERE profile.level = 'p-twenty'"));
+        assertEquals(List.of("20", "10", "30"), rows("SELECT b.id" + from + " ORDER BY profile.level, b.id"));
+        assertEquals(List.of("null:1", "gold:1", "p-thirty:1"),
+            rows("SELECT profile.level AS lvl, COUNT(*) AS n" + from + " GROUP BY profile.level ORDER BY profile.level"));
+        assertEquals(List.of("null"), rows("SELECT UPPER(profile.level) AS u" + from + " WHERE b.id = 20"));
+    }
+
+    @Test
+    void aRealNullStillLetsANestedNameBeReadFromALaterTable() throws Exception {
+        // Order 2's own profile is null, so profile.level is read from n2, as in 3.0.0
+        nestedTables();
+        assertEquals(List.of("2:p-thirty"),
+            rows("SELECT a.id AS a, profile.level AS lvl FROM n1 a JOIN n2 b ON a.k = b.id WHERE a.id = 2"));
+        assertEquals(List.of("2:p-thirty"),
+            rows("SELECT a.id AS a, profile.level AS lvl FROM n1 a LEFT JOIN n2 b ON a.k = b.id WHERE a.id = 2"));
+        assertEquals(List.of("2:p-thirty"),
+            rows("SELECT a.id AS a, profile.level AS lvl FROM n1 a RIGHT JOIN n2 b ON a.k = b.id WHERE a.id = 2"));
+        assertEquals(List.of("1:gold", "2:null"), rows("SELECT id, profile.level AS lvl FROM n1"));
+        assertEquals("[{\"id\":2,\"k\":30,\"profile\":null}]", executor.execute("SELECT * FROM n1 WHERE id = 2"));
+    }
+
+    @Test
+    void filledInNullsPrintAsNull() throws Exception {
+        nestedTables();
+        assertEquals("[{\"id\":20,\"k\":null,\"profile\":{\"level\":\"p-twenty\"}}]",
+            executor.execute("SELECT * FROM n1 a RIGHT JOIN n2 b ON a.k = b.id WHERE b.id = 20"));
+        assertEquals("[{\"a\":null,\"k\":null}]",
+            executor.execute("SELECT a.profile AS a, k FROM n1 a RIGHT JOIN n2 b ON a.k = b.id WHERE b.id = 20"));
+        assertEquals("[{\"n\":1}]",
+            executor.execute("SELECT COUNT(DISTINCT a.profile) AS n FROM n1 a RIGHT JOIN n2 b ON a.k = b.id"));
+    }
+
     @Test
     void aFieldOnlySomeEarlierRowsHaveIsNullOnUnmatchedRows() throws Exception {
         table("mixed", """

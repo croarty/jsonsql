@@ -1033,10 +1033,10 @@ public class QueryExecutor implements FieldAccessor {
                 if (value.isObject()) {
                     JsonNode existing = shape.get(entry.getKey());
                     ObjectNode fields = existing instanceof ObjectNode object ? object : shape.putObject(entry.getKey());
-                    value.fieldNames().forEachRemaining(fields::putNull);
+                    value.fieldNames().forEachRemaining(name -> fields.set(name, FilledNull.INSTANCE));
                 } else if (!shape.has(entry.getKey())) {
                     // A value at the top of the row, such as an UNNEST element
-                    shape.putNull(entry.getKey());
+                    shape.set(entry.getKey(), FilledNull.INSTANCE);
                 }
             }
         }
@@ -1052,6 +1052,10 @@ public class QueryExecutor implements FieldAccessor {
 
         // Navigate through the path
         for (String part : parts) {
+            if (current instanceof FilledNull) {
+                // A filled-in field of an unmatched row: profile.level is null here too
+                return current;
+            }
             if (current == null || !current.has(part)) {
                 return null;
             }
