@@ -44,18 +44,26 @@ class UnsupportedExpressionTest {
     }
 
     @Test
-    void testExistsThrowsUnsupported() {
-        UnsupportedExpressionException ex = assertThrows(
-            UnsupportedExpressionException.class,
+    void testExistsIsRejectedWhenTheQueryIsParsed() {
+        QueryParseException ex = assertThrows(QueryParseException.class,
             () -> executor.execute("SELECT * FROM products WHERE EXISTS (SELECT 1 FROM products)"));
-        assertTrue(ex.getMessage().toLowerCase().contains("unsupported"));
+        assertEquals("EXISTS is not supported (use IN (SELECT ...) or a join)", ex.getMessage());
     }
 
     @Test
-    void testSubqueryInThrowsUnsupported() {
-        // IN with a subquery RHS is not a ParenthesedExpressionList -> unsupported, must throw
-        assertThrows(UnsupportedExpressionException.class,
-            () -> executor.execute("SELECT * FROM products WHERE id IN (SELECT id FROM products)"));
+    void testAnUnsupportedConditionIsRejectedEvenWhenNoRowWouldReachIt() {
+        // It used to fail only when a row reached it, so an empty table or an earlier false hid it
+        assertThrows(QueryParseException.class,
+            () -> executor.execute("SELECT * FROM products WHERE price > 100 AND EXISTS (SELECT 1 FROM products)"));
+        assertThrows(QueryParseException.class,
+            () -> executor.execute("SELECT * FROM products WHERE price > 100 AND name"));
+    }
+
+    @Test
+    void testSubqueryInWorks() throws Exception {
+        JsonNode result = objectMapper.readTree(
+            executor.execute("SELECT name FROM products WHERE id IN (SELECT id FROM products WHERE price > 20)"));
+        assertEquals("[{\"name\":\"Gadget\"}]", result.toString());
     }
 
     @Test

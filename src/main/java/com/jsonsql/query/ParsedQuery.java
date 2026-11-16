@@ -212,8 +212,33 @@ public class ParsedQuery {
     }
 
     /**
-     * The queries of the derived tables in this query's FROM and joins, in order. Each is a
-     * plain query or a set operation, and may hold derived tables of its own.
+     * A subquery used as a value, (SELECT ...), or after IN.
+     *
+     * @param node  where it is written; its result is looked up by this node, by identity
+     * @param query the subquery: a plain query or a set operation
+     * @param list  true after IN, where every row counts; false for one value
+     */
+    public record ValueSubquery(Expression node, ParsedQuery query, boolean list) {}
+
+    private final List<ValueSubquery> valueSubqueries = new ArrayList<>();
+
+    /** Record a subquery written in this query, which runs before this query's rows. */
+    public void addValueSubquery(Expression node, ParsedQuery query, boolean list) {
+        // The same node seen twice, such as a GROUP BY key written out again, runs once
+        if (valueSubqueries.stream().noneMatch(subquery -> subquery.node() == node)) {
+            valueSubqueries.add(new ValueSubquery(node, query, list));
+        }
+    }
+
+    /** The subqueries written in this query as values or after IN, in the order parsed. */
+    public List<ValueSubquery> getValueSubqueries() {
+        return Collections.unmodifiableList(valueSubqueries);
+    }
+
+    /**
+     * The queries nested in this one: the derived tables in its FROM and joins, and the
+     * subqueries it uses as values or after IN, in that order. Each is a plain query or a
+     * set operation, and may hold nested queries of its own.
      */
     public List<ParsedQuery> nestedQueries() {
         List<ParsedQuery> nested = new ArrayList<>();
@@ -226,6 +251,9 @@ public class ParsedQuery {
                     nested.add(join.getTable().getSubquery());
                 }
             }
+        }
+        for (ValueSubquery subquery : valueSubqueries) {
+            nested.add(subquery.query());
         }
         return nested;
     }

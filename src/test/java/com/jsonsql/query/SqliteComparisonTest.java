@@ -439,7 +439,37 @@ class SqliteComparisonTest {
             any("WITH x AS (SELECT id, cat FROM p) SELECT t.id AS i FROM (SELECT id FROM x WHERE cat = 'Tools') t"),
             any("WITH x AS (SELECT t.id FROM (SELECT id FROM p WHERE qty > 2) t) SELECT id FROM x"),
             ordered("SELECT t.id AS i FROM (SELECT id FROM p ORDER BY id DESC LIMIT 3) t ORDER BY t.id", "i"),
-            ordered("SELECT t.n AS n, t.c AS c FROM (SELECT pid AS n, COUNT(*) AS c FROM o GROUP BY pid) t ORDER BY t.c DESC, t.n LIMIT 3", "n", "c"));
+            ordered("SELECT t.n AS n, t.c AS c FROM (SELECT pid AS n, COUNT(*) AS c FROM o GROUP BY pid) t ORDER BY t.c DESC, t.n LIMIT 3", "n", "c"),
+            // Subqueries as values and after IN
+            any("SELECT id FROM p WHERE price > (SELECT AVG(price) FROM p)"),
+            any("SELECT id, (SELECT MAX(n) FROM o) AS m FROM p"),
+            any("SELECT id, (SELECT name FROM p WHERE id = 99) AS x FROM p"),
+            any("SELECT id FROM p WHERE price > (SELECT price FROM p WHERE id = 99)"),
+            any("SELECT id FROM p WHERE id IN (SELECT pid FROM o)"),
+            any("SELECT id FROM p WHERE id NOT IN (SELECT pid FROM o)"),
+            any("SELECT id FROM p WHERE id NOT IN (SELECT pid FROM o WHERE pid IS NOT NULL)"),
+            any("SELECT id FROM o WHERE pid IN (SELECT id FROM p)"),
+            any("SELECT id FROM o WHERE pid NOT IN (SELECT id FROM p)"),
+            any("SELECT id FROM p WHERE cat IN (SELECT cat FROM k)"),
+            any("SELECT id FROM p WHERE cat NOT IN (SELECT cat FROM k)"),
+            any("SELECT id FROM p WHERE cat NOT IN (SELECT cat FROM k WHERE cat IS NOT NULL)"),
+            any("SELECT id FROM p WHERE id IN (SELECT pid FROM o WHERE n > 100)"),
+            any("SELECT id FROM p WHERE id NOT IN (SELECT pid FROM o WHERE n > 100)"),
+            any("SELECT id FROM m WHERE v IN (SELECT v FROM m WHERE id < 3)"),
+            any("SELECT id FROM m WHERE v NOT IN (SELECT v FROM m WHERE id IN (1, 5))"),
+            any("SELECT id FROM p WHERE id IN (1, (SELECT MIN(pid) FROM o))"),
+            any("SELECT cat, COUNT(*) AS n FROM p GROUP BY cat HAVING COUNT(*) > (SELECT COUNT(*) FROM k WHERE cat IS NULL)"),
+            ordered("SELECT id FROM p WHERE price IS NOT NULL ORDER BY ABS(price - (SELECT AVG(price) FROM p)), id", "id"),
+            any("SELECT p.id AS pi, o.id AS oi FROM p JOIN o ON p.id = o.pid AND o.n >= (SELECT AVG(n) FROM o)"),
+            any("SELECT o.id AS oi, p.name AS nm FROM o LEFT JOIN p ON p.id = o.pid AND p.id IN (SELECT pid FROM o WHERE st = 'open')"),
+            any("SELECT id FROM p WHERE id IN (SELECT pid FROM o WHERE n > (SELECT MIN(n) FROM o))"),
+            any("SELECT id FROM p WHERE id IN (SELECT pid FROM o UNION SELECT id FROM c)"),
+            any("SELECT id, CASE WHEN price > (SELECT AVG(price) FROM p) THEN 'hi' ELSE 'lo' END AS b FROM p"),
+            any("SELECT id, qty - (SELECT MIN(qty) FROM p) AS d FROM p"),
+            any("SELECT id FROM p WHERE id IN (SELECT pid FROM o) EXCEPT SELECT id FROM c"),
+            any("SELECT t.id AS i FROM (SELECT id FROM p WHERE price < (SELECT AVG(price) FROM p)) t"),
+            any("WITH x AS (SELECT pid FROM o WHERE st = 'open') SELECT id FROM p WHERE id IN (SELECT pid FROM x)"),
+            any("WITH x AS (SELECT id FROM p WHERE price > (SELECT AVG(price) FROM p)) SELECT id FROM x"));
     }
 
     static Stream<Query> aggregateQueries() {

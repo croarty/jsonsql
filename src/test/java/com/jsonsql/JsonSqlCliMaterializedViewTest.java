@@ -210,6 +210,24 @@ class JsonSqlCliMaterializedViewTest {
     }
 
     @Test
+    void aViewWithASubqueryGoesStaleWhenTheSubquerysSourceChanges() throws Exception {
+        Files.writeString(dataDir.resolve("limits.json"), "[{\"cap\": 50}]");
+        Files.writeString(mappingFile, "{\"products\": \"products.json:$.products[*]\", \"limits\": \"limits.json:$[*]\"}");
+        CliResult build = runCli(withConfig(
+            "--materialize-view", "cheap",
+            "--query", "WITH cheap AS (SELECT id FROM products WHERE price < (SELECT MAX(cap) FROM limits)) SELECT * FROM cheap"));
+        assertEquals(0, build.exitCode(), build.err());
+        assertEquals("[{\"id\":1},{\"id\":2}]", runCli(withConfig("-q", "SELECT id FROM cheap")).out().trim());
+        assertTrue(runCli(withConfig("--list-materialized-views")).out().contains("FRESH"));
+
+        Files.writeString(dataDir.resolve("limits.json"), "[{\"cap\": 500}, {\"cap\": 5}]");
+        String list = runCli(withConfig("--list-materialized-views")).out();
+        assertTrue(list.contains("STALE"), list);
+        assertEquals(0, runCli(withConfig("--rebuild-view", "cheap")).exitCode());
+        assertEquals("[{\"id\":1},{\"id\":2},{\"id\":3}]", runCli(withConfig("-q", "SELECT id FROM cheap")).out().trim());
+    }
+
+    @Test
     void aViewCannotBeASetOperation() {
         CliResult r = runCli(withConfig(
             "--materialize-view", "pair",

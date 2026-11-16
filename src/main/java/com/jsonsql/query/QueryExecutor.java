@@ -111,12 +111,20 @@ public class QueryExecutor implements FieldAccessor {
      * Execute a SQL query and return JSON result.
      */
     public String execute(String sql) throws Exception {
+        try {
+            return executeStatement(sql);
+        } finally {
+            forgetSubqueries();
+        }
+    }
+
+    private String executeStatement(String sql) throws Exception {
         // Parse the query
         ParsedQuery parsedQuery = queryParser.parse(sql);
-        
+
         // Create execution context for CTEs
         QueryExecutionContext context = new QueryExecutionContext();
-        
+
         // Execute CTEs first if present
         if (parsedQuery.hasCTEs()) {
             if (DebugMode.isEnabled()) {
@@ -226,7 +234,11 @@ public class QueryExecutor implements FieldAccessor {
      * Execute a parsed query and return the result rows as a list (for materialization).
      */
     public List<JsonNode> executeToRowList(ParsedQuery parsedQuery) throws Exception {
-        return runToRows(parsedQuery, new QueryExecutionContext());
+        try {
+            return runToRows(parsedQuery, new QueryExecutionContext());
+        } finally {
+            forgetSubqueries();
+        }
     }
 
     /**
@@ -261,6 +273,9 @@ public class QueryExecutor implements FieldAccessor {
      * Execute a parsed query with execution context (supports recursive execution for CTEs).
      */
     private String executeQuery(ParsedQuery parsedQuery, QueryExecutionContext context) throws Exception {
+        // Subqueries used as values run once, before any row
+        runValueSubqueries(parsedQuery, context);
+
         // Load data from FROM table (checks CTE context first). The query is passed so the
         // index planner can prune backing files for the FROM table before loading.
         List<JsonNode> fromData = loadSource(parsedQuery.getFromTable(), context, parsedQuery);
@@ -412,7 +427,7 @@ public class QueryExecutor implements FieldAccessor {
             return getFieldValue(row, name);
         };
         ExpressionEvaluator columnValues = new ExpressionEvaluator(this);
-        ExpressionEvaluator sortValues = new ExpressionEvaluator(aliasesThenFields);
+        ExpressionEvaluator sortValues = new ExpressionEvaluator(withSubqueries(aliasesThenFields));
 
         List<JsonNode> calculated = new ArrayList<>(rows.size());
         for (JsonNode row : rows) {
@@ -439,6 +454,82 @@ public class QueryExecutor implements FieldAccessor {
         return value == null ? NullNode.getInstance() : value;
     }
 
+    // -- subqueries used as values ------------------------------------------------------
+
+    /** The result of each subquery used as a value, by the node it is written as. */
+    private final Map<Expression, JsonNode> subqueryValues = new IdentityHashMap<>();
+    /** The rows of each subquery after IN, by the node it is written as. */
+    private final Map<Expression, List<JsonNode>> subqueryLists = new IdentityHashMap<>();
+
+    /**
+     * Run the subqueries a query uses as values or after IN, once, before its rows. So they
+     * run whether or not a row needs them, and their warnings and errors don't depend on the
+     * outer data.
+     */
+    private void runValueSubqueries(ParsedQuery query, QueryExecutionContext context) throws Exception {
+        for (ParsedQuery.ValueSubquery subquery : query.getValueSubqueries()) {
+            List<JsonNode> values = new ArrayList<>();
+            for (JsonNode row : runToRows(subquery.query(), context)) {
+                // The subquery selects one column
+                JsonNode value = row.isObject() && row.size() > 0 ? row.elements().next() : null;
+                values.add(Values.isNull(value) ? null : value);
+            }
+            if (subquery.list()) {
+                subqueryLists.put(subquery.node(), values);
+                continue;
+            }
+            if (values.size() > 1) {
+                throw new QueryExecutionException("Subquery returned " + values.size()
+                    + " rows where one value is expected: " + subquery.node()
+                    + " (add LIMIT 1 or use an aggregate such as MAX)");
+            }
+            subqueryValues.put(subquery.node(), values.isEmpty() ? null : values.get(0));
+        }
+    }
+
+    @Override
+    public JsonNode subqueryValue(Expression subquery) {
+        if (!subqueryValues.containsKey(subquery)) {
+            throw new IllegalStateException("The subquery has not been run: " + subquery);
+        }
+        return subqueryValues.get(subquery);
+    }
+
+    @Override
+    public List<JsonNode> subqueryValues(Expression subquery) {
+        List<JsonNode> values = subqueryLists.get(subquery);
+        if (values == null) {
+            throw new IllegalStateException("The subquery has not been run: " + subquery);
+        }
+        return values;
+    }
+
+    /** An accessor that reads fields its own way, and subquery results from this executor. */
+    private FieldAccessor withSubqueries(FieldAccessor fields) {
+        return new FieldAccessor() {
+            @Override
+            public JsonNode getFieldValue(JsonNode row, String fieldPath) {
+                return fields.getFieldValue(row, fieldPath);
+            }
+
+            @Override
+            public JsonNode subqueryValue(Expression subquery) {
+                return QueryExecutor.this.subqueryValue(subquery);
+            }
+
+            @Override
+            public List<JsonNode> subqueryValues(Expression subquery) {
+                return QueryExecutor.this.subqueryValues(subquery);
+            }
+        };
+    }
+
+    /** A statement's subquery results are dropped when it ends. */
+    private void forgetSubqueries() {
+        subqueryValues.clear();
+        subqueryLists.clear();
+    }
+
     /**
      * Values a calculation could not use are a warning, or an error in strict mode.
      */
@@ -463,7 +554,7 @@ public class QueryExecutor implements FieldAccessor {
 
         // Calculations on groups, such as SUM(price) * 2: first the SELECT columns, so that
         // HAVING and ORDER BY can use their aliases
-        ExpressionEvaluator groupValues = new ExpressionEvaluator(groupFields, query.getGroupCalculations().keySet());
+        ExpressionEvaluator groupValues = new ExpressionEvaluator(withSubqueries(groupFields), query.getGroupCalculations().keySet());
         for (JsonNode group : groups) {
             for (ColumnInfo column : query.getSelectColumns()) {
                 if (column.isComputed()) {
@@ -735,8 +826,18 @@ public class QueryExecutor implements FieldAccessor {
                 appendSourceFingerprint(keyBuilder, "JOINSRC", join.getTable(), upstreamCteKeys);
             }
         }
+        appendSubquerySources(keyBuilder, cteQuery, upstreamCteKeys);
 
         return keyBuilder.toString();
+    }
+
+    /** What the subqueries a query uses as values read; their text is already in the key. */
+    private void appendSubquerySources(StringBuilder keyBuilder, ParsedQuery query, Map<String, String> upstreamCteKeys) {
+        for (ParsedQuery.ValueSubquery subquery : query.getValueSubqueries()) {
+            StringBuilder sources = new StringBuilder();
+            appendQuerySources(sources, subquery.query(), upstreamCteKeys);
+            keyBuilder.append("SUBQUERYSRC[").append(sources).append("]:");
+        }
     }
 
     /**
@@ -754,6 +855,7 @@ public class QueryExecutor implements FieldAccessor {
         for (JoinInfo join : query.getJoins()) {
             appendSourceFingerprint(keyBuilder, "JOINSRC", join.getTable(), upstreamCteKeys);
         }
+        appendSubquerySources(keyBuilder, query, upstreamCteKeys);
     }
 
     private void appendSourceFingerprint(StringBuilder keyBuilder, String label, TableInfo tableInfo,

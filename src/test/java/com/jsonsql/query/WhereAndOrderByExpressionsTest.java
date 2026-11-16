@@ -241,11 +241,11 @@ class WhereAndOrderByExpressionsTest {
         "SELECT id FROM t WHERE COUNT(*) > 1                   -> Function in WHERE: COUNT(*) > 1 is not supported (use HAVING to filter on an aggregate)",
         "SELECT id FROM t WHERE SUM(price) * 2 > 1             -> Function in WHERE: SUM(price) * 2 > 1 is not supported (use HAVING to filter on an aggregate)",
         "SELECT id FROM t WHERE CAST(price AS DATE) > 1        -> CAST to DATE in WHERE: CAST(price AS DATE) > 1 is not supported (use INTEGER, REAL or TEXT)",
-        "SELECT id FROM t WHERE price > (SELECT 1)             -> Expression in WHERE: price > (SELECT 1) is not supported",
+        "SELECT id FROM t WHERE price > (SELECT 1)             -> FROM clause is required",
         "SELECT id FROM t ORDER BY SOUNDEX(name)                 -> Function in ORDER BY: SOUNDEX(name) is not supported",
         "SELECT id FROM t ORDER BY price * HEX(name)        -> Function in ORDER BY: price * HEX(name) is not supported",
         "SELECT id FROM t ORDER BY CAST(price AS DATE)         -> CAST to DATE in ORDER BY: CAST(price AS DATE) is not supported (use INTEGER, REAL or TEXT)",
-        "SELECT id FROM t ORDER BY (SELECT 1)                  -> Expression in ORDER BY: (SELECT 1) is not supported",
+        "SELECT id FROM t ORDER BY (SELECT 1)                  -> FROM clause is required",
         "SELECT id FROM t UNION SELECT oid FROM o ORDER BY id * 2 -> Expression in ORDER BY: id * 2 is not supported",
     })
     void whatIsStillRejected(String sql, String message) {

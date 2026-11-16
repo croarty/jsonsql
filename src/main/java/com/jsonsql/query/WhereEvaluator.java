@@ -7,7 +7,9 @@ import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.conditional.OrExpression;
 import net.sf.jsqlparser.expression.operators.relational.*;
 import net.sf.jsqlparser.schema.Column;
+import net.sf.jsqlparser.statement.select.ParenthesedSelect;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -316,36 +318,41 @@ public class WhereEvaluator {
             return Truth.UNKNOWN;
         }
 
-        // Get the list of values to check against
+        // Get the list of values to check against: written out, or a subquery's rows
         var rightExpression = inExpr.getRightExpression();
-
-        // Handle ExpressionList (the typical case)
-        if (rightExpression instanceof ParenthesedExpressionList) {
-            ParenthesedExpressionList<?> expressionList = (ParenthesedExpressionList<?>) rightExpression;
-
+        List<JsonNode> listValues = new ArrayList<>();
+        if (rightExpression instanceof ParenthesedExpressionList<?> expressionList) {
             // ExpressionList extends List directly (getExpressions() is deprecated)
-            boolean listHasNull = false;
             for (var expr : expressionList) {
-                JsonNode listValue = resolve(row, (Expression) expr);
-                if (listValue == null) {
-                    listHasNull = true;
-                    continue;
-                }
-                if (Values.equal(fieldValue, listValue)) {
-                    // Found a match
-                    return Truth.of(!inExpr.isNot()); // IN returns true, NOT IN returns false
-                }
+                listValues.add(resolve(row, (Expression) expr));
             }
-
-            // No match found: a NULL in the list could have matched, so the answer is UNKNOWN
-            return listHasNull ? Truth.UNKNOWN : Truth.of(inExpr.isNot());
+        } else if (rightExpression instanceof ParenthesedSelect) {
+            // Worked out once, before the rows
+            for (JsonNode value : fieldAccessor.subqueryValues(rightExpression)) {
+                listValues.add(Values.isNull(value) ? null : value);
+            }
+        } else {
+            // Unsupported right expression type - fail loudly instead of silently excluding all rows
+            throw new UnsupportedExpressionException(
+                "Unsupported IN expression right-hand side: " + inExpr +
+                " (type: " + (rightExpression == null ? "null" : rightExpression.getClass().getSimpleName()) + ")"
+            );
         }
 
-        // Unsupported right expression type - fail loudly instead of silently excluding all rows
-        throw new UnsupportedExpressionException(
-            "Unsupported IN expression right-hand side: " + inExpr +
-            " (type: " + (rightExpression == null ? "null" : rightExpression.getClass().getSimpleName()) + ")"
-        );
+        boolean listHasNull = false;
+        for (JsonNode listValue : listValues) {
+            if (listValue == null) {
+                listHasNull = true;
+                continue;
+            }
+            if (Values.equal(fieldValue, listValue)) {
+                // Found a match
+                return Truth.of(!inExpr.isNot()); // IN returns true, NOT IN returns false
+            }
+        }
+
+        // No match found: a NULL in the list could have matched, so the answer is UNKNOWN
+        return listHasNull ? Truth.UNKNOWN : Truth.of(inExpr.isNot());
     }
 
     /**
